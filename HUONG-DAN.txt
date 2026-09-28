@@ -1,0 +1,27 @@
+ĐƯA APP "MINH AN HỌC VUI" LÊN VERCEL
+
+Cách 1 - Kéo thả (dễ nhất, không cần cài gì)
+1. Vào https://vercel.com, đăng nhập (dùng tài khoản Google hoặc GitHub).
+2. Bấm "Add New..." > "Project".
+3. Kéo cả thư mục "minh-an-hoc-vui" (thư mục có file index.html) vào ô tải lên.
+4. Bấm "Deploy". Khoảng 1 phút sau Vercel cho bạn một đường link dạng
+   https://minh-an-hoc-vui.vercel.app
+
+Cách 2 - Dùng dòng lệnh
+   npm i -g vercel
+   cd minh-an-hoc-vui
+   vercel --prod
+
+Đưa ra màn hình chính máy tính bảng (dùng như app)
+- iPad (Safari): mở link > nút Chia sẻ > "Thêm vào MH chính".
+- Android (Chrome): mở link > menu ba chấm > "Thêm vào màn hình chính".
+
+Lưu ý về dữ liệu
+- Bản trên Vercel lưu sao, điểm, phiếu đi chơi ngay trên máy tính bảng của con.
+  Không xóa dữ liệu trình duyệt / lịch sử duyệt web của trang này.
+- Chuyển tiến độ từ bản trên Claude sang: vào "Bố mẹ" > "Sao lưu và chuyển máy"
+  > "Sao chép mã sao lưu", rồi dán vào ô cùng tên trên bản Vercel > "Khôi phục từ mã".
+- Nên sao lưu mã này mỗi tuần (dán vào Ghi chú/Zalo của bố mẹ) để phòng mất máy.
+- Mã PIN mặc định 1234 - đổi ngay trong Khu bố mẹ.
+- Giọng đọc dùng giọng có sẵn của máy. Nếu không nghe tiếng Việt, vào Cài đặt máy
+  > Ngôn ngữ > Chuyển văn bản thành giọng nói và tải giọng Tiếng Việt.
