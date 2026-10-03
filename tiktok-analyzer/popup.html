@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>TikTok Analyzer</title>
+<style>
+  :root { --bg:#fcfcfb; --card:#f3f2ef; --text:#0b0b0b; --muted:#52514e; --accent:#2a78d6; --line:#e2e1dc; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1a1a19; --card:#262624; --text:#fff; --muted:#c3c2b7; --accent:#3987e5; --line:#383835; } }
+  * { box-sizing: border-box; }
+  body { margin:0; width:340px; background:var(--bg); color:var(--text); font:13px/1.45 system-ui, sans-serif; }
+  header { padding:14px 16px 10px; border-bottom:1px solid var(--line); }
+  h1 { font-size:15px; margin:0; }
+  .sub { color:var(--muted); font-size:12px; margin-top:2px; }
+  main { padding:12px 16px 16px; display:grid; gap:10px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .tile { background:var(--card); border-radius:8px; padding:8px 10px; }
+  .tile b { display:block; font-size:18px; font-variant-numeric:tabular-nums; }
+  .tile span { color:var(--muted); font-size:11px; }
+  button { width:100%; border:0; border-radius:8px; padding:9px 10px; font:600 13px system-ui; cursor:pointer; background:var(--card); color:var(--text); }
+  button.primary { background:var(--accent); color:#fff; }
+  .row { display:flex; gap:8px; }
+  .note { color:var(--muted); font-size:11.5px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 TikTok Analyzer</h1>
+  <div class="sub" id="ctx">Đang kiểm tra trang hiện tại…</div>
+</header>
+<main>
+  <div class="grid" id="tiles"></div>
+  <div id="scrollBox" class="hidden">
+    <div class="row">
+      <button id="scroll" class="primary">⬇ Tự cuộn để thu thập</button>
+      <button id="stop" style="width:90px">Dừng</button>
+    </div>
+  </div>
+  <button id="open" class="primary">Mở Dashboard phân tích</button>
+  <div class="row">
+    <button id="csv">Xuất CSV</button>
+    <button id="clear">Xoá dữ liệu</button>
+  </div>
+  <div class="note">Mở trang kênh (@username), video, hashtag hoặc tìm kiếm trên tiktok.com rồi cuộn xuống. Tiện ích tự ghi lại số liệu các video hiển thị.</div>
+</main>
+<script src="src/common.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

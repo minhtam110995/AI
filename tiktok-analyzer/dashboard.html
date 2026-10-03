@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TikTok Analyzer – Dashboard</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>📊 TikTok Analyzer</h1>
+    <p class="muted" id="subtitle">Phân tích dữ liệu đã thu thập từ tiktok.com</p>
+  </div>
+  <div class="actions">
+    <button id="exportCsv">Xuất CSV</button>
+    <button id="exportJson">Sao lưu JSON</button>
+    <label class="btn">Nhập JSON<input type="file" id="importJson" accept=".json" hidden></label>
+  </div>
+</header>
+
+<section class="filters">
+  <label>Kênh
+    <select id="fAuthor"><option value="">Tất cả kênh</option></select>
+  </label>
+  <label>Thời gian đăng
+    <select id="fRange">
+      <option value="0">Toàn bộ</option>
+      <option value="7">7 ngày</option>
+      <option value="30">30 ngày</option>
+      <option value="90" selected>90 ngày</option>
+      <option value="365">12 tháng</option>
+    </select>
+  </label>
+  <label class="grow">Tìm theo mô tả / hashtag
+    <input id="fSearch" type="search" placeholder="vd: review, #skincare">
+  </label>
+</section>
+
+<section id="profile" class="profile hidden"></section>
+<section class="kpis" id="kpis"></section>
+<section class="card insights"><h2>💡 Gợi ý từ dữ liệu</h2><ul id="insights"></ul></section>
+
+<div class="grid2">
+  <section class="card wide"><h2>Lượt xem từng video theo ngày đăng</h2><p class="muted small">Mỗi cột là 1 video. Đường kẻ ngang = lượt xem trung vị.</p><div id="chartTimeline" class="chart"></div></section>
+  <section class="card"><h2>Giờ & ngày đăng hiệu quả</h2><p class="muted small">Lượt xem trung vị theo khung giờ đăng (giờ máy bạn). Ô càng đậm càng tốt.</p><div id="chartHeat" class="chart"></div></section>
+  <section class="card"><h2>Độ dài video tối ưu</h2><p class="muted small">Lượt xem trung vị theo độ dài video.</p><div id="chartDuration" class="chart"></div></section>
+  <section class="card"><h2>Hashtag hiệu quả nhất</h2><p class="muted small">Lượt xem trung vị của video chứa hashtag (≥ 2 video).</p><div id="chartTags" class="chart"></div></section>
+  <section class="card"><h2>Tăng trưởng follower</h2><p class="muted small">Ghi lại mỗi lần bạn mở trang kênh (tối đa 1 mốc/giờ).</p><div id="chartGrowth" class="chart"></div></section>
+</div>
+
+<section class="card" id="channelsCard"><h2>So sánh kênh / đối thủ</h2><div class="tablewrap"><table id="channels"></table></div></section>
+
+<section class="card">
+  <div class="tablehead"><h2>Danh sách video</h2><span class="muted small" id="tableInfo"></span></div>
+  <div class="tablewrap"><table id="videos"></table></div>
+</section>
+
+<div id="tip" class="tip" role="tooltip"></div>
+<script src="src/common.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
