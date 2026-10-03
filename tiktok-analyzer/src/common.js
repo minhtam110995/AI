@@ -96,7 +96,7 @@ const TTA = (() => {
   const load = () => new Promise((r) => chrome.storage.local.get({ videos: {}, users: {} }, r));
 
   function toCSV(videos) {
-    const cols = ['id', 'author', 'createTime', 'views', 'likes', 'comments', 'shares', 'saves', 'er', 'duration', 'hashtags', 'music', 'desc', 'url'];
+    const cols = ['id', 'author', 'createTime', 'views', 'likes', 'comments', 'shares', 'saves', 'er', 'duration', 'hashtags', 'music', 'desc', 'transcript', 'url'];
     const esc = (x) => {
       const s = String(x ?? '');
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -104,7 +104,7 @@ const TTA = (() => {
     const rows = videos.map((v) => [
       v.id, v.author, v.createTime ? new Date(v.createTime * 1000).toISOString() : '',
       v.views, v.likes, v.comments, v.shares, v.saves, er(v).toFixed(4), v.duration,
-      v.hashtags.map((h) => '#' + h).join(' '), v.music, v.desc,
+      v.hashtags.map((h) => '#' + h).join(' '), v.music, v.desc, v.transcript || '',
       `https://www.tiktok.com/@${v.author}/video/${v.id}`,
     ].map(esc).join(','));
     return '﻿' + cols.join(',') + '\n' + rows.join('\n');

@@ -335,13 +335,14 @@ function renderTable(list) {
   const val = (v) => (key === 'er' ? TTA.er(v) : v[key]);
   const rows = [...list].sort((a, b) => (val(a) > val(b) ? dir : val(a) < val(b) ? -dir : 0)).slice(0, 300);
   $('#tableInfo').textContent = list.length > 300 ? `Hiển thị 300/${list.length} video (xuất CSV để xem đủ)` : `${list.length} video`;
-  $('#videos').innerHTML = '<thead><tr><th class="l"></th>' + COLS.map((c) => `<th data-key="${c.key}" class="${c.cls || ''}">${c.label}${key === c.key ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr></thead><tbody>' +
+  $('#videos').innerHTML = '<thead><tr><th class="l"></th>' + COLS.map((c) => `<th data-key="${c.key}" class="${c.cls || ''}">${c.label}${key === c.key ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '<th>Nội dung</th></tr></thead><tbody>' +
     rows.map((v) => {
       const url = `https://www.tiktok.com/@${esc(v.author)}/video/${v.id}`;
       const badge = med > 0 && v.views >= 3 * med ? '<span class="tag">🔥 bứt phá</span>' : '';
       return `<tr><td><img class="thumb" loading="lazy" src="${esc(v.cover)}" alt=""></td>
         <td class="desc"><a href="${url}" target="_blank">${esc(v.desc.slice(0, 120) || '(không có mô tả)')}</a>${badge}<div class="muted small">@${esc(v.author)}</div></td>` +
-        COLS.slice(1).map((c) => `<td>${c.fmt(c.key === 'er' ? TTA.er(v) : v[c.key])}</td>`).join('') + '</tr>';
+        COLS.slice(1).map((c) => `<td>${c.fmt(c.key === 'er' ? TTA.er(v) : v[c.key])}</td>`).join('') +
+        `<td><a href="original.html?author=${encodeURIComponent(v.author)}&id=${v.id}" target="_blank" title="Lấy caption + lời thoại gốc">📝${v.transcript ? ' ✓' : ''}</a></td></tr>`;
     }).join('') + '</tbody>';
 }
 $('#videos').addEventListener('click', (e) => {

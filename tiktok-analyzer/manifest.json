@@ -1,15 +1,23 @@
 {
   "manifest_version": 3,
   "name": "TikTok Analyzer",
-  "version": "1.0.0",
-  "description": "Thu thập và phân tích dữ liệu kênh, video TikTok ngay trên trình duyệt: lượt xem, tương tác, hashtag, giờ đăng tốt nhất.",
+  "version": "1.1.0",
+  "description": "Thu thập và phân tích dữ liệu kênh, video TikTok: lượt xem, tương tác, hashtag, giờ đăng tốt nhất, lấy lời thoại gốc của video.",
   "permissions": [
     "storage",
     "unlimitedStorage",
     "tabs"
   ],
   "host_permissions": [
-    "https://www.tiktok.com/*"
+    "https://*.tiktok.com/*",
+    "https://*.tiktokcdn.com/*",
+    "https://*.tiktokcdn-us.com/*",
+    "https://*.tiktokcdn-eu.com/*",
+    "https://*.tiktokv.com/*",
+    "https://*.tiktokv.us/*",
+    "https://*.tiktokv.eu/*",
+    "https://*.byteoversea.com/*",
+    "https://*.ibytedtos.com/*"
   ],
   "action": {
     "default_popup": "popup.html",

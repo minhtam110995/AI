@@ -25,9 +25,19 @@ Tiện ích cũng ghi dữ liệu khi bạn xem trang hashtag, trang tìm kiếm
 - **Bộ lọc:** theo kênh, khoảng thời gian, từ khoá hoặc hashtag.
 - **Xuất CSV** (mở được bằng Excel hoặc Google Sheets) và **sao lưu/nhập JSON** để chuyển dữ liệu sang máy khác.
 
+## 📝 Lấy nội dung gốc video (lời thoại, caption)
+- **Đang xem một video** trên TikTok: bấm biểu tượng tiện ích, chọn **📝 Lấy nội dung gốc video**.
+- **Trong Dashboard:** bấm 📝 ở cột *Nội dung* của từng video. Video đã lấy lời thoại sẽ có dấu ✓.
+- **Lấy hàng loạt:** dán tối đa 50 link (mỗi dòng 1 link) vào trang *Lấy nội dung gốc video*, rồi bấm **Xuất CSV kết quả**.
+
+Kết quả gồm caption, hashtag, âm thanh và **lời thoại** lấy từ phụ đề tự động hoặc phụ đề của tác giả do TikTok tạo. Bạn có thể bật mốc thời gian, chọn ngôn ngữ (bản gốc hoặc bản dịch máy), copy hoặc tải file .txt. Lời thoại cũng được lưu lại và có trong cột `transcript` khi xuất CSV.
+
+Video không có lời nói (chỉ có nhạc), hoặc video TikTok chưa tạo phụ đề, sẽ không có lời thoại.
+
 ## Cách hoạt động
 - `src/inject.js` chạy trong trang TikTok và **đọc** các phản hồi API mà chính trang đã tải (danh sách video, thông tin kênh, tìm kiếm). Nó không gửi thêm request nào.
 - `src/content.js` đọc thêm dữ liệu nhúng sẵn trong trang, chuẩn hoá rồi lưu vào `chrome.storage.local`. Thông tin follower được lưu tối đa 1 mốc mỗi giờ để vẽ đường tăng trưởng.
+- `src/transcript.js` (chạy trong `src/background.js`) tải trang video, đọc danh sách phụ đề rồi tải bản phụ đề gốc.
 - `dashboard.html/js` và `popup.html/js` đọc dữ liệu đã lưu và vẽ biểu đồ bằng SVG thuần, không dùng thư viện ngoài.
 
 ## Lưu ý
