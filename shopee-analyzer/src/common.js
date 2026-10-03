@@ -8,12 +8,16 @@ const SPA = (() => {
   function normalizeProduct(o, extra = {}) {
     const itemid = o.itemid ?? o.item_id;
     const shopid = o.shopid ?? o.shop_id;
-    const name = o.name ?? o.title;
-    if (!itemid || !shopid || !name || !('price' in o || 'price_min' in o)) return null;
+    // Shopee có 2 kiểu dữ liệu: kiểu cũ (item_basic) và kiểu "thẻ sản phẩm" mới (item_card_*)
+    const card = o.item_card_displayed_asset || {};
+    const dp = o.item_card_display_price || {};
+    const sc = o.item_card_display_sold_count || {};
+    const name = o.name ?? o.title ?? card.name;
+    if (!itemid || !shopid || !name || !('price' in o || 'price_min' in o || 'price' in dp)) return null;
     const pr = extra.product_review || {};
-    const ir = o.item_rating || {};
+    const ir = o.item_rating || card.rating || {};
     const rc = Array.isArray(ir.rating_count) ? ir.rating_count : Array.isArray(pr.rating_count) ? pr.rating_count : null;
-    const before = money(o.price_before_discount);
+    const before = money(o.price_before_discount ?? dp.strikethrough_price);
     const models = (o.models || extra.models || []).map((m) => ({
       name: m.name || '', price: money(m.price), stock: num(m.stock ?? m.normal_stock), sold: num(m.sold),
     }));
@@ -22,28 +26,28 @@ const SPA = (() => {
       itemid: String(itemid),
       shopid: String(shopid),
       name: String(name),
-      image: o.image || (o.images || [])[0] || '',
+      image: o.image || card.image || (o.images || [])[0] || '',
       images: o.images || null,
-      price: money(o.price ?? o.price_min),
+      price: money(o.price ?? o.price_min ?? dp.price),
       priceMin: money(o.price_min),
       priceMax: money(o.price_max),
       priceBefore: before && before > 0 ? before : null,
-      discount: num(o.raw_discount) ?? (typeof o.discount === 'string' ? num(o.discount.replace(/\D/g, '')) : null),
-      sold30: num(o.sold ?? pr.sold),
-      hsold: num(o.historical_sold ?? pr.historical_sold ?? o.global_sold ?? pr.global_sold),
+      discount: num(o.raw_discount ?? dp.discount) ?? (typeof o.discount === 'string' ? num(o.discount.replace(/\D/g, '')) : null),
+      sold30: num(o.sold ?? sc.monthly_sold_count ?? pr.sold),
+      hsold: num(o.historical_sold ?? sc.historical_sold_count ?? pr.historical_sold ?? o.global_sold ?? pr.global_sold),
       rating: num(ir.rating_star ?? pr.rating_star),
-      ratingCount: rc ? num(rc[0]) : num(pr.total_rating_count ?? ir.total_rating_count),
+      ratingCount: rc ? num(rc[0]) : num(pr.total_rating_count ?? ir.total_rating_count ?? ir.rating_count),
       stars: rc && rc.length >= 6 ? rc.slice(1, 6).map(Number) : null,
       likes: num(o.liked_count),
       ctime: num(o.ctime),
       stock: num(o.stock ?? o.normal_stock),
-      location: o.shop_location || null,
+      location: o.shop_location || o.shop_data?.shop_location || null,
       mall: o.is_official_shop != null ? !!o.is_official_shop : null,
       preferred: o.shopee_verified != null ? !!o.shopee_verified : null,
       brand: o.brand || null,
       catid: num(o.catid ?? o.cat_id),
       freeship: o.show_free_shipping != null ? !!o.show_free_shipping : null,
-      shopName: o.shop_name || extra.shop_detailed?.name || null,
+      shopName: o.shop_name || o.shop_data?.shop_name || extra.shop_detailed?.name || null,
       tiers: o.tier_variations ? o.tier_variations.map((t) => ({ name: t.name, options: t.options || [] })) : null,
       models: models.length ? models : null,
       ads: !!(o.adsid || extra.adsid),
@@ -112,6 +116,22 @@ const SPA = (() => {
     };
     walk(json, 0);
     return { products, shops, reviews };
+  }
+
+  // "1,2k" → 1200, "10k+" → 10000, "1,5tr" → 1500000
+  function parseShort(t) {
+    const m = String(t || '').toLowerCase().replace(/\s/g, '').match(/([\d.,]+)(k|tr|triệu|m)?/);
+    if (!m) return null;
+    const n = Number(m[1].replace(/\.(?=\d{3}\b)/g, '').replace(',', '.'));
+    if (!Number.isFinite(n)) return null;
+    return Math.round(n * (m[2] === 'k' ? 1e3 : m[2] ? 1e6 : 1));
+  }
+
+  // Gộp: chỉ điền các trường còn trống (dùng cho dữ liệu đọc từ giao diện, kém chính xác hơn API).
+  function fillMissing(prev, next) {
+    const out = { ...(prev || {}) };
+    for (const k in next) if (out[k] == null && next[k] != null && next[k] !== '') out[k] = next[k];
+    return out;
   }
 
   // Gộp: chỉ ghi đè trường có giá trị.
@@ -254,7 +274,7 @@ const SPA = (() => {
   }
 
   return {
-    extract, normalizeProduct, normalizeShop, normalizeReview, merge, loadAll, DEFAULT_SETTINGS,
+    extract, normalizeProduct, normalizeShop, normalizeReview, merge, fillMissing, parseShort, loadAll, DEFAULT_SETTINGS,
     fmt, vnd, pct, fmtDate, ageDays, median, sum, url, img, rev30, revAll, velocity,
     tokens, phrases, toCSV, PRODUCT_COLS, download,
   };

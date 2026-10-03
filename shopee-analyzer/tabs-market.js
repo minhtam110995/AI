@@ -50,23 +50,47 @@ function opportunity(ps) {
   return { score, demand, barrier, conc, mall };
 }
 
+const CTX_ICON = { kw: '🔍', shop: '🏪', cat: '📂' };
+const ctxLabel = (k) => `${CTX_ICON[k.type || 'kw'] || '🔍'} ${k.type === 'shop' ? (DB.shops[k.shopid]?.name || k.label) : k.label || k.keyword}`;
+const ctxOptions = () => Object.values(DB.keywords).sort((a, b) => b.updatedAt - a.updatedAt)
+  .map((k) => `<option value="${esc(k.keyword)}">${esc(ctxLabel(k))} (${Object.keys(k.items).length} SP)</option>`).join('');
+
+// Xoá 1 phiên; sản phẩm chỉ thuộc phiên đó (và không được theo dõi) cũng bị xoá
+async function deleteCtx(key) {
+  const items = Object.keys(DB.keywords[key]?.items || {});
+  const others = Object.values(DB.keywords).filter((k) => k.keyword !== key);
+  const orphan = items.filter((it) => !others.some((k) => it in k.items) && !DB.watch.includes(it));
+  await chrome.storage.local.remove(['k:' + key, ...orphan.map((it) => 'p:' + it)]);
+}
+
 TABS.market = {
   render(el, hp, keep) {
     const kws = Object.values(DB.keywords).sort((a, b) => b.updatedAt - a.updatedAt);
-    const prevKw = keep ? $('#mKw')?.value : undefined;
+    // Nếu người dùng chưa tự chọn phiên, luôn hiển thị phiên vừa quét gần nhất
+    const prevKw = keep ? (this.picked ? $('#mKw')?.value : undefined) : hp.get('ctx') || undefined;
+    if (!keep) this.picked = false;
+    if (hp.get('ctx')) history.replaceState(null, '', '#market');
     const prevTop = keep ? $('#mTop')?.value : '0';
     el.innerHTML = `
       <section class="filters">
-        <label>Từ khoá đã quét
-          <select id="mKw"><option value="">Tất cả sản phẩm đã lưu</option>
-          ${kws.map((k) => `<option value="${esc(k.keyword)}">${esc(k.keyword)} (${Object.keys(k.items).length} SP)</option>`).join('')}</select></label>
+        <label>Phiên quét (từ khoá / shop / danh mục)
+          <select id="mKw"><option value="">Tất cả sản phẩm đã lưu</option>${ctxOptions()}</select></label>
         <label>Phạm vi
           <select id="mTop"><option value="0">Toàn bộ kết quả</option><option value="20">Top 20</option><option value="50">Top 50</option><option value="100">Top 100</option></select></label>
+        <label style="align-self:end"><button id="mDel" title="Xoá phiên này và các sản phẩm chỉ thuộc phiên này">🗑 Xoá phiên này</button></label>
       </section>
       <div id="mBody"></div>`;
-    $('#mKw').value = prevKw ?? (kws[0]?.keyword || '');
+    $('#mKw').value = prevKw && DB.keywords[prevKw] ? prevKw : kws[0]?.keyword || '';
+    $('#mDel').onclick = async () => {
+      const k = $('#mKw').value;
+      if (!k) { alert('Chọn một phiên để xoá.'); return; }
+      if (!confirm(`Xoá phiên "${ctxLabel(DB.keywords[k])}"? Sản phẩm chỉ thuộc phiên này (không theo dõi) cũng bị xoá.`)) return;
+      await deleteCtx(k);
+      history.replaceState(null, '', '#market');
+    };
     $('#mTop').value = prevTop || '0';
-    $('#mKw').onchange = $('#mTop').onchange = () => this.body();
+    $('#mKw').onchange = () => { this.picked = true; this.body(); };
+    $('#mTop').onchange = () => this.body();
     this.body();
   },
 
@@ -82,7 +106,10 @@ TABS.market = {
     const shops = {};
     ps.forEach((p) => { const s = (shops[p.shopid] ||= { shopid: p.shopid, items: [], rev: 0 }); s.items.push(p); s.rev += SPA.rev30(p) || 0; });
     const shopList = Object.values(shops).sort((a, b) => b.rev - a.rev);
-    const opp = opportunity(ps);
+    const ctx = DB.keywords[kw];
+    const isShop = ctx?.type === 'shop';
+    const opp = isShop ? null : opportunity(ps);
+    const shopInfo = isShop ? DB.shops[ctx.shopid] : null;
     const buckets = priceBuckets(ps);
     const bestBucket = [...buckets].sort((a, b) => b.rev - a.rev)[0];
     const newHot = ps.filter((p) => SPA.ageDays(p.ctime) != null && SPA.ageDays(p.ctime) <= 90 && p.sold30 > 0).sort((a, b) => b.sold30 - a.sold30).slice(0, 10);
@@ -95,7 +122,7 @@ TABS.market = {
     const ins = [];
     if (opp) ins.push(`Điểm cơ hội <b>${Math.round(opp.score)}/100</b>: ${opp.score >= 65 ? 'thị trường hấp dẫn, nên thử' : opp.score >= 45 ? 'cạnh tranh vừa phải, cần điểm khác biệt rõ' : 'cạnh tranh gắt hoặc nhu cầu thấp, cân nhắc kỹ'}.`);
     if (bestBucket) ins.push(`Phân khúc giá bán chạy nhất: <b>${bestBucket.label}đ</b>, chiếm ${SPA.pct(bestBucket.rev / (rev || 1), 0)} doanh thu (${bestBucket.items.length} SP).`);
-    if (top3share != null) ins.push(`Top 3 shop chiếm <b>${SPA.pct(top3share, 0)}</b> doanh thu. ${top3share > 0.6 ? 'Thị trường tập trung, khó chen chân.' : 'Thị trường còn phân mảnh, shop mới vẫn có cơ hội.'}`);
+    if (top3share != null && !isShop) ins.push(`Top 3 shop chiếm <b>${SPA.pct(top3share, 0)}</b> doanh thu. ${top3share > 0.6 ? 'Thị trường tập trung, khó chen chân.' : 'Thị trường còn phân mảnh, shop mới vẫn có cơ hội.'}`);
     if (newHot.length) ins.push(`Có <b>${newHot.length}</b> sản phẩm mới (≤ 90 ngày) đã có đơn. Mẫu bán tốt nhất: ${esc(newHot[0].name.slice(0, 60))} (${SPA.fmt(newHot[0].sold30)}/tháng).`);
     if (weak.length) ins.push(`<b>${weak.length}</b> sản phẩm bán khá nhưng sao dưới 4,7. Xem đánh giá xấu của chúng để làm sản phẩm tốt hơn.`);
     if (phr.length) ins.push(`Cụm từ trong tiêu đề của sản phẩm bán chạy: ${phr.slice(0, 6).map((p) => `<b>${esc(p.phrase)}</b>`).join(', ')}.`);
@@ -103,6 +130,9 @@ TABS.market = {
     ins.push(`Shop Mall chiếm ${SPA.pct(mallShare, 0)} số sản phẩm; Shop Yêu thích ${SPA.pct(ps.filter((p) => p.preferred).length / ps.length, 0)}.`);
 
     box.innerHTML = `
+      ${isShop ? `<section class="card"><h2>🏪 ${esc(shopInfo?.name || ctx.label)} ${shopInfo?.mall ? '<span class="pill mall">Mall</span>' : ''}${shopInfo?.preferred ? '<span class="pill">Yêu thích</span>' : ''}</h2>
+        <div class="small">${shopInfo ? `${SPA.fmt(shopInfo.followers)} người theo dõi · ${shopInfo.itemCount ?? '–'} sản phẩm trên Shopee · sao shop ${shopInfo.rating ? shopInfo.rating.toFixed(1) : '–'} · phản hồi chat ${shopInfo.responseRate ?? '–'}% · tham gia ${SPA.fmtDate(shopInfo.ctime)} · ${esc(shopInfo.location || '')}` : 'Chưa có thông tin shop (mở lại trang shop để tiện ích ghi nhận).'}</div>
+        <div class="small" style="margin-top:4px">Đã quét <b>${ps.length}</b>${shopInfo?.itemCount ? ` / ${shopInfo.itemCount}` : ''} sản phẩm · <a href="https://shopee.vn/shop/${ctx.shopid}" target="_blank">mở shop</a> · <a href="#products&kw=${encodeURIComponent(kw)}">xem bảng sản phẩm</a></div></section>` : ''}
       <section class="kpis">
         ${[['Sản phẩm', SPA.fmt(ps.length)], ['Doanh thu/tháng (ước tính)', SPA.fmt(rev) + 'đ'], ['Số shop', SPA.fmt(shopList.length)],
           ['Giá trung vị', SPA.vnd(SPA.median(ps.map((p) => p.price)))], ['Đã bán/tháng trung vị', SPA.fmt(SPA.median(ps.map((p) => p.sold30)))],
@@ -124,14 +154,14 @@ TABS.market = {
         <section class="card"><h2>Phân khúc giá</h2><p class="muted small">Doanh thu/tháng ước tính theo khoảng giá (đ).</p><div class="chart">${Charts.bars(buckets.map((b) => ({ label: b.label, value: b.rev, tip: `<b>${b.label}đ</b><br>${b.items.length} SP · ${SPA.fmt(b.sold)} đơn/tháng<br>Doanh thu ${SPA.fmt(b.rev)}đ` })), { label: 'Phân khúc giá' })}</div></section>
         <section class="card"><h2>Doanh thu theo nơi bán</h2><p class="muted small">Doanh thu/tháng ước tính theo tỉnh/thành của shop.</p><div class="chart">${Charts.hbars(Object.entries(locs).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([l, v]) => ({ label: l, value: v })), { left: 130 })}</div></section>
       </div>
-      <section class="card" style="margin-top:16px"><h2>🏪 Top shop trong thị trường</h2><div class="tablewrap"><table>
+      ${isShop ? '' : `      <section class="card" style="margin-top:16px"><h2>🏪 Top shop trong thị trường</h2><div class="tablewrap"><table>
         <thead><tr><th>Shop</th><th>Số SP</th><th>Doanh thu/tháng</th><th>Thị phần</th><th>SP bán chạy nhất</th></tr></thead><tbody>
         ${shopList.slice(0, 15).map((s) => {
           const info = DB.shops[s.shopid];
           const best = [...s.items].sort((a, b) => (b.sold30 || 0) - (a.sold30 || 0))[0];
           return `<tr><td>${esc(info?.name || best?.shopName || s.shopid)}${info?.mall || best?.mall ? '<span class="pill mall">Mall</span>' : ''}</td><td>${s.items.length}</td><td>${SPA.fmt(s.rev)}đ</td><td>${SPA.pct(s.rev / (rev || 1))}</td>
             <td class="name"><a data-open="${best.key}">${esc(best.name.slice(0, 70))}</a></td></tr>`;
-        }).join('')}</tbody></table></div></section>
+        }).join('')}</tbody></table></div></section>`}
       <div class="lists">
         <section class="card"><h2>🔥 Sản phẩm mới bán chạy (≤ 90 ngày)</h2><ul class="plist">${newHot.map((p) => plistItem(p, SPA.ageDays(p.ctime) + ' ngày')).join('') || '<li class="muted">Chưa có</li>'}</ul></section>
         <section class="card"><h2>🛠 Bán chạy nhưng bị chê (sao &lt; 4,7)</h2><ul class="plist">${weak.map((p) => plistItem(p, '⭐ ' + p.rating.toFixed(1))).join('') || '<li class="muted">Chưa có</li>'}</ul></section>

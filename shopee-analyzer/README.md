@@ -16,6 +16,11 @@ Tiện ích Chrome (Manifest V3) tự ghi lại số liệu sản phẩm, shop v
 3. Trong khung **Shopee Analyzer** ở góc phải (hoặc trong popup), bấm **⬇ Quét 3/10 trang**. Tiện ích tự cuộn và lật trang như người dùng thật.
 4. Bấm **📊 Mở Dashboard** để phân tích.
 
+## Phiên quét (từ khoá / shop / danh mục)
+Mỗi trang bạn quét được lưu thành một **phiên** riêng: 🔍 từ khoá, 🏪 shop hoặc 📂 danh mục. Dashboard tự mở **phiên vừa quét gần nhất**. Muốn xem phiên khác thì chọn ở ô **Phiên quét**. Bấm **🗑 Xoá phiên này** để xoá một phiên cũ. Khi xoá, các sản phẩm chỉ thuộc phiên đó (và không đang theo dõi) cũng bị xoá theo.
+
+**Quét một shop:** mở trang shop, rồi bấm **⬇ Quét**. Tiện ích tự chuyển sang tab **Tất cả sản phẩm**, lật từng trang và dừng khi tới trang cuối.
+
 ## Tính năng
 | Nhóm | Tính năng |
 |---|---|

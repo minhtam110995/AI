@@ -20,7 +20,7 @@ TABS.products = {
     const kws = Object.values(DB.keywords).sort((a, b) => b.updatedAt - a.updatedAt);
     el.innerHTML = `
       <section class="filters">
-        <label>Từ khoá<select id="pKw"><option value="">Tất cả</option>${kws.map((k) => `<option value="${esc(k.keyword)}">${esc(k.keyword)}</option>`).join('')}</select></label>
+        <label>Phiên quét<select id="pKw"><option value="">Tất cả</option>${ctxOptions()}</select></label>
         <label class="grow">Tìm theo tên sản phẩm<input id="pQ" type="search" placeholder="vd: kem chống nắng"></label>
         <label>Đã bán/tháng tối thiểu<input id="pMin" type="search" inputmode="numeric" placeholder="0" style="min-width:120px"></label>
         <label>Shop ID<input id="pShop" type="search" placeholder="tất cả" style="min-width:120px"></label>

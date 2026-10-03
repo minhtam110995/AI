@@ -10,7 +10,7 @@ const currentTab = () => (location.hash.slice(1).match(/^[a-z]+/) || ['market'])
 async function reload() {
   DB = await SPA.loadAll();
   const ps = Object.values(DB.products);
-  $('#subtitle').textContent = `${ps.length} sản phẩm · ${new Set(ps.map((p) => p.shopid)).size} shop · ${Object.keys(DB.keywords).length} từ khoá · ${DB.watch.length} đang theo dõi`;
+  $('#subtitle').textContent = `${ps.length} sản phẩm · ${new Set(ps.map((p) => p.shopid)).size} shop · ${Object.keys(DB.keywords).length} phiên quét · ${DB.watch.length} đang theo dõi`;
 }
 
 let lastTab = null;
