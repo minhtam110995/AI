@@ -95,7 +95,7 @@ function openProduct(key) {
     <section class="kpis">
       ${[['Giá', SPA.vnd(p.price) + (p.priceMax && p.priceMax !== p.price ? ' – ' + SPA.vnd(p.priceMax) : '')],
         ['Giá gốc / giảm', p.priceBefore ? `${SPA.vnd(p.priceBefore)} · -${p.discount || Math.round((1 - p.price / p.priceBefore) * 100)}%` : '–'],
-        ['Đã bán / tháng', SPA.fmt(p.sold30)], ['Tổng đã bán', SPA.fmt(p.hsold)],
+        [`Đã bán / tháng${p.m30src && p.m30src !== 'shopee' ? ' (ước tính: ' + SPA.M30_SRC[p.m30src] + ')' : ''}`, SPA.fmt(p.sold30)], ['Tổng đã bán', SPA.fmt(p.hsold)],
         ['Doanh thu / tháng (ước tính)', SPA.vnd(SPA.rev30(p))], ['Doanh thu tích luỹ (ước tính)', SPA.vnd(SPA.revAll(p))],
         ['Đánh giá', `⭐ ${p.rating ? p.rating.toFixed(2) : '–'} · ${SPA.fmt(p.ratingCount)}`], ['Tồn kho', SPA.fmt(p.stock)],
         ['Tốc độ bán thực tế', v != null ? v.toFixed(1) + ' đơn/ngày' : 'cần ≥ 2 lần ghi nhận'], ['Lượt thích', SPA.fmt(p.likes)]]

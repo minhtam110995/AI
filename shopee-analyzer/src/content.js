@@ -14,6 +14,7 @@
   let pageSeen = new Map(); // sản phẩm xuất hiện trên trang hiện tại, theo thứ tự
   let pageShopId = null;
   let flushedSeen = 0;
+  const domTried = new Set();
 
   function pageInfo() {
     const u = new URL(location.href);
@@ -168,8 +169,9 @@
     const age = SPA.ageDays(p.ctime);
     const parts = [];
     if (r != null) parts.push(`💰 ${SPA.fmt(r)}/th`);
-    if (p.sold30 != null) parts.push(`🛒 ${SPA.fmt(p.sold30)}/th`);
-    else if (p.hsold != null) parts.push(`🛒 tổng ${SPA.fmt(p.hsold)}`);
+    const m = SPA.m30(p);
+    if (m.v) parts.push(`🛒 ${m.src === 'shopee' ? '' : '~'}${SPA.fmt(m.v)}/th`);
+    if (p.hsold != null) parts.push(`tổng ${SPA.fmt(p.hsold)}`);
     if (p.ratingCount != null) parts.push(`⭐ ${p.rating ? p.rating.toFixed(1) : '–'} (${SPA.fmt(p.ratingCount)})`);
     if (age != null) parts.push(`📅 ${age < 60 ? age + ' ngày' : Math.round(age / 30) + ' th'}`);
     return parts.join(' · ');
@@ -199,11 +201,16 @@
     for (const a of anchors) {
       const key = keyFromHref(a.getAttribute('href'));
       if (!key) continue;
-      if (!mem.has(key)) {
+      const cur = mem.get(key);
+      // Chưa có dữ liệu, hoặc API không có số "đã bán" → đọc từ thẻ sản phẩm (mỗi thẻ 1 lần)
+      if ((!cur || (cur.hsold == null && !(cur.sold30 > 0))) && !domTried.has(key)) {
         const d = parseCard(a, key);
         if (d) {
-          mem.set(key, { ...d });
-          if (!pending.products.has(key)) pending.products.set(key, d);
+          domTried.add(key);
+          const { _dom, ...plain } = d;
+          mem.set(key, SPA.fillMissing(cur, plain));
+          const pp = pending.products.get(key);
+          pending.products.set(key, pp ? SPA.fillMissing(pp, plain) : cur ? { ...plain, _dom: true } : d);
           domAdded = true;
         }
       }
@@ -220,7 +227,7 @@
       }
       b.dataset.v = String(p.sold30) + watch.has(key);
       b.innerHTML = `<span class="spa-star" title="Theo dõi sản phẩm" data-key="${key}">${watch.has(key) ? '★' : '☆'}</span> ${badgeHTML(p)}`;
-      const isNew = SPA.ageDays(p.ctime) != null && SPA.ageDays(p.ctime) <= 90 && (p.sold30 || 0) >= 100;
+      const isNew = SPA.ageDays(p.ctime) != null && SPA.ageDays(p.ctime) <= 90 && (SPA.m30(p).v || 0) >= 100;
       b.classList.toggle('spa-hot', isNew);
       if (isNew) b.title = 'Sản phẩm mới (≤ 90 ngày) nhưng bán chạy';
     }
@@ -281,7 +288,7 @@
       const v = SPA.velocity(p);
       body.innerHTML = `
         <div class="row"><span>Giá</span><b>${SPA.vnd(p.price)}${p.priceMax && p.priceMax !== p.price ? ' – ' + SPA.vnd(p.priceMax) : ''}</b></div>
-        <div class="row"><span>Đã bán / tháng</span><b>${SPA.fmt(p.sold30)}</b></div>
+        <div class="row"><span>Đã bán / tháng${SPA.m30(p).src === 'shopee' ? '' : ' (ước tính)'}</span><b>${SPA.fmt(SPA.m30(p).v)}</b></div>
         <div class="row"><span>Tổng đã bán</span><b>${SPA.fmt(p.hsold)}</b></div>
         <div class="row"><span>Doanh thu / tháng (ước tính)</span><b>${SPA.vnd(SPA.rev30(p))}</b></div>
         <div class="row"><span>Doanh thu tích luỹ (ước tính)</span><b>${SPA.vnd(SPA.revAll(p))}</b></div>
@@ -301,7 +308,8 @@
       const icon = { kw: '🔍', shop: '🏪', cat: '📂' };
       body.innerHTML = `<div class="msg">${c ? `Phiên: <b>${icon[c.type]} ${c.label.replace(/</g, '&lt;')}</b><br>` : ''}Trang này: <b>${pageSeen.size}</b> SP · mới lưu: <b>${newCount}</b></div>
         <div class="btns"><button data-act="crawl3">⬇ Quét 3 trang</button><button data-act="crawl10">⬇ Quét 10 trang</button>
-        <button data-act="dash" style="grid-column:1/-1">📊 Mở Dashboard</button></div><div class="msg" id="spa-msg">${crawlStatus()}</div>`;
+        <button data-act="dash" style="grid-column:1/-1">📊 Mở Dashboard</button>
+        ${c ? `<button data-act="delctx" style="grid-column:1/-1">🗑 Xoá dữ liệu ${c.type === 'shop' ? 'shop' : 'phiên'} này & quét lại</button>` : ''}</div><div class="msg" id="spa-msg">${crawlStatus()}</div>`;
     }
   }
 
@@ -324,6 +332,12 @@
       msg(`Đang tải ${imgs.length} ảnh vào thư mục Downloads/shopee/${key}/`);
     }
     if (act === 'reviews') fetchReviews(key, 500);
+    if (act === 'delctx') {
+      const c = ctxNow();
+      if (!c || !confirm(`Xoá toàn bộ dữ liệu đã quét của "${c.label}"? Trang sẽ tải lại để bạn quét lại từ đầu.`)) return;
+      setJob(null);
+      SPA.deleteSession(c.key).then(() => { msg('✓ Đã xoá. Đang tải lại trang…'); setTimeout(() => location.reload(), 600); });
+    }
     if (act === 'crawl3') startCrawl(3);
     if (act === 'crawl10') startCrawl(10);
   }

@@ -14,7 +14,7 @@ function niceStep(x) {
   return 10 * p;
 }
 
-function priceBuckets(ps) {
+function priceBuckets(ps, revFn = SPA.rev30) {
   const prices = ps.map((p) => p.price).filter((x) => x > 0).sort((a, b) => a - b);
   if (prices.length < 3) return [];
   const q = (f) => prices[Math.min(prices.length - 1, Math.floor(f * prices.length))];
@@ -31,7 +31,7 @@ function priceBuckets(ps) {
   return b.map((x, i) => ({
     ...x,
     label: `${i === 0 ? '≤' : ''}${SPA.fmt(i === 0 ? x.to : x.from)}${i === 0 ? '' : i === n - 1 ? '+' : '–' + SPA.fmt(x.to)}`,
-    rev: SPA.sum(x.items.map(SPA.rev30)), sold: SPA.sum(x.items.map((p) => p.sold30)),
+    rev: SPA.sum(x.items.map(revFn)), sold: SPA.sum(x.items.map((p) => p.sold30)),
   }));
 }
 
@@ -55,13 +55,6 @@ const ctxLabel = (k) => `${CTX_ICON[k.type || 'kw'] || '🔍'} ${k.type === 'sho
 const ctxOptions = () => Object.values(DB.keywords).sort((a, b) => b.updatedAt - a.updatedAt)
   .map((k) => `<option value="${esc(k.keyword)}">${esc(ctxLabel(k))} (${Object.keys(k.items).length} SP)</option>`).join('');
 
-// Xoá 1 phiên; sản phẩm chỉ thuộc phiên đó (và không được theo dõi) cũng bị xoá
-async function deleteCtx(key) {
-  const items = Object.keys(DB.keywords[key]?.items || {});
-  const others = Object.values(DB.keywords).filter((k) => k.keyword !== key);
-  const orphan = items.filter((it) => !others.some((k) => it in k.items) && !DB.watch.includes(it));
-  await chrome.storage.local.remove(['k:' + key, ...orphan.map((it) => 'p:' + it)]);
-}
 
 TABS.market = {
   render(el, hp, keep) {
@@ -78,14 +71,19 @@ TABS.market = {
         <label>Phạm vi
           <select id="mTop"><option value="0">Toàn bộ kết quả</option><option value="20">Top 20</option><option value="50">Top 50</option><option value="100">Top 100</option></select></label>
         <label style="align-self:end"><button id="mDel" title="Xoá phiên này và các sản phẩm chỉ thuộc phiên này">🗑 Xoá phiên này</button></label>
+        <label style="align-self:end"><button id="mReset" title="Xoá toàn bộ dữ liệu đã quét, giữ cài đặt">🧹 Xoá toàn bộ & làm lại</button></label>
       </section>
       <div id="mBody"></div>`;
     $('#mKw').value = prevKw && DB.keywords[prevKw] ? prevKw : kws[0]?.keyword || '';
+    $('#mReset').onclick = async () => {
+      if (!confirm('Xoá TOÀN BỘ dữ liệu đã quét (sản phẩm, shop, phiên, đánh giá, theo dõi)? Cài đặt được giữ lại.')) return;
+      await SPA.resetAll();
+    };
     $('#mDel').onclick = async () => {
       const k = $('#mKw').value;
       if (!k) { alert('Chọn một phiên để xoá.'); return; }
       if (!confirm(`Xoá phiên "${ctxLabel(DB.keywords[k])}"? Sản phẩm chỉ thuộc phiên này (không theo dõi) cũng bị xoá.`)) return;
-      await deleteCtx(k);
+      await SPA.deleteSession(k);
       history.replaceState(null, '', '#market');
     };
     $('#mTop').value = prevTop || '0';
@@ -103,6 +101,8 @@ TABS.market = {
       return;
     }
     const rev = SPA.sum(ps.map(SPA.rev30));
+    const estShare = ps.filter((p) => p.m30src && p.m30src !== 'shopee').length / ps.length;
+    const revAllSum = SPA.sum(ps.map(SPA.revAll));
     const shops = {};
     ps.forEach((p) => { const s = (shops[p.shopid] ||= { shopid: p.shopid, items: [], rev: 0 }); s.items.push(p); s.rev += SPA.rev30(p) || 0; });
     const shopList = Object.values(shops).sort((a, b) => b.rev - a.rev);
@@ -110,13 +110,17 @@ TABS.market = {
     const isShop = ctx?.type === 'shop';
     const opp = isShop ? null : opportunity(ps);
     const shopInfo = isShop ? DB.shops[ctx.shopid] : null;
-    const buckets = priceBuckets(ps);
+    // Không có số bán/tháng nào → vẽ theo doanh thu tích luỹ
+    const useAll = !(SPA.sum(ps.map(SPA.rev30)) > 0) && SPA.sum(ps.map(SPA.revAll)) > 0;
+    const revFn = useAll ? SPA.revAll : SPA.rev30;
+    const revWord = useAll ? 'Doanh thu tích luỹ' : 'Doanh thu/tháng';
+    const buckets = priceBuckets(ps, revFn);
     const bestBucket = [...buckets].sort((a, b) => b.rev - a.rev)[0];
     const newHot = ps.filter((p) => SPA.ageDays(p.ctime) != null && SPA.ageDays(p.ctime) <= 90 && p.sold30 > 0).sort((a, b) => b.sold30 - a.sold30).slice(0, 10);
     const weak = ps.filter((p) => (p.sold30 || 0) >= 50 && p.rating && p.rating < 4.7).sort((a, b) => a.rating - b.rating || b.sold30 - a.sold30).slice(0, 10);
     const phr = SPA.phrases(ps.map((p) => ({ text: p.name, sold: p.sold30 || 0 })), (it) => 1 + it.sold, 25);
     const locs = {};
-    ps.forEach((p) => p.location && (locs[p.location] = (locs[p.location] || 0) + (SPA.rev30(p) || 0)));
+    ps.forEach((p) => p.location && (locs[p.location] = (locs[p.location] || 0) + (revFn(p) || 0)));
     const top3share = rev ? SPA.sum(shopList.slice(0, 3).map((s) => s.rev)) / rev : null;
 
     const ins = [];
@@ -135,6 +139,7 @@ TABS.market = {
         <div class="small" style="margin-top:4px">Đã quét <b>${ps.length}</b>${shopInfo?.itemCount ? ` / ${shopInfo.itemCount}` : ''} sản phẩm · <a href="https://shopee.vn/shop/${ctx.shopid}" target="_blank">mở shop</a> · <a href="#products&kw=${encodeURIComponent(kw)}">xem bảng sản phẩm</a></div></section>` : ''}
       <section class="kpis">
         ${[['Sản phẩm', SPA.fmt(ps.length)], ['Doanh thu/tháng (ước tính)', SPA.fmt(rev) + 'đ'], ['Số shop', SPA.fmt(shopList.length)],
+          ['Doanh thu tích luỹ (ước tính)', SPA.fmt(revAllSum) + 'đ'],
           ['Giá trung vị', SPA.vnd(SPA.median(ps.map((p) => p.price)))], ['Đã bán/tháng trung vị', SPA.fmt(SPA.median(ps.map((p) => p.sold30)))],
           ['Sao trung bình', (SPA.median(ps.map((p) => p.rating)) || 0).toFixed(2)], ['Đánh giá trung vị (top 10)', SPA.fmt(SPA.median([...ps].sort((a, b) => (b.sold30 || 0) - (a.sold30 || 0)).slice(0, 10).map((p) => p.ratingCount)))],
           ['Tỉ lệ Mall', SPA.pct(mallShare, 0)]]
@@ -148,11 +153,11 @@ TABS.market = {
           ${Charts.meter('Độ tập trung top 3', opp.conc, SPA.pct(opp.conc, 0))}
           ${Charts.meter('Tỉ lệ Mall', opp.mall, SPA.pct(opp.mall, 0))}
         </div></div>
-        <p class="muted small">Điểm tham khảo = 45% nhu cầu + 20% (1 − rào cản đánh giá) + 20% (1 − độ tập trung) + 15% (1 − tỉ lệ Mall). Doanh thu = giá × đã bán/tháng do Shopee hiển thị, chỉ là ước tính.</p></section>` : ''}
+        <p class="muted small">${estShare > 0.3 ? `⚠️ ${SPA.pct(estShare, 0)} sản phẩm không có số "bán/tháng" từ Shopee nên được ước tính (tốc độ bán thực tế giữa các lần ghi nhận, hoặc tổng đã bán ÷ số tháng từ ngày đăng). ` : ''}Điểm tham khảo = 45% nhu cầu + 20% (1 − rào cản đánh giá) + 20% (1 − độ tập trung) + 15% (1 − tỉ lệ Mall). Doanh thu = giá × đã bán/tháng do Shopee hiển thị, chỉ là ước tính.</p></section>` : ''}
       <section class="card insights"><h2>💡 Nhận định</h2><ul>${ins.map((x) => `<li>${x}</li>`).join('')}</ul></section>
       <div class="grid2">
-        <section class="card"><h2>Phân khúc giá</h2><p class="muted small">Doanh thu/tháng ước tính theo khoảng giá (đ).</p><div class="chart">${Charts.bars(buckets.map((b) => ({ label: b.label, value: b.rev, tip: `<b>${b.label}đ</b><br>${b.items.length} SP · ${SPA.fmt(b.sold)} đơn/tháng<br>Doanh thu ${SPA.fmt(b.rev)}đ` })), { label: 'Phân khúc giá' })}</div></section>
-        <section class="card"><h2>Doanh thu theo nơi bán</h2><p class="muted small">Doanh thu/tháng ước tính theo tỉnh/thành của shop.</p><div class="chart">${Charts.hbars(Object.entries(locs).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([l, v]) => ({ label: l, value: v })), { left: 130 })}</div></section>
+        <section class="card"><h2>Phân khúc giá</h2><p class="muted small">${revWord} ước tính theo khoảng giá (đ).</p><div class="chart">${Charts.bars(buckets.map((b) => ({ label: b.label, value: b.rev, tip: `<b>${b.label}đ</b><br>${b.items.length} SP · ${SPA.fmt(b.sold)} đơn/tháng<br>Doanh thu ${SPA.fmt(b.rev)}đ` })), { label: 'Phân khúc giá' })}</div></section>
+        <section class="card"><h2>Doanh thu theo nơi bán</h2><p class="muted small">${revWord} ước tính theo tỉnh/thành của shop.</p><div class="chart">${Charts.hbars(Object.entries(locs).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([l, v]) => ({ label: l, value: v })), { left: 130 })}</div></section>
       </div>
       ${isShop ? '' : `      <section class="card" style="margin-top:16px"><h2>🏪 Top shop trong thị trường</h2><div class="tablewrap"><table>
         <thead><tr><th>Shop</th><th>Số SP</th><th>Doanh thu/tháng</th><th>Thị phần</th><th>SP bán chạy nhất</th></tr></thead><tbody>

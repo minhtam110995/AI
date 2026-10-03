@@ -19,6 +19,8 @@ Tiện ích Chrome (Manifest V3) tự ghi lại số liệu sản phẩm, shop v
 ## Phiên quét (từ khoá / shop / danh mục)
 Mỗi trang bạn quét được lưu thành một **phiên** riêng: 🔍 từ khoá, 🏪 shop hoặc 📂 danh mục. Dashboard tự mở **phiên vừa quét gần nhất**. Muốn xem phiên khác thì chọn ở ô **Phiên quét**. Bấm **🗑 Xoá phiên này** để xoá một phiên cũ. Khi xoá, các sản phẩm chỉ thuộc phiên đó (và không đang theo dõi) cũng bị xoá theo.
 
+**Xoá để quét lại:** trên trang shop hoặc trang tìm kiếm, bấm **🗑 Xoá dữ liệu shop/phiên này & quét lại** ở khung nổi. Muốn xoá sạch mọi thứ thì bấm **🗑 Xoá toàn bộ dữ liệu & làm lại** trong popup, hoặc **🧹 Xoá toàn bộ** ở Dashboard.
+
 **Quét một shop:** mở trang shop, rồi bấm **⬇ Quét**. Tiện ích tự chuyển sang tab **Tất cả sản phẩm**, lật từng trang và dừng khi tới trang cuối.
 
 ## Tính năng
@@ -36,6 +38,7 @@ Mỗi trang bạn quét được lưu thành một **phiên** riêng: 🔍 từ 
 Vào Dashboard, tab **⚙️ Cài đặt**, rồi làm theo 4 bước hướng dẫn: dán đoạn Apps Script có sẵn vào Sheet, triển khai dạng Web App, rồi dán link vào tiện ích. Sau đó bấm **Gửi Google Sheets** ở tab Sản phẩm hoặc Shop.
 
 ## Lưu ý
+- **Bán/tháng:** nhiều trang của Shopee (ví dụ trang shop) không trả số bán/tháng. Khi đó tiện ích tự ước tính, theo thứ tự: (1) tốc độ bán thực tế giữa các lần ghi nhận × 30 ngày, (2) tổng đã bán ÷ số tháng kể từ ngày đăng. Nhãn trên trang có dấu `~` là số ước tính.
 - **Doanh thu là ước tính:** giá × số "đã bán" do Shopee hiển thị (đã được làm tròn). Muốn số liệu sát thực tế hơn, hãy **theo dõi** sản phẩm vài ngày để có tốc độ bán thực tế.
 - Tiện ích chỉ đọc dữ liệu mà trang Shopee đã tải, và cuộn hoặc lật trang với tốc độ như người dùng thật. Đừng quét quá nhiều trang liên tục, vì Shopee có thể yêu cầu xác minh.
 - **Lấy đánh giá:** tiện ích gọi trực tiếp API đánh giá. Nếu Shopee chặn, nó tự chuyển sang bấm "trang sau" trong mục đánh giá. Khi đó hãy cuộn tới mục "ĐÁNH GIÁ SẢN PHẨM" trước rồi bấm lại.

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Shopee Analyzer",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Nghiên cứu thị trường Shopee: doanh thu ước tính, phân khúc giá, đối thủ, theo dõi giá & lượt bán, phân tích đánh giá, tính lãi.",
   "permissions": ["storage", "unlimitedStorage", "tabs", "downloads", "alarms", "notifications"],
   "host_permissions": ["https://shopee.vn/*", "https://*.susercontent.com/*", "https://script.google.com/*", "https://script.googleusercontent.com/*"],

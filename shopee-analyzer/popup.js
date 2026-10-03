@@ -40,4 +40,10 @@ $('#profit').onclick = () => open('dashboard.html#profit=');
 $('#crawl').onclick = () => { chrome.tabs.sendMessage(tab.id, { type: 'crawl', pages: Number($('#pages').value) }); window.close(); };
 $('#stop').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'stopCrawl' });
 $('#reviews').onclick = () => { chrome.tabs.sendMessage(tab.id, { type: 'reviews', max: 500 }); window.close(); };
+$('#reset').onclick = async () => {
+  if (!confirm('Xoá TOÀN BỘ dữ liệu đã quét (sản phẩm, shop, phiên, đánh giá, danh sách theo dõi)? Cài đặt được giữ lại.')) return;
+  await SPA.resetAll();
+  if (/^https:\/\/shopee\.vn\//.test(tab?.url || '')) chrome.tabs.reload(tab.id);
+  window.close();
+};
 init();

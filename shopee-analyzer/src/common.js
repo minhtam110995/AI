@@ -147,12 +147,33 @@ const SPA = (() => {
     const all = await chrome.storage.local.get(null);
     const db = { products: {}, shops: {}, keywords: {}, reviews: {}, watch: all.watch || [], settings: { ...DEFAULT_SETTINGS, ...(all.settings || {}), fees: { ...DEFAULT_SETTINGS.fees, ...(all.settings?.fees || {}) } }, lastRefresh: all.lastRefresh };
     for (const k in all) {
-      if (k.startsWith('p:')) db.products[k.slice(2)] = all[k];
+      if (k.startsWith('p:')) {
+        const p = all[k];
+        const m = m30(p);
+        db.products[k.slice(2)] = { ...p, sold30raw: p.sold30 ?? null, sold30: m.v, m30src: m.src };
+      }
       else if (k.startsWith('s:')) db.shops[k.slice(2)] = all[k];
       else if (k.startsWith('k:')) db.keywords[k.slice(2)] = all[k];
       else if (k.startsWith('r:')) db.reviews[k.slice(2)] = all[k];
     }
     return db;
+  }
+
+  // Xoá 1 phiên quét; sản phẩm chỉ thuộc phiên đó (và không được theo dõi) cũng bị xoá
+  async function deleteSession(key) {
+    const all = await chrome.storage.local.get(null);
+    const items = Object.keys(all['k:' + key]?.items || {});
+    const others = Object.keys(all).filter((k) => k.startsWith('k:') && k !== 'k:' + key).map((k) => all[k].items || {});
+    const watch = all.watch || [];
+    const orphan = items.filter((it) => !others.some((o) => it in o) && !watch.includes(it));
+    await chrome.storage.local.remove(['k:' + key, ...orphan.map((it) => 'p:' + it), ...orphan.map((it) => 'r:' + it)]);
+    return orphan.length;
+  }
+
+  // Xoá toàn bộ dữ liệu đã quét (giữ lại cài đặt)
+  async function resetAll() {
+    const all = await chrome.storage.local.get(null);
+    await chrome.storage.local.remove(Object.keys(all).filter((k) => k !== 'settings'));
   }
 
   const DEFAULT_SETTINGS = {
@@ -186,8 +207,21 @@ const SPA = (() => {
   const url = (p) => `https://shopee.vn/product/${p.shopid}/${p.itemid}`;
   const img = (hash) => (!hash ? '' : /^https?:/.test(hash) ? hash : IMG + hash);
 
+  // Bán/tháng: số Shopee hiển thị; nếu Shopee trả 0/không có thì ước tính
+  //  1) tốc độ bán thực tế giữa các lần ghi nhận × 30, 2) tổng đã bán ÷ số tháng từ ngày đăng
+  function m30(p) {
+    const raw = p.sold30raw !== undefined ? p.sold30raw : p.sold30;
+    if (raw > 0) return { v: raw, src: 'shopee' };
+    const v = velocity(p);
+    if (v != null && v > 0) return { v: v * 30, src: 'velocity' };
+    const age = ageDays(p.ctime);
+    if (p.hsold > 0 && age != null) return { v: p.hsold / Math.max(1, age / 30), src: 'avg' };
+    return { v: raw ?? null, src: 'shopee' };
+  }
+  const M30_SRC = { shopee: 'số Shopee hiển thị', velocity: 'tốc độ bán thực tế × 30 ngày', avg: 'TB tổng đã bán ÷ số tháng từ ngày đăng' };
+
   // Doanh thu ước tính
-  const rev30 = (p) => (p.price != null && p.sold30 != null ? p.price * p.sold30 : null);
+  const rev30 = (p) => { const s = p.sold30raw !== undefined ? p.sold30 : m30(p).v; return p.price != null && s != null ? p.price * s : null; };
   const revAll = (p) => (p.price != null && p.hsold != null ? p.price * p.hsold : null);
 
   // Tốc độ bán thực tế từ lịch sử ghi nhận (đơn/ngày), cần ≥ 2 mốc cách nhau ≥ 12 giờ.
@@ -275,7 +309,7 @@ const SPA = (() => {
 
   return {
     extract, normalizeProduct, normalizeShop, normalizeReview, merge, fillMissing, parseShort, loadAll, DEFAULT_SETTINGS,
-    fmt, vnd, pct, fmtDate, ageDays, median, sum, url, img, rev30, revAll, velocity,
+    fmt, vnd, pct, fmtDate, ageDays, median, sum, url, img, rev30, revAll, velocity, m30, M30_SRC, deleteSession, resetAll,
     tokens, phrases, toCSV, PRODUCT_COLS, download,
   };
 })();
