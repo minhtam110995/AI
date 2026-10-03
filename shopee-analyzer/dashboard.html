@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shopee Analyzer – Dashboard</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>🛍 Shopee Analyzer</h1>
+    <p class="muted" id="subtitle">Phân tích dữ liệu đã thu thập từ shopee.vn</p>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <a href="#market" data-tab="market">📈 Thị trường</a>
+  <a href="#products" data-tab="products">📦 Sản phẩm</a>
+  <a href="#shops" data-tab="shops">🏪 Shop</a>
+  <a href="#watch" data-tab="watch">⭐ Theo dõi</a>
+  <a href="#reviews" data-tab="reviews">💬 Đánh giá</a>
+  <a href="#profit" data-tab="profit">🧮 Tính lãi</a>
+  <a href="#settings" data-tab="settings">⚙️ Cài đặt</a>
+</nav>
+
+<main id="view"></main>
+
+<dialog id="dlg"><div class="dhead"><h2 id="dlgTitle" style="margin:0"></h2><button id="dlgClose">✕ Đóng</button></div><div class="dbody" id="dlgBody"></div></dialog>
+<div id="tip" class="tip" role="tooltip"></div>
+
+<script src="src/common.js"></script>
+<script src="charts.js"></script>
+<script src="dashboard.js"></script>
+<script src="tabs-market.js"></script>
+<script src="tabs-products.js"></script>
+<script src="tabs-more.js"></script>
+</body>
+</html>
