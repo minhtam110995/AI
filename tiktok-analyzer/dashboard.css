@@ -63,3 +63,14 @@ td.desc a:hover { text-decoration: underline; }
 .tip { position: fixed; pointer-events: none; background: var(--text); color: var(--surface); padding: 6px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45; opacity: 0; transition: opacity .1s; z-index: 50; max-width: 280px; }
 .tip.show { opacity: 1; }
 .hit { fill: transparent; cursor: pointer; }
+
+/* ---- tabs ---- */
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.tabs a { padding: 10px 14px; color: var(--text2); text-decoration: none; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs a.on { color: var(--text); border-color: #fe2c55; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+button.primary { background: var(--series); color: #fff; border-color: var(--series); }
+button:disabled { opacity: .6; cursor: wait; }
+code { background: var(--grid); padding: 1px 5px; border-radius: 4px; }
+.grid2 td.desc { min-width: 140px; }
+.grid2 .tablewrap table { font-size: 12.5px; }

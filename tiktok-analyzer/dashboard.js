@@ -7,13 +7,18 @@ const DUR = [
   { label: '1–3 phút', max: 180 }, { label: '> 3 phút', max: Infinity },
 ];
 
-const state = { videos: [], users: {}, sort: { key: 'createTime', dir: -1 } };
+const state = { videos: [], users: {}, comments: {}, watchChannels: [], ttSettings: {}, sort: { key: 'createTime', dir: -1 } };
 
 // ---------- dữ liệu ----------
 async function loadData() {
-  const { videos, users } = await TTA.load();
+  const all = await chrome.storage.local.get(null);
+  const videos = all.videos || {}, users = all.users || {};
   state.videos = Object.values(videos).filter((v) => !v.isAd);
   state.users = users;
+  state.comments = Object.fromEntries(Object.keys(all).filter((k) => k.startsWith('c:')).map((k) => [k.slice(2), all[k]]));
+  state.watchChannels = all.watchChannels || [];
+  state.ttSettings = all.ttSettings || {};
+  state.lastChannelRefresh = all.lastChannelRefresh;
   const authors = [...new Set(state.videos.map((v) => v.author).filter(Boolean))].sort();
   const sel = $('#fAuthor');
   const cur = sel.value || new URLSearchParams(location.search).get('author') || '';
@@ -356,7 +361,12 @@ $('#videos').addEventListener('click', (e) => {
 function render() {
   const author = $('#fAuthor').value;
   const list = filtered();
-  $('#subtitle').textContent = `${state.videos.length} video · ${Object.keys(state.users).length} kênh đã lưu${author ? ` · đang xem @${author}` : ''}`;
+  const nC = Object.values(state.comments).reduce((a, c) => a + c.length, 0);
+  $('#subtitle').textContent = `${state.videos.length} video · ${new Set(state.videos.map((v) => v.author)).size} kênh · ${TTA.fmt(nC)} bình luận đã lưu${author ? ` · đang xem @${author}` : ''}`;
+  const tab = typeof PANES !== 'undefined' && PANES[currentTab()] ? currentTab() : 'overview';
+  document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
+  document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== tab));
+  if (tab !== 'overview') { PANES[tab](list, author); return; }
   renderProfile(author);
   renderKpis(list, author);
   renderInsights(list, author);
@@ -384,6 +394,7 @@ $('#importJson').onchange = async (e) => {
 };
 
 ['#fAuthor', '#fRange'].forEach((s) => $(s).addEventListener('change', render));
+window.addEventListener('hashchange', render);
 let st;
 $('#fSearch').addEventListener('input', () => { clearTimeout(st); st = setTimeout(render, 200); });
 let lt;

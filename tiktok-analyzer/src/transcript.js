@@ -118,6 +118,7 @@ const Transcript = (() => {
       languages: tracks.map((t) => ({ lang: t.lang, source: t.source, original: t.original })),
       transcript,
       timed: segments.map((s) => `[${clock(s.start)}] ${s.text}`).join('\n'),
+      segments,
       note: !tracks.length ? 'Video này không có phụ đề tự động (thường do video không có lời nói, chỉ có nhạc, hoặc TikTok chưa tạo phụ đề).' : error,
     };
   }

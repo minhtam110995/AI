@@ -19,6 +19,14 @@
   </div>
 </header>
 
+<nav class="tabs" id="tabs">
+  <a href="#overview" data-tab="overview">📊 Tổng quan</a>
+  <a href="#content" data-tab="content">🎬 Nội dung & Hook</a>
+  <a href="#comments" data-tab="comments">💬 Bình luận</a>
+  <a href="#trends" data-tab="trends">📡 Theo dõi & Trend</a>
+  <a href="#shop" data-tab="shop">🛒 TikTok Shop</a>
+</nav>
+
 <section class="filters">
   <label>Kênh
     <select id="fAuthor"><option value="">Tất cả kênh</option></select>
@@ -37,6 +45,7 @@
   </label>
 </section>
 
+<div data-pane="overview">
 <section id="profile" class="profile hidden"></section>
 <section class="kpis" id="kpis"></section>
 <section class="card insights"><h2>💡 Gợi ý từ dữ liệu</h2><ul id="insights"></ul></section>
@@ -55,9 +64,15 @@
   <div class="tablehead"><h2>Danh sách video</h2><span class="muted small" id="tableInfo"></span></div>
   <div class="tablewrap"><table id="videos"></table></div>
 </section>
+</div>
+<div data-pane="content" id="paneContent"></div>
+<div data-pane="comments" id="paneComments"></div>
+<div data-pane="trends" id="paneTrends"></div>
+<div data-pane="shop" id="paneShop"></div>
 
 <div id="tip" class="tip" role="tooltip"></div>
 <script src="src/common.js"></script>
 <script src="dashboard.js"></script>
+<script src="dashboard-tabs.js"></script>
 </body>
 </html>

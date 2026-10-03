@@ -32,6 +32,12 @@ async function init() {
     try {
       const ctx = await chrome.tabs.sendMessage(tab.id, { type: 'context' });
       profile = ctx?.profile || '';
+      if (ctx?.video) $('#cmts').classList.remove('hidden');
+      if (profile) {
+        const { watchChannels = [] } = await chrome.storage.local.get('watchChannels');
+        $('#watchCh').textContent = watchChannels.includes(profile) ? `★ Đang theo dõi @${profile} (bấm để bỏ)` : `⭐ Theo dõi kênh @${profile}`;
+        $('#watchCh').classList.remove('hidden');
+      }
       $('#ctx').textContent = profile ? `Kênh: @${profile} · +${ctx.sessionCount} video mới phiên này` : `Đang ở TikTok · +${ctx?.sessionCount || 0} video mới phiên này`;
       $('#scrollBox').classList.remove('hidden');
     } catch (_) {
@@ -47,6 +53,13 @@ $('#open').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('dash
 $('#original').onclick = () => {
   const isVideo = /tiktok\.com\/.*\/(video|photo)\/\d+/.test(tab?.url || '');
   chrome.tabs.create({ url: chrome.runtime.getURL('original.html' + (isVideo ? '?link=' + encodeURIComponent(tab.url) : '')) });
+};
+$('#cmts').onclick = () => { chrome.tabs.sendMessage(tab.id, { type: 'comments', max: 500 }); window.close(); };
+$('#watchCh').onclick = async () => {
+  const { watchChannels = [] } = await chrome.storage.local.get('watchChannels');
+  const next = watchChannels.includes(profile) ? watchChannels.filter((u) => u !== profile) : [...watchChannels, profile];
+  await chrome.storage.local.set({ watchChannels: next });
+  $('#watchCh').textContent = next.includes(profile) ? `★ Đang theo dõi @${profile} (bấm để bỏ)` : `⭐ Theo dõi kênh @${profile}`;
 };
 $('#scroll').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: 30 });
 $('#stop').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'stopScroll' });

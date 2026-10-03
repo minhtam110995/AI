@@ -5,7 +5,7 @@
   if (window.__TTA_INJECTED__) return;
   window.__TTA_INJECTED__ = true;
 
-  const WATCH = /\/api\/(post\/item_list|recommend\/item_list|related\/item_list|challenge\/item_list|music\/item_list|search\/|user\/detail|item\/detail|repost\/item_list|favorite\/item_list|preload\/item_list)/;
+  const WATCH = /\/api\/(post\/item_list|recommend\/item_list|related\/item_list|challenge\/item_list|music\/item_list|search\/|user\/detail|item\/detail|repost\/item_list|favorite\/item_list|preload\/item_list|comment\/list|explore\/item_list|user\/playlist)/;
 
   const emit = (url, text) => {
     if (!text || text[0] !== '{') return;

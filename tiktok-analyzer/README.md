@@ -25,6 +25,29 @@ Tiện ích cũng ghi dữ liệu khi bạn xem trang hashtag, trang tìm kiếm
 - **Bộ lọc:** theo kênh, khoảng thời gian, từ khoá hoặc hashtag.
 - **Xuất CSV** (mở được bằng Excel hoặc Google Sheets) và **sao lưu/nhập JSON** để chuyển dữ liệu sang máy khác.
 
+## Tính năng mới (bản 1.2) – chạy hoàn toàn trong tiện ích, không cần API key
+- **Nhãn trên lưới video TikTok:** ER · share · lưu · 🔥 *gấp X lần view trung vị của kênh* (viền đỏ khi ≥ 3×) · 🛒 nếu video gắn giỏ.
+- **🎬 Nội dung & Hook** (Dashboard):
+  - **Công thức viral:** so sánh nhóm 20% video top với phần còn lại theo độ dài, lời nói, âm thanh gốc, hook câu hỏi, tỉ lệ share và lưu, giờ đăng.
+  - **Kiểu hook mở đầu:** câu hỏi, con số, POV, cảnh báo, gây tò mò, kể chuyện, trước/sau.
+  - **Format video:** review, unbox, hướng dẫn, so sánh, bán hàng, vlog…
+  - **Lịch đăng gợi ý** và **câu mở đầu của 10 video top**.
+  - Nút lấy lời thoại hàng loạt cho 20 video top.
+- **💬 Bình luận:** mở một video, rồi bấm popup → **💬 Lấy bình luận video này**. Tiện ích tự cuộn khung bình luận. Dashboard cho thấy:
+  - **Ý định mua:** hỏi giá, xin link, ib, còn hàng…
+  - **Câu hỏi khách hay hỏi.**
+  - **Cụm từ nổi bật.**
+  - **Video nào khiến khách muốn mua nhất.**
+  - Xuất CSV hoặc copy nội dung.
+- **📡 Theo dõi & Trend:**
+  - Theo dõi kênh đối thủ (popup → ⭐ khi đang ở trang kênh), tự cập nhật mỗi ngày, **thông báo khi có video bứt phá**.
+  - **Video tăng view nhanh** (view/giờ) và **video "vượt tầm"** (view so với follower).
+  - **Âm thanh và hashtag đang được dùng nhiều** trong 14 ngày.
+- **🛒 TikTok Shop:** video gắn giỏ so với video thường, sản phẩm được gắn nhiều view nhất, creator đang bán hàng (gợi ý hợp tác affiliate).
+- **Phụ đề .SRT:** nút **Tải .srt** ở trang *Lấy nội dung gốc video*.
+
+> Các phân tích về trend, âm thanh, TikTok Shop dựa trên dữ liệu **bạn đã thu thập**. Lướt For You, tìm kiếm và mở kênh càng nhiều thì kết quả càng chính xác.
+
 ## 📝 Lấy nội dung gốc video (lời thoại, caption)
 - **Đang xem một video** trên TikTok: bấm biểu tượng tiện ích, chọn **📝 Lấy nội dung gốc video**.
 - **Trong Dashboard:** bấm 📝 ở cột *Nội dung* của từng video. Video đã lấy lời thoại sẽ có dấu ✓.

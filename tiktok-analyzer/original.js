@@ -44,7 +44,8 @@ function renderItem(box, r, link) {
         <label class="small"><input type="checkbox" data-act="timed"> Mốc thời gian</label>
         <button class="small" data-act="tr">Copy</button>
         <button class="small" data-act="all">Copy tất cả</button>
-        <button class="small" data-act="txt">Tải .txt</button></span></div>
+        <button class="small" data-act="txt">Tải .txt</button>
+        ${r.segments?.length ? '<button class="small" data-act="srt">Tải .srt</button>' : ''}</span></div>
       <div class="text" data-el="tr">${esc(r.transcript) || '<span class="muted">(không có lời thoại)</span>'}</div></div>
     ${r.note ? `<div class="note">ℹ️ ${esc(r.note)}</div>` : ''}`;
   box.onclick = (e) => {
@@ -52,6 +53,7 @@ function renderItem(box, r, link) {
     if (act === 'cap') copy(r.caption, e.target);
     if (act === 'tr') copy(box.querySelector('[data-act=timed]').checked ? r.timed : r.transcript, e.target);
     if (act === 'all') copy(fullText(r), e.target);
+    if (act === 'srt') TTA.download(`tiktok-${r.author}-${r.id}.srt`, toSRT(r.segments, r.video?.duration), 'text/plain');
     if (act === 'txt') TTA.download(`tiktok-${r.author}-${r.id}.txt`, '﻿' + fullText(r) + (r.timed ? '\n\nCó mốc thời gian:\n' + r.timed : ''), 'text/plain');
   };
   box.onchange = async (e) => {
@@ -63,6 +65,19 @@ function renderItem(box, r, link) {
       if (res?.ok) { Object.assign(r, res.result); renderItem(box, r, link); }
     }
   };
+}
+
+// Phụ đề .srt: mỗi câu kéo dài đến khi câu sau bắt đầu
+function toSRT(segs, duration) {
+  const t = (s) => {
+    const ms = Math.max(0, Math.round(s * 1000));
+    const p = (n, l = 2) => String(n).padStart(l, '0');
+    return `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms / 60000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
+  };
+  return segs.map((s, i) => {
+    const end = segs[i + 1]?.start ?? Math.min(s.start + 4, duration || s.start + 4);
+    return `${i + 1}\n${t(s.start)} --> ${t(Math.max(end, s.start + 0.5))}\n${s.text}\n`;
+  }).join('\n');
 }
 
 async function run() {

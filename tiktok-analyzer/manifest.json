@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "TikTok Analyzer",
-  "version": "1.1.0",
-  "description": "Thu thập và phân tích dữ liệu kênh, video TikTok: lượt xem, tương tác, hashtag, giờ đăng tốt nhất, lấy lời thoại gốc của video.",
+  "version": "1.2.0",
+  "description": "Phân tích kênh & video TikTok: lượt xem, tương tác, hook, công thức viral, bình luận & ý định mua, theo dõi đối thủ, trend âm thanh, TikTok Shop, lời thoại gốc.",
   "permissions": [
     "storage",
     "unlimitedStorage",
-    "tabs"
+    "tabs",
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
     "https://*.tiktok.com/*",
