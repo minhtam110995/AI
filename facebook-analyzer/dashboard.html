@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facebook Analyzer – Dashboard</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>📘 Facebook Analyzer</h1>
+    <p class="muted" id="subtitle">Phân tích fanpage & Reels đã thu thập từ facebook.com</p>
+  </div>
+  <div class="actions">
+    <button id="exportCsv">Xuất CSV</button>
+    <button id="exportJson">Sao lưu JSON</button>
+    <label class="btn">Nhập JSON<input type="file" id="importJson" accept=".json" hidden></label>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <a href="#page" data-tab="page">📊 Fanpage</a>
+  <a href="#reels" data-tab="reels">🎬 Reels</a>
+  <a href="#track" data-tab="track">📡 Theo dõi đối thủ</a>
+</nav>
+
+<section class="filters">
+  <label>Fanpage<select id="fPage"><option value="">Tất cả fanpage</option></select></label>
+  <label>Thời gian đăng
+    <select id="fRange"><option value="0">Toàn bộ</option><option value="7">7 ngày</option><option value="30">30 ngày</option><option value="90" selected>90 ngày</option><option value="365">12 tháng</option></select>
+  </label>
+  <label>Định dạng
+    <select id="fType"><option value="">Tất cả</option><option value="reel">Reels</option><option value="video">Video</option><option value="photo">Ảnh</option><option value="album">Album ảnh</option><option value="link">Link</option><option value="text">Chỉ chữ</option></select>
+  </label>
+  <label class="grow">Tìm theo nội dung / hashtag<input id="fSearch" type="search" placeholder="vd: khuyến mãi, #skincare"></label>
+</section>
+
+<main id="view"></main>
+<div id="tip" class="tip" role="tooltip"></div>
+<script src="src/common.js"></script>
+<script src="charts.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

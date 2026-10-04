@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Facebook Analyzer</title>
+<style>
+  :root { --bg:#fcfcfb; --card:#f3f2ef; --text:#0b0b0b; --muted:#52514e; --accent:#1877f2; --line:#e2e1dc; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1a1a19; --card:#262624; --text:#fff; --muted:#c3c2b7; --accent:#2d88ff; --line:#383835; } }
+  * { box-sizing: border-box; }
+  body { margin:0; width:340px; background:var(--bg); color:var(--text); font:13px/1.45 system-ui, sans-serif; }
+  header { padding:14px 16px 10px; border-bottom:1px solid var(--line); }
+  h1 { font-size:15px; margin:0; }
+  .sub { color:var(--muted); font-size:12px; margin-top:2px; }
+  main { padding:12px 16px 16px; display:grid; gap:8px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .tile { background:var(--card); border-radius:8px; padding:8px 10px; }
+  .tile b { display:block; font-size:18px; font-variant-numeric:tabular-nums; }
+  .tile span { color:var(--muted); font-size:11px; }
+  button { width:100%; border:0; border-radius:8px; padding:9px 10px; font:600 13px system-ui; cursor:pointer; background:var(--card); color:var(--text); }
+  button.primary { background:var(--accent); color:#fff; }
+  .row { display:flex; gap:8px; }
+  .note { color:var(--muted); font-size:11.5px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header><h1>📘 Facebook Analyzer</h1><div class="sub" id="ctx">Đang kiểm tra trang hiện tại…</div></header>
+<main>
+  <div class="grid" id="tiles"></div>
+  <div id="pageBox" class="hidden" style="display:grid;gap:8px">
+    <div class="row"><button id="scroll" class="primary">⬇ Quét bài viết</button><button id="reels" class="primary">🎬 Quét Reels</button></div>
+    <button id="stop">Dừng cuộn</button>
+    <button id="watch">⭐ Theo dõi fanpage này</button>
+  </div>
+  <button id="open" class="primary">📊 Mở Dashboard</button>
+  <button id="reset">🗑 Xoá toàn bộ dữ liệu</button>
+  <div class="note">Mở một fanpage trên facebook.com rồi bấm “Quét bài viết” hoặc “Quét Reels”. Tiện ích tự ghi số liệu các bài hiển thị và gắn nhãn 🔥 bứt phá.</div>
+</main>
+<script src="src/common.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>
