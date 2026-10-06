@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Video Studio</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🎬 Video Studio <small>dán link mẫu → video tương tự</small></div>
+    <nav>
+      <button class="ghost" id="btnNew">＋ Dự án mới</button>
+      <button class="ghost" id="btnProjects">📁 Dự án</button>
+      <button class="ghost" id="btnSettings">⚙ Cài đặt</button>
+    </nav>
+  </header>
+
+  <main id="app">
+    <!-- 1. Video mẫu -->
+    <section class="card" id="step1">
+      <h2><span class="num">1</span> Video mẫu</h2>
+      <div class="row">
+        <input id="url" type="url" placeholder="Dán link Facebook Reels, TikTok, YouTube Shorts, Instagram…" />
+        <button id="btnFetch" class="primary">Tải &amp; phân tích</button>
+      </div>
+      <div class="row muted small">
+        <label class="linklike">📤 Hoặc tải file video lên<input id="fileSource" type="file" accept="video/*" hidden /></label>
+        <span>·</span>
+        <button class="linklike" id="btnBlank">Bỏ qua, tự viết kịch bản từ đầu</button>
+      </div>
+      <div id="sourceBox"></div>
+    </section>
+
+    <!-- 2. Phân tích -->
+    <section class="card hidden" id="step2">
+      <h2><span class="num">2</span> Phân tích video mẫu <button class="ghost small right" id="btnReanalyze">↻ Phân tích lại</button></h2>
+      <div id="analysisBox"></div>
+    </section>
+
+    <!-- 3. Kịch bản -->
+    <section class="card hidden" id="step3">
+      <h2><span class="num">3</span> Kịch bản mới</h2>
+      <div class="grid2">
+        <label>Chủ đề / sản phẩm của bạn *<textarea id="bTopic" rows="2" placeholder="VD: Serum vitamin C cho da xỉn màu, giá 299k"></textarea></label>
+        <label>Điểm nổi bật / thông tin bắt buộc<textarea id="bDetails" rows="2" placeholder="Thành phần, công dụng, ưu đãi, bằng chứng…"></textarea></label>
+        <label>Khách hàng mục tiêu<input id="bAudience" placeholder="VD: Nữ văn phòng 22–35 tuổi" /></label>
+        <label>Lời kêu gọi (CTA)<input id="bCta" placeholder="VD: Bấm giỏ hàng nhận quà" /></label>
+        <label>Giọng điệu<input id="bTone" placeholder="Để trống = giống video mẫu" /></label>
+        <label>Ghi chú thêm<input id="bNotes" placeholder="Từ cần tránh, thông điệp thương hiệu…" /></label>
+      </div>
+
+      <div class="options">
+        <div>
+          <div class="label">⏱ Thời lượng</div>
+          <div class="chips" id="durationChips"></div>
+          <input id="durationCustom" type="number" min="5" max="600" placeholder="Tuỳ chỉnh (giây)" class="small-input" />
+        </div>
+        <div>
+          <div class="label">📐 Khung hình</div>
+          <div class="chips" id="aspectChips"></div>
+        </div>
+      </div>
+
+      <div class="label">🎨 Template edit <span class="muted small">(⭐ = gần giống video mẫu nhất)</span></div>
+      <div class="templates" id="templateGrid"></div>
+
+      <div class="row">
+        <button id="btnScript" class="primary">✍ Viết kịch bản</button>
+        <span class="status" id="scriptStatus"></span>
+      </div>
+      <div id="scriptBox"></div>
+    </section>
+
+    <!-- 4. Giọng, hình, xuất -->
+    <section class="card hidden" id="step4">
+      <h2><span class="num">4</span> Giọng đọc, hình ảnh &amp; xuất video</h2>
+
+      <div class="label">🎙 Giọng đọc</div>
+      <div class="chips" id="providerChips">
+        <button class="chip" data-provider="gemini">Gemini (Google AI Studio)</button>
+        <button class="chip" data-provider="elevenlabs">ElevenLabs</button>
+      </div>
+      <div class="voicebar">
+        <input id="voiceSearch" placeholder="🔍 Tìm giọng…" />
+        <select id="voiceGender"><option value="">Tất cả</option><option>Nữ</option><option>Nam</option></select>
+        <label class="inline">Tốc độ <input id="voiceSpeed" type="range" min="0.8" max="1.2" step="0.05" value="1" /> <b id="voiceSpeedVal">1.00×</b></label>
+      </div>
+      <div class="voices" id="voiceList"></div>
+      <label class="inline hidden" id="toneWrap">Chỉ dẫn giọng (Gemini) <input id="voiceTone" placeholder="VD: hào hứng, thân mật như nói với bạn" /></label>
+
+      <div class="label">🖼 Ảnh / clip sản phẩm của bạn <span class="muted small">(dùng cho cảnh "Sản phẩm")</span></div>
+      <label class="dropzone" id="dropzone">Kéo thả hoặc bấm để chọn ảnh/clip (nhiều file)
+        <input id="mediaFiles" type="file" accept="image/*,video/*" multiple hidden />
+      </label>
+      <div class="mediaGrid" id="mediaGrid"></div>
+      <label class="inline"><input type="checkbox" id="useStock" checked /> Tự tìm video minh hoạ miễn phí trên Pexels cho cảnh "Stock" <span class="muted small" id="pexelsHint"></span></label>
+
+      <details class="advanced" open>
+        <summary>🎛 Phong cách edit &amp; âm thanh</summary>
+        <div class="grid3">
+          <label class="inline"><input type="checkbox" id="copyStyle" checked /> Bắt chước phong cách video mẫu</label>
+          <label class="inline"><input type="checkbox" id="fitDuration" checked /> Tự khớp đúng thời lượng</label>
+          <label class="inline"><input type="checkbox" id="sCaptions" checked /> Hiện phụ đề</label>
+          <label>Font phụ đề<select id="sFont"></select></label>
+          <label>Vị trí phụ đề<select id="sPos"><option value="">Theo template</option><option value="center">Giữa</option><option value="lower">Dưới vừa</option><option value="bottom">Sát dưới</option></select></label>
+          <label>Chuyển cảnh<select id="sTransition"><option value="">Theo template</option><option value="cut">Cắt thẳng</option><option value="fade">Mờ dần</option><option value="slide">Trượt</option><option value="zoom">Phóng to</option><option value="whip">Lướt nhoè</option></select></label>
+          <label>Màu chữ <input type="color" id="sColor" value="#ffffff" /></label>
+          <label>Màu từ đang đọc <input type="color" id="sHighlight" value="#ffd400" /></label>
+          <label>Màu nhấn <input type="color" id="sAccent" value="#ff3b30" /></label>
+          <label>Chỉnh màu<select id="sGrade"><option value="">Theo template</option><option value="none">Không</option><option value="warm">Ấm</option><option value="cool">Lạnh</option><option value="vivid">Rực rỡ</option><option value="bw">Đen trắng</option><option value="dark">Tối</option></select></label>
+          <label>Zoom giật<select id="sZoom"><option value="">Theo template</option><option value="1">Bật</option><option value="0">Tắt</option></select></label>
+          <label>Thanh tiến trình<select id="sProgress"><option value="">Theo template</option><option value="1">Bật</option><option value="0">Tắt</option></select></label>
+          <label>Tên thương hiệu / kênh<input id="brand" placeholder="Hiện góc video (tuỳ chọn)" /></label>
+          <label>Nhạc nền<select id="music"></select></label>
+          <label class="linklike small">🎵 Tải nhạc của bạn<input id="musicFile" type="file" accept="audio/*" hidden /></label>
+        </div>
+        <p class="muted small" id="sfxHint"></p>
+      </details>
+
+      <div class="row">
+        <button id="btnRender" class="primary big">🎬 Tạo video</button>
+        <span class="status" id="renderStatus"></span>
+      </div>
+      <div class="progress hidden" id="renderProgress"><div></div></div>
+      <div id="resultBox"></div>
+    </section>
+  </main>
+
+  <!-- Cài đặt -->
+  <dialog id="settingsDlg">
+    <form method="dialog" class="dlg">
+      <h3>⚙ Cài đặt</h3>
+      <p class="muted small">Key chỉ lưu trên máy bạn (file data/settings.json). Để trống ô nào = giữ nguyên key cũ.</p>
+      <label>Gemini API key * <a href="https://aistudio.google.com/apikey" target="_blank">lấy key</a><input id="kGemini" autocomplete="off" /></label>
+      <label>ElevenLabs API key <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank">lấy key</a><input id="kEleven" autocomplete="off" /></label>
+      <label>Pexels API key (kho video miễn phí) <a href="https://www.pexels.com/api/" target="_blank">lấy key</a><input id="kPexels" autocomplete="off" /></label>
+      <div class="grid2">
+        <label>Model Gemini (phân tích/viết)<input id="mGemini" /></label>
+        <label>Model Gemini TTS (giọng)<input id="mGeminiTts" /></label>
+        <label>Model ElevenLabs<select id="mEleven"></select></label>
+        <label>Cookie đăng nhập (video riêng tư)
+          <select id="cookies"><option value="none">Không dùng</option><option value="chrome">Lấy từ Chrome</option><option value="edge">Lấy từ Edge</option><option value="firefox">Lấy từ Firefox</option><option value="brave">Lấy từ Brave</option></select>
+        </label>
+      </div>
+      <div class="row">
+        <button type="button" class="ghost small" id="btnUpdateYt">↻ Cập nhật yt-dlp</button>
+        <button type="button" class="ghost small" id="btnGenSfx">🔊 Tạo bộ hiệu ứng âm thanh (ElevenLabs)</button>
+      </div>
+      <p class="small" id="toolMsg"></p>
+      <div class="row end">
+        <button value="cancel" class="ghost">Đóng</button>
+        <button id="btnSaveSettings" class="primary" value="default">Lưu</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="projectsDlg">
+    <form method="dialog" class="dlg">
+      <h3>📁 Dự án gần đây</h3>
+      <div id="projectList"></div>
+      <div class="row end"><button value="cancel" class="ghost">Đóng</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast"></div>
+  <script src="app.js" type="module"></script>
+</body>
+</html>

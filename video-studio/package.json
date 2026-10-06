@@ -1,0 +1,31 @@
+{
+  "name": "video-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dán link video mẫu → phân tích kịch bản & phong cách edit → tạo video tương tự (chạy trên máy bạn)",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "preview": "remotion studio remotion/index.jsx",
+    "test:render": "node scripts/test-render.js"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "dependencies": {
+    "@fontsource/anton": "^5.3.0",
+    "@fontsource/be-vietnam-pro": "^5.3.0",
+    "@fontsource/montserrat": "^5.3.0",
+    "@fontsource/oswald": "^5.3.0",
+    "@fontsource/playfair-display": "^5.3.0",
+    "@remotion/bundler": "4.0.533",
+    "@remotion/cli": "4.0.533",
+    "@remotion/renderer": "4.0.533",
+    "express": "^4.22.3",
+    "ffmpeg-static": "^5.3.0",
+    "multer": "^2.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "4.0.533"
+  }
+}
