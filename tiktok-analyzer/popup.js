@@ -28,7 +28,13 @@ async function render() {
 async function init() {
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const onTikTok = /^https:\/\/www\.tiktok\.com\//.test(tab?.url || '');
-  if (onTikTok) {
+  if (/^https:\/\/affiliate\.tiktok\.com\//.test(tab?.url || '')) {
+    try {
+      const c = await chrome.tabs.sendMessage(tab.id, { type: 'context' });
+      $('#ctx').textContent = `Trung tâm liên kết TikTok Shop · +${c.added} nhà sáng tạo đã lưu`;
+      $('#affBox').classList.remove('hidden');
+    } catch (_) { $('#ctx').textContent = 'Hãy tải lại (F5) trang Trung tâm liên kết để bắt đầu.'; }
+  } else if (onTikTok) {
     try {
       const ctx = await chrome.tabs.sendMessage(tab.id, { type: 'context' });
       profile = ctx?.profile || '';
@@ -61,6 +67,9 @@ $('#watchCh').onclick = async () => {
   await chrome.storage.local.set({ watchChannels: next });
   $('#watchCh').textContent = next.includes(profile) ? `★ Đang theo dõi @${profile} (bấm để bỏ)` : `⭐ Theo dõi kênh @${profile}`;
 };
+$('#affScroll').onclick = () => { chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: 40 }); window.close(); };
+$('#affStop').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'stopScroll' });
+$('#affOpen').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html#creators') });
 $('#scroll').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: 30 });
 $('#stop').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'stopScroll' });
 $('#csv').onclick = async () => {

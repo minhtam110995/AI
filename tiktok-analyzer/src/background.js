@@ -4,7 +4,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   // Mở trang Dashboard khi người dùng bấm nút nổi trên TikTok.
   if (msg.type === 'openDashboard') {
     const q = msg.author ? '?author=' + encodeURIComponent(msg.author) : '';
-    chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html' + q) });
+    chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html' + q + (msg.hash ? '#' + msg.hash : '')) });
   }
 
   // Lấy nội dung gốc (caption + lời thoại) của 1 video, lưu kèm vào dữ liệu video.

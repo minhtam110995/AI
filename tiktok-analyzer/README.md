@@ -25,6 +25,17 @@ Tiện ích cũng ghi dữ liệu khi bạn xem trang hashtag, trang tìm kiếm
 - **Bộ lọc:** theo kênh, khoảng thời gian, từ khoá hoặc hashtag.
 - **Xuất CSV** (mở được bằng Excel hoặc Google Sheets) và **sao lưu/nhập JSON** để chuyển dữ liệu sang máy khác.
 
+## 🤝 Nhà sáng tạo – số liệu thật từ Trung tâm liên kết TikTok Shop (bản 1.4)
+Chỉ cần **tài khoản người bán TikTok Shop của bạn**, không cần đăng nhập tài khoản của từng creator.
+1. Đăng nhập [affiliate.tiktok.com](https://affiliate.tiktok.com), vào **Khám phá các nhà sáng tạo → Tìm nhà sáng tạo** (hoặc Bảng xếp hạng), rồi chọn bộ lọc ngành.
+2. Bấm biểu tượng tiện ích, chọn **⬇ Tự cuộn lấy danh sách nhà sáng tạo**.
+3. Mở Dashboard, vào tab **🤝 Nhà sáng tạo**. Tại đây bạn xem được:
+   - GMV, món bán, **giá TB/món**, follower, **GMV / 1K follower** (tìm creator nhỏ nhưng bán tốt), lượt xem TB, tương tác, giới tính và độ tuổi người xem, Ngôi sao sáng tạo, **GMV thay đổi** so với lần ghi nhận trước;
+   - lọc theo GMV, ngành hàng, Ngôi sao; đánh dấu ★ danh sách mời; xuất CSV; copy @handle;
+   - nút **Phân tích kênh**: lấy video, sản phẩm và hook của creator đó (tab 💰 Affiliate & Ads).
+
+Tiện ích chỉ đọc số liệu mà trang đã hiển thị cho tài khoản của bạn. Tiện ích không lưu mật khẩu và không gửi dữ liệu đi đâu.
+
 ## 💰 Affiliate & Ads (bản 1.3)
 - **Dán kênh để phân tích:** dán `@kenh` hoặc link kênh vào tab **💰 Affiliate & Ads**. Tiện ích mở kênh trong tab nền và tự cuộn để lấy video, rồi mở trang các sản phẩm gắn giỏ để lấy **giá, số "đã bán", tên shop**.
 - **Sản phẩm nào ra đơn:** gồm giá, đã bán, **bán/ngày** (khi phân tích lại sau 1–3 ngày), doanh thu sản phẩm, số video và lượt xem của kênh cho sản phẩm, **phần doanh thu quy cho kênh**, số creator khác cũng đang bán.

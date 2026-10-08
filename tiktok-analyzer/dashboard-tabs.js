@@ -248,6 +248,13 @@ PANES.trends = (list, author) => {
   };
 };
 
+// Định dạng tiền kiểu Việt: 145,6 trđ · 1,2 tỷđ
+function money(x) {
+  if (x == null || !Number.isFinite(x)) return '–';
+  const f = (n, u) => n.toFixed(n >= 100 ? 0 : 1).replace(/\.0$/, '').replace('.', ',') + u;
+  return x >= 1e9 ? f(x / 1e9, ' tỷđ') : x >= 1e6 ? f(x / 1e6, ' trđ') : x >= 1e3 ? f(x / 1e3, 'kđ') : Math.round(x) + 'đ';
+}
+
 // ================= 💰 Affiliate & Ads =================
 // Doanh thu là ƯỚC TÍNH: TikTok không công khai doanh thu từng video/kênh.
 //  - Doanh thu sản phẩm = giá × số "đã bán" (tích luỹ) hoặc giá × tốc độ bán × 30 ngày (khi có ≥ 2 lần ghi nhận)
@@ -302,11 +309,6 @@ PANES.shop = (list, author) => {
   const branded = list.filter((v) => v.branded);
   const adByAuthor = {};
   allAds.forEach((v) => { const a = (adByAuthor[v.author] ||= { author: v.author, vs: [], seen: 0, last: 0 }); a.vs.push(v); a.seen += v.adSeen || 1; a.last = Math.max(a.last, v.adLast || 0); });
-  const money = (x) => {
-    if (x == null || !Number.isFinite(x)) return '–';
-    const f = (n, u) => n.toFixed(n >= 100 ? 0 : 1).replace(/\.0$/, '').replace('.', ',') + u;
-    return x >= 1e9 ? f(x / 1e9, ' tỷđ') : x >= 1e6 ? f(x / 1e6, ' trđ') : x >= 1e3 ? f(x / 1e3, 'kđ') : Math.round(x) + 'đ';
-  };
   const plink = (r) => (r.p.productId || /^\d{12,}$/.test(r.pid) ? `<a href="https://shop.tiktok.com/view/product/${r.p.productId || r.pid}?region=VN&locale=vi-VN" target="_blank">${esc(r.title.slice(0, 70))}</a>` : esc(r.title.slice(0, 70)));
 
   el.innerHTML = `
@@ -351,4 +353,84 @@ PANES.shop = (list, author) => {
     history.replaceState(null, '', `?author=${encodeURIComponent(u)}#shop`);
   };
   if ($('#affCom')) $('#affCom').onchange = () => chrome.storage.local.set({ ttSettings: { ...state.ttSettings, commission: Number($('#affCom').value) || 0 } });
+};
+
+// ================= 🤝 Nhà sáng tạo (Trung tâm liên kết TikTok Shop) =================
+// Số liệu do TikTok hiển thị cho tài khoản người bán của bạn (GMV, số món bán, lượt xem TB, tương tác…).
+const CR = { sort: { key: 'gmv', dir: -1 } };
+PANES.creators = () => {
+  const el = $('#paneCreators');
+  const all = Object.values(state.creators);
+  if (!all.length) {
+    el.innerHTML = `<section class="card"><h2>Chưa có dữ liệu nhà sáng tạo</h2><ol class="small">
+      <li>Đăng nhập <b>tài khoản người bán TikTok Shop của bạn</b> tại <a href="https://affiliate.tiktok.com" target="_blank">affiliate.tiktok.com</a>.</li>
+      <li>Vào <b>Khám phá các nhà sáng tạo → Tìm nhà sáng tạo</b> (hoặc Bảng xếp hạng), chọn bộ lọc ngành hàng bạn cần.</li>
+      <li>Bấm biểu tượng tiện ích → <b>⬇ Tự cuộn lấy danh sách</b>. Tiện ích ghi lại GMV, số món bán, lượt xem, tương tác… của từng creator.</li>
+      <li>Mở trang chi tiết của creator nào thì số liệu chi tiết của creator đó cũng được lưu.</li></ol>
+      <p class="muted small">Tiện ích chỉ đọc số liệu trang đã hiển thị cho tài khoản của bạn, không lưu mật khẩu, không gửi dữ liệu đi đâu.</p></section>`;
+    return;
+  }
+  const prev = { min: $('#crMin')?.value || '0', cat: $('#crCat')?.value || '', star: $('#crStar')?.checked, sl: $('#crSL')?.checked, q: $('#crQ')?.value || '' };
+  const cats = [...new Set(all.flatMap((c) => c.categories || []))].sort();
+  el.innerHTML = `
+    <section class="filters">
+      <label class="grow">Tìm creator<input id="crQ" type="search" placeholder="tên, @handle, ngành…" value="${esc(prev.q)}"></label>
+      <label>GMV tối thiểu<select id="crMin">${[['0', 'Tất cả'], ['1e6', '≥ 1 tr'], ['1e7', '≥ 10 tr'], ['5e7', '≥ 50 tr'], ['1e8', '≥ 100 tr'], ['1e9', '≥ 1 tỷ']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
+      <label>Ngành hàng<select id="crCat"><option value="">Tất cả</option>${cats.map((c) => `<option>${esc(c)}</option>`).join('')}</select></label>
+      <label style="align-self:end" class="small"><span><input type="checkbox" id="crStar"> Ngôi sao sáng tạo</span></label>
+      <label style="align-self:end" class="small"><span><input type="checkbox" id="crSL"> Chỉ danh sách mời ★</span></label>
+    </section><div id="crBody"></div>`;
+  $('#crMin').value = prev.min; $('#crCat').value = prev.cat; $('#crStar').checked = !!prev.star; $('#crSL').checked = !!prev.sl;
+  const body = () => {
+    const q = $('#crQ').value.trim().toLowerCase(), min = Number($('#crMin').value), cat = $('#crCat').value;
+    const list = all.filter((c) => (c.gmv || 0) >= min && (!cat || (c.categories || []).includes(cat)) && (!$('#crStar').checked || c.star) && (!$('#crSL').checked || c.shortlist) &&
+      (!q || [c.handle, c.name, ...(c.categories || [])].join(' ').toLowerCase().includes(q)));
+    const aov = (c) => (c.gmv && c.units ? c.gmv / c.units : null);
+    const perK = (c) => (c.gmv && c.followers ? c.gmv / c.followers * 1000 : null);
+    const growth = (c) => { const s = c.snaps || []; if (s.length < 2) return null; const a = s[s.length - 2], b = s[s.length - 1]; return a.gmv ? (b.gmv - a.gmv) / a.gmv : null; };
+    const COLS = [['gmv', 'GMV', (c) => money(c.gmv)], ['units', 'Món bán', (c) => TTA.fmt(c.units ?? NaN)], ['aov', 'Giá TB/món', (c) => money(aov(c)), aov],
+      ['followers', 'Follower', (c) => TTA.fmt(c.followers ?? NaN)], ['perK', 'GMV / 1K follower', (c) => money(perK(c)), perK],
+      ['avgViews', 'View TB', (c) => TTA.fmt(c.avgViews ?? NaN)], ['er', 'Tương tác', (c) => TTA.pct(c.er ?? NaN)], ['growth', 'GMV thay đổi', (c) => { const g = growth(c); return g == null ? '–' : `<span class="${g >= 0 ? 'up' : 'down'}">${g >= 0 ? '+' : ''}${TTA.pct(g, 0)}</span>`; }, growth]];
+    const { key, dir } = CR.sort;
+    const col = COLS.find((c) => c[0] === key);
+    const val = (c) => (col?.[3] ? col[3](c) : c[key]) ?? -Infinity;
+    const rows = [...list].sort((a, b) => (val(a) > val(b) ? dir : val(a) < val(b) ? -dir : 0));
+    const gmvs = list.map((c) => c.gmv).filter((x) => x != null);
+    $('#crBody').innerHTML = `
+      ${kpiRow([['Nhà sáng tạo', list.length], ['Tổng GMV', money(gmvs.reduce((a, b) => a + b, 0))], ['GMV trung vị', money(TTA.median(gmvs))],
+        ['Món bán trung vị', TTA.fmt(TTA.median(list.map((c) => c.units).filter((x) => x != null)))], ['Giá TB/món (trung vị)', money(TTA.median(list.map(aov).filter((x) => x != null)))],
+        ['Ngôi sao sáng tạo', list.filter((c) => c.star).length]])}
+      <div class="grid2"><section class="card"><h2>Top 10 GMV</h2>${hbarsSVG(rows.filter((c) => c.gmv).sort((a, b) => b.gmv - a.gmv).slice(0, 10).map((c) => ({ label: '@' + c.handle, value: c.gmv, tip: `<b>@${esc(c.handle)}</b><br>GMV ${money(c.gmv)} · ${TTA.fmt(c.units ?? NaN)} món` })), { fmt: money })}</section>
+      <section class="card"><h2>GMV / 1K follower cao nhất</h2><p class="muted small">Creator nhỏ nhưng bán tốt, thường dễ hợp tác và chi phí thấp.</p>${hbarsSVG(list.filter(perK).sort((a, b) => perK(b) - perK(a)).slice(0, 10).map((c) => ({ label: '@' + c.handle, value: perK(c) })), { fmt: money })}</section></div>
+      <section class="card" style="margin-top:16px"><div class="tablehead"><h2>Danh sách nhà sáng tạo</h2>
+        <span class="toolbar" style="margin:0"><button id="crCsv">Xuất CSV</button><button id="crCopy">Copy @handle</button></span></div>
+        <div class="tablewrap"><table><thead><tr><th></th><th class="l">Nhà sáng tạo</th><th class="l">Ngành</th><th>Người xem</th>${COLS.map(([k, l]) => `<th data-key="${k}" style="cursor:pointer">${l}${key === k ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}<th></th></tr></thead><tbody>
+        ${rows.slice(0, 500).map((c) => `<tr><td><button class="star" data-sl="${esc(c.handle)}">${c.shortlist ? '★' : '☆'}</button></td>
+          <td class="desc"><a href="https://www.tiktok.com/@${esc(c.handle)}" target="_blank">@${esc(c.handle)}</a>${c.star ? ' <span class="tag">⭐ Ngôi sao</span>' : ''}<div class="muted small">${esc(c.name || '')}</div></td>
+          <td class="desc small">${esc((c.categories || []).join(', ').slice(0, 50))}</td><td class="small">${c.gender ? `${esc(c.gender)} ${TTA.pct(c.genderPct, 0)}${c.age ? ', ' + esc(c.age) : ''}` : '–'}</td>
+          ${COLS.map(([, , f]) => `<td>${f(c)}</td>`).join('')}
+          <td><button data-an="${esc(c.handle)}" title="Lấy video, sản phẩm & hook của kênh này">Phân tích kênh</button>${c.detailUrl ? ` <a href="${esc(c.detailUrl)}" target="_blank">Chi tiết</a>` : ''}</td></tr>`).join('')}
+        </tbody></table></div><p class="muted small">Số liệu lấy từ Trung tâm liên kết TikTok Shop (theo khoảng thời gian bạn chọn trên trang đó). "GMV thay đổi" so với lần ghi nhận trước.</p></section>`;
+    $('#crBody thead').onclick = (e) => { const th = e.target.closest('th[data-key]'); if (!th) return; CR.sort = { key: th.dataset.key, dir: CR.sort.key === th.dataset.key ? -CR.sort.dir : -1 }; body(); };
+    $('#crBody').querySelectorAll('[data-sl]').forEach((b) => (b.onclick = async () => {
+      const { affCreators = {} } = await chrome.storage.local.get('affCreators');
+      const c = affCreators[b.dataset.sl]; if (!c) return;
+      c.shortlist = !c.shortlist; state.creators[b.dataset.sl].shortlist = c.shortlist; b.textContent = c.shortlist ? '★' : '☆';
+      chrome.storage.local.set({ affCreators });
+    }));
+    $('#crBody').querySelectorAll('[data-an]').forEach((b) => (b.onclick = async () => {
+      await chrome.runtime.sendMessage({ type: 'analyzeChannel', username: b.dataset.an, scrolls: 15 });
+      location.href = `?author=${encodeURIComponent(b.dataset.an)}#shop`;
+    }));
+    const csvCols = [['handle', (c) => '@' + c.handle], ['ten', (c) => c.name], ['nganh', (c) => (c.categories || []).join('; ')], ['gmv', (c) => c.gmv], ['mon_ban', (c) => c.units], ['gia_tb_mon', (c) => Math.round(aov(c) || 0) || ''],
+      ['follower', (c) => c.followers], ['gmv_moi_1k_follower', (c) => Math.round(perK(c) || 0) || ''], ['view_tb', (c) => c.avgViews], ['tuong_tac', (c) => c.er], ['gioi_tinh', (c) => c.gender], ['ty_le_gioi', (c) => c.genderPct], ['tuoi', (c) => c.age],
+      ['ngoi_sao', (c) => (c.star ? 1 : 0)], ['moi', (c) => (c.shortlist ? 1 : 0)], ['link', (c) => `https://www.tiktok.com/@${c.handle}`]];
+    const q2 = (x) => { const s = String(x ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    $('#crCsv').onclick = () => TTA.download(`nha-sang-tao-${new Date().toISOString().slice(0, 10)}.csv`, '﻿' + csvCols.map((c) => c[0]).join(',') + '\n' + rows.map((c) => csvCols.map(([, f]) => q2(f(c))).join(',')).join('\n'));
+    $('#crCopy').onclick = (e) => navigator.clipboard.writeText(rows.map((c) => '@' + c.handle).join('\n')).then(() => (e.target.textContent = `✓ Đã copy ${rows.length}`));
+  };
+  let t;
+  $('#crQ').oninput = () => { clearTimeout(t); t = setTimeout(body, 250); };
+  ['#crMin', '#crCat', '#crStar', '#crSL'].forEach((s) => ($(s).onchange = body));
+  body();
 };

@@ -20,7 +20,7 @@
   button.primary { background:var(--accent); color:#fff; }
   .row { display:flex; gap:8px; }
   .note { color:var(--muted); font-size:11.5px; }
-  .hidden { display:none; }
+  .hidden { display:none !important; }
 </style>
 </head>
 <body>
@@ -37,6 +37,10 @@
     </div>
   </div>
   <button id="open" class="primary">Mở Dashboard phân tích</button>
+  <div id="affBox" class="hidden" style="display:grid;gap:8px">
+    <div class="row"><button id="affScroll" class="primary">⬇ Tự cuộn lấy danh sách nhà sáng tạo</button><button id="affStop" style="width:80px">Dừng</button></div>
+    <button id="affOpen">🤝 Mở bảng nhà sáng tạo</button>
+  </div>
   <button id="original">📝 Lấy nội dung gốc video</button>
   <button id="cmts" class="hidden">💬 Lấy bình luận video này</button>
   <button id="watchCh" class="hidden">⭐ Theo dõi kênh này</button>

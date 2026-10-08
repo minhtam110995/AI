@@ -44,10 +44,10 @@ const TTA = (() => {
     if (v == null || v === '') return null;
     if (typeof v === 'number') return Number.isFinite(v) ? v : null;
     const s = String(v).toLowerCase().replace(/\s/g, '');
-    const m = s.match(/([\d.,]+)(tr|k)?/);
+    const m = s.match(/([\d.,]+)(tỷ|ty|tr|k)?/);
     if (!m) return null;
     let n;
-    if (m[2]) n = Number(m[1].replace(',', '.')) * (m[2] === 'tr' ? 1e6 : 1e3);
+    if (m[2]) n = Number(m[1].replace(',', '.')) * (m[2] === 'tr' ? 1e6 : m[2] === 'k' ? 1e3 : 1e9);
     else n = Number(m[1].replace(/[.,](?=\d{3}(\D|$))/g, '').replace(',', '.'));
     return Number.isFinite(n) ? Math.round(n) : null;
   }
