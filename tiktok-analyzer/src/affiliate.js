@@ -6,6 +6,8 @@
   let timer = null;
   let added = 0;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Thông tin chẩn đoán (chỉ lưu tạm trong trang, chỉ xuất ra khi bạn bấm "Xuất file chẩn đoán")
+  const diag = { api: [], rows: [], parsedApi: 0, parsedDom: 0 };
   const num = (v) => (v == null || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
   const pct = (v) => { if (v == null) return null; const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n / 100 : null; };
 
@@ -56,7 +58,7 @@
   const un = (x) => (x && typeof x === 'object' && !Array.isArray(x) && ('value' in x || 'formatted' in x) ? x.formatted ?? x.value : x);
   const pick = (o, re) => { for (const k in o) if (re.test(k) && o[k] != null && typeof o[k] !== 'boolean') return un(o[k]); return undefined; };
   function fromApi(o) {
-    const hk = HANDLE_KEYS.find((k) => typeof o[k] === 'string' && o[k]);
+    const hk = HANDLE_KEYS.find((k) => typeof un(o[k]) === 'string' && un(o[k]));
     if (!hk) return null;
     // gộp các nhóm số liệu lồng (vd: {stats: {gmv: …}}) nhưng không ghi đè khoá đã có
     const flat = { ...o };
@@ -72,7 +74,7 @@
     if (gmv === undefined && units === undefined && fol === undefined) return null;
     const cats = pick(flat, /categor/i);
     return {
-      handle: o[hk], name: o.nickname || o.nick_name || o.display_name || null,
+      handle: un(o[hk]), name: un(o.nickname) || un(o.nick_name) || un(o.display_name) || null,
       gmv: money(gmv), units: units != null ? TTA.parseCount(units?.value ?? units) : null,
       avgViews: views != null ? TTA.parseCount(views?.value ?? views) : null,
       er: eng == null ? null : typeof eng === 'number' ? (eng > 1 ? eng / 100 : eng) : pct(eng),
@@ -87,24 +89,46 @@
     seen.add(o);
     if (Array.isArray(o)) { o.forEach((x) => walk(x, d + 1, seen)); return; }
     const c = fromApi(o);
-    if (c) put(c);
+    if (c) { put(c); diag.parsedApi++; }
     for (const k in o) walk(o[k], d + 1, seen);
   }
   window.addEventListener('message', (e) => {
     if (e.source !== window || !e.data?.__tta || e.data.kind !== 'api') return;
+    try {
+      const firstObjs = [];
+      const find = (o, d) => { if (firstObjs.length || !o || typeof o !== 'object' || d > 6) return; if (Array.isArray(o)) { if (o[0] && typeof o[0] === 'object') firstObjs.push(o[0]); else return; } else for (const k in o) find(o[k], d + 1); };
+      find(e.data.data, 0);
+      diag.api.push({ url: String(e.data.url || '').split('?')[0], keys: Object.keys(e.data.data || {}).slice(0, 20), sample: firstObjs[0] ? JSON.stringify(firstObjs[0]).slice(0, 2500) : null });
+      if (diag.api.length > 40) diag.api.shift();
+    } catch (_) {}
     walk(e.data.data);
   });
 
   // ---------- 2) đọc bảng trên giao diện (trang "Tìm nhà sáng tạo", bảng xếp hạng…) ----------
-  const MONEY = /^([\d.,]+\s*(?:Tr|tr|Tỷ|tỷ|K|k|N)?\s*[đd₫])$/;
+  const MONEY = /^(?:₫\s*[\d.,]+\s*(?:Tr|tr|Tỷ|tỷ|K|k|N|M)?|[\d.,]+\s*(?:Tr|tr|Tỷ|tỷ|K|k|N|M)?\s*(?:[đd₫]|VND))$/;
+  // tách dòng, bỏ biểu tượng đầu dòng, gộp ký hiệu "đ" đứng riêng vào số phía trước
+  const splitLines = (t) => {
+    const out = [];
+    for (let l of String(t || '').split('\n')) {
+      l = l.trim().replace(/^[^\p{L}\p{N}@₫]+/u, '').trim();
+      if (!l) continue;
+      if (/^([đd₫]|VND)$/i.test(l) && out.length && /\d/.test(out[out.length - 1])) out[out.length - 1] += ' ' + l;
+      else out.push(l);
+    }
+    return out;
+  };
   const COUNT = /^[\d.,]+\s*(?:K|N|M|Tr)?$/i;
   function parseRow(row) {
     // bỏ biểu tượng ở đầu dòng (🛍, 👤…)
-    const lines = (row.innerText || '').split('\n').map((s) => s.trim().replace(/^[^\p{L}\p{N}@]+/u, '').trim()).filter(Boolean);
+    const lines = splitLines(row.innerText);
     const gi = lines.findIndex((l) => MONEY.test(l));
     if (gi < 1) return null;
-    const handle = lines[0];
-    if (!/^[\w.]{2,40}$/.test(handle)) return null;
+    const hi = lines.slice(0, Math.min(gi, 5)).findIndex((l) => /^@?[\w.]{2,40}$/.test(l) && !/^\d+$/.test(l));
+    if (hi < 0) return null;
+    const handle = lines[hi].replace(/^@/, '');
+    lines.splice(0, hi);
+    const gi2 = lines.findIndex((l) => MONEY.test(l));
+    if (gi2 !== gi - hi) return null;
     const after = lines.slice(gi + 1);
     const units = after.find((l) => COUNT.test(l));
     const views = after.filter((l) => COUNT.test(l))[1];
@@ -127,8 +151,36 @@
     };
   }
 
+  // Khung dòng của 1 creator: phần tử nhỏ nhất bao quanh ô GMV mà có tên @handle ở đầu
+  function rowFromCell(cell) {
+    let el = cell.parentElement;
+    for (let i = 0; i < 10 && el && el !== document.body; i++) {
+      const lines = splitLines(el.innerText);
+      if (lines.length >= 4 && lines.slice(0, 5).some((l) => /^@?[\w.]{2,40}$/.test(l) && !/^\d+$/.test(l))) {
+        return lines.filter((l) => MONEY.test(l)).length <= 3 ? el : null;
+      }
+      el = el.parentElement;
+    }
+    return null;
+  }
+
   function scanTable() {
     const seen = new Set();
+    let rowsFound = 0;
+    for (const cell of document.querySelectorAll('td, div, span, a')) {
+      if (cell.childElementCount > 3) continue;
+      const raw = cell.textContent;
+      if (!raw || raw.length > 30 || !/\d/.test(raw) || !/[đd₫]|VND/i.test(raw)) continue; // lọc nhanh trước khi đo layout
+      const t = splitLines(cell.innerText).join(' ');
+      if (t.length > 20 || !MONEY.test(t)) continue;
+      const row = rowFromCell(cell);
+      if (!row || seen.has(row)) continue;
+      seen.add(row);
+      rowsFound++;
+      const c = parseRow(row);
+      if (c) { put(c); diag.parsedDom++; }
+      if (diag.rows.length < 5) diag.rows.push(String(row.innerText || '').slice(0, 800));
+    }
     // Mỗi dòng creator có nút "Mời"/"Invite": đi ngược lên tìm khung dòng chứa số GMV
     for (const btn of document.querySelectorAll('button')) {
       if (!/^(Mời|Invite)$/i.test((btn.innerText || '').trim())) continue;
@@ -140,7 +192,8 @@
       if (!row || seen.has(row)) continue;
       seen.add(row);
       const c = parseRow(row);
-      if (c) put(c);
+      if (c) { put(c); diag.parsedDom++; }
+      if (diag.rows.length < 5) diag.rows.push(String(row.innerText || '').slice(0, 800));
     }
     scanDetail();
   }
@@ -215,7 +268,7 @@
       b.onclick = () => chrome.runtime.sendMessage({ type: 'openDashboard', hash: 'creators' });
       document.body.appendChild(b);
     }
-    b.textContent = text || `🤝 +${added} nhà sáng tạo đã lưu`;
+    b.textContent = text || (added ? `🤝 +${added} nhà sáng tạo đã lưu` : '🤝 Chưa đọc được creator nào – mở popup → 🩺 Xuất file chẩn đoán');
   }
 
   function boot() {
@@ -229,5 +282,12 @@
     if (m.type === 'context') reply({ affiliate: true, added, url: location.href });
     if (m.type === 'autoscroll') { autoScroll(m.times || 30); reply({ ok: true }); }
     if (m.type === 'stopScroll') { scrolling = false; reply({ ok: true }); }
+    if (m.type === 'diag') {
+      const sample = [...document.querySelectorAll('button')].map((x) => (x.innerText || '').trim()).filter((x) => x && x.length < 20);
+      const out = { version: chrome.runtime.getManifest().version, url: location.href.split('?')[0], title: document.title, added, ...diag,
+        buttons: [...new Set(sample)].slice(0, 40), bodySample: String(document.querySelector('main, [role="main"]')?.innerText || document.body.innerText).slice(0, 4000) };
+      TTA.download(`chan-doan-affiliate-${Date.now()}.json`, JSON.stringify(out, null, 2), 'application/json');
+      reply({ ok: true });
+    }
   });
 })();

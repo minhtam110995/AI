@@ -69,6 +69,7 @@ $('#watchCh').onclick = async () => {
 };
 $('#affScroll').onclick = () => { chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: 40 }); window.close(); };
 $('#affStop').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'stopScroll' });
+$('#affDiag').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'diag' });
 $('#affOpen').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html#creators') });
 $('#scroll').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: 30 });
 $('#stop').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'stopScroll' });
