@@ -22,7 +22,8 @@ const TTA = (() => {
       duration: num(it.video?.duration),
       cover: it.video?.cover || it.video?.originCover || '',
       music: it.music ? `${it.music.title || ''}${it.music.authorName ? ' – ' + it.music.authorName : ''}` : '',
-      isAd: !!it.isAd,
+      isAd: !!(it.isAd || it.adLabelVersion),
+      branded: !!(it.brandOrganicType || it.isPaidPartnership || it.paidPartnership || it.brandedContentType),
       views: num(s.playCount),
       likes: num(s.diggCount),
       comments: num(s.commentCount),
@@ -38,18 +39,68 @@ const TTA = (() => {
     };
   }
 
+  // "199.000₫" → 199000, "₫1,2tr" → 1200000, số giữ nguyên
+  function parseMoney(v) {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    const s = String(v).toLowerCase().replace(/\s/g, '');
+    const m = s.match(/([\d.,]+)(tr|k)?/);
+    if (!m) return null;
+    let n;
+    if (m[2]) n = Number(m[1].replace(',', '.')) * (m[2] === 'tr' ? 1e6 : 1e3);
+    else n = Number(m[1].replace(/[.,](?=\d{3}(\D|$))/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? Math.round(n) : null;
+  }
+  // "1,2K" → 1200, "10K+" → 10000, "3 triệu" → 3000000
+  function parseCount(v) {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return v;
+    const m = String(v).toLowerCase().replace(/\s/g, '').match(/([\d.,]+)(k|n|m|tr|triệu)?/);
+    if (!m) return null;
+    const n = m[2] ? Number(m[1].replace(',', '.')) : Number(m[1].replace(/[.,]/g, ''));
+    return Number.isFinite(n) ? Math.round(n * ({ k: 1e3, n: 1e3, m: 1e6, tr: 1e6, 'triệu': 1e6 }[m[2]] || 1)) : null;
+  }
+  const normTitle = (t) => String(t || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80);
+  const productKey = (id, title) => (id ? String(id) : 't:' + normTitle(title));
+
   // Sản phẩm gắn giỏ (TikTok Shop) – đọc từ "anchors" của video, nếu có.
   function shopProducts(it) {
     const out = [];
     for (const a of it.anchors || []) {
       let extra = {};
       try { extra = typeof a.extra === 'string' ? JSON.parse(a.extra) : a.extra || {}; } catch (_) {}
-      const title = a.keyword || a.description || extra.title || extra.product_name || '';
+      if (Array.isArray(extra)) extra = extra[0] || {};
+      const raw = JSON.stringify(a);
+      const title = a.keyword || a.description || extra.title || extra.product_name || extra.name || '';
       const looksShop = /shop|product|ecom/i.test(String(a.type) + (a.icon?.urlList?.[0] || '') + (a.schema || '') + JSON.stringify(a.logExtra || '')) || [33, 35, 72].includes(Number(a.type));
-      if (title && looksShop) out.push({ id: String(a.id || title), title, price: extra.price || extra.min_price || null, thumb: a.thumbnail?.urlList?.[0] || '' });
+      const pid = extra.product_id || extra.productId || (raw.match(/product_?id["=:\\]+(\d{12,22})/i) || [])[1] || null;
+      if (title && looksShop) {
+        out.push({
+          id: String(a.id || title), pid: productKey(pid, title), productId: pid ? String(pid) : null, title,
+          price: extra.price || extra.min_price || extra.format_price || null, priceNum: parseMoney(extra.price ?? extra.min_price ?? extra.format_price),
+          sold: parseCount(extra.sold_count ?? extra.sold ?? extra.sale_count), thumb: a.thumbnail?.urlList?.[0] || '',
+        });
+      }
     }
-    if (!out.length && it.isECVideo) out.push({ id: 'ec-' + it.id, title: '(Sản phẩm TikTok Shop)', price: null, thumb: '' });
+    if (!out.length && it.isECVideo) out.push({ id: 'ec-' + it.id, pid: 'ec-' + it.id, title: '(Sản phẩm TikTok Shop)', price: null, thumb: '' });
     return out;
+  }
+
+  // Sản phẩm trên trang chi tiết TikTok Shop (giá, đã bán, shop)
+  const SOLD_KEYS = ['sold_count', 'soldCount', 'sold', 'sale_count', 'sold_num', 'total_sold', 'global_sold_count', 'format_sold_count'];
+  function normalizeProduct(o) {
+    const id = o.product_id || o.productId || (typeof o.id === 'string' && /^\d{12,22}$/.test(o.id) ? o.id : null);
+    const title = o.title || o.product_name || o.name;
+    const soldKey = SOLD_KEYS.find((k) => o[k] != null && o[k] !== '');
+    if (!id || !title || typeof title !== 'string' || !soldKey) return null;
+    const pi = o.price_info || o.price || o.product_price || {};
+    const price = parseMoney(typeof pi === 'object' ? pi.sale_price ?? pi.min_price ?? pi.real_price ?? pi.price ?? pi.format_price ?? o.min_price : pi);
+    return {
+      pid: String(id), productId: String(id), title, price, sold: parseCount(o[soldKey]),
+      shop: o.shop_name || o.seller?.name || o.shop_info?.shop_name || o.seller_info?.shop_name || null,
+      image: o.cover || o.image?.url_list?.[0] || o.images?.[0]?.url_list?.[0] || null,
+      rating: Number(o.rating ?? o.product_rating ?? o.review_info?.rating) || null,
+    };
   }
 
   function normalizeComment(o) {
@@ -83,6 +134,7 @@ const TTA = (() => {
     const videos = [];
     const users = [];
     const comments = [];
+    const products = [];
     const seen = new WeakSet();
     const walk = (o, depth) => {
       if (!o || typeof o !== 'object' || depth > 12 || seen.has(o)) return;
@@ -96,6 +148,10 @@ const TTA = (() => {
         const u = normalizeUser(o);
         if (u) users.push(u);
       }
+      if ((o.product_id || o.productId) && !o.stats) {
+        const p = normalizeProduct(o);
+        if (p) products.push(p);
+      }
       if (o.cid && o.aweme_id) {
         const c = normalizeComment(o);
         if (c) comments.push(c);
@@ -103,7 +159,7 @@ const TTA = (() => {
       for (const k in o) walk(o[k], depth + 1);
     };
     walk(json, 0);
-    return { videos, users, comments };
+    return { videos, users, comments, products };
   }
 
   // ---------- phân tích nội dung (chạy hoàn toàn trên máy) ----------
@@ -236,5 +292,6 @@ const TTA = (() => {
   return {
     extract, normalizeVideo, normalizeUser, engagement, er, fmt, pct, median, fmtDate, load, toCSV, download,
     hookType, formatType, isIntent, isQuestion, phrases, hookText, viewVelocity, HOOKS, FORMATS,
+    parseMoney, parseCount, productKey, normalizeProduct,
   };
 })();

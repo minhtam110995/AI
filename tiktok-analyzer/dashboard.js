@@ -13,7 +13,10 @@ const state = { videos: [], users: {}, comments: {}, watchChannels: [], ttSettin
 async function loadData() {
   const all = await chrome.storage.local.get(null);
   const videos = all.videos || {}, users = all.users || {};
-  state.videos = Object.values(videos).filter((v) => !v.isAd);
+  state.allVideos = Object.values(videos);
+  state.videos = state.allVideos.filter((v) => !v.isAd);
+  state.products = all.products || {};
+  state.job = all.ttJob || null;
   state.users = users;
   state.comments = Object.fromEntries(Object.keys(all).filter((k) => k.startsWith('c:')).map((k) => [k.slice(2), all[k]]));
   state.watchChannels = all.watchChannels || [];

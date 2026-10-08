@@ -1,7 +1,7 @@
 // Content script: nhận dữ liệu từ inject.js + dữ liệu nhúng sẵn trong trang,
 // lưu vào chrome.storage.local, gắn nhãn lên lưới video, tự cuộn và lấy bình luận.
 (() => {
-  const pending = { videos: new Map(), users: new Map(), comments: new Map() };
+  const pending = { videos: new Map(), users: new Map(), comments: new Map(), products: new Map(), adSeen: new Map() };
   const mem = new Map(); // video đã biết (để gắn nhãn)
   let sessionCount = 0;
   let timer = null;
@@ -14,19 +14,38 @@
     scheduleDecorate();
   });
 
-  function queue({ videos, users, comments = [] }) {
-    videos.forEach((v) => { pending.videos.set(v.id, { ...pending.videos.get(v.id), ...v }); mem.set(v.id, { ...mem.get(v.id), ...v }); });
+  function queue({ videos, users, comments = [], products = [] }) {
+    videos.forEach((v) => {
+      pending.videos.set(v.id, { ...pending.videos.get(v.id), ...v });
+      mem.set(v.id, { ...mem.get(v.id), ...v });
+      if (v.isAd) pending.adSeen.set(v.id, (pending.adSeen.get(v.id) || 0) + 1);
+      // sản phẩm gắn giỏ trong video → danh sách sản phẩm
+      (v.products || []).forEach((p) => p.pid && !p.pid.startsWith('ec-') && addProduct({ pid: p.pid, productId: p.productId, title: p.title, price: p.priceNum, sold: p.sold }));
+    });
+    products.forEach(addProduct);
     users.forEach((u) => pending.users.set(u.uniqueId, u));
     comments.forEach((c) => pending.comments.set(c.cid, c));
-    if (videos.length || users.length || comments.length) {
+    if (videos.length || users.length || comments.length || products.length) {
       clearTimeout(timer);
       timer = setTimeout(flush, 800);
       if (videos.length) { recomputeMedians(); scheduleDecorate(); }
     }
   }
 
+  function addProduct(p) {
+    const prev = pending.products.get(p.pid) || {};
+    const out = { ...prev };
+    for (const k in p) if (p[k] != null && p[k] !== '') out[k] = p[k];
+    pending.products.set(p.pid, out);
+    clearTimeout(timer);
+    timer = setTimeout(flush, 800);
+  }
+
   function flush() {
-    if (!pending.videos.size && !pending.users.size && !pending.comments.size) return;
+    if (!pending.videos.size && !pending.users.size && !pending.comments.size && !pending.products.size) return;
+    const newProducts = [...pending.products.values()];
+    const adSeen = new Map(pending.adSeen);
+    pending.products.clear(); pending.adSeen.clear();
     const newVideos = [...pending.videos.values()];
     const newUsers = [...pending.users.values()];
     const newComments = [...pending.comments.values()];
@@ -34,8 +53,19 @@
     const byVid = {};
     newComments.forEach((c) => (byVid[c.vid] ||= []).push(c));
     const cKeys = Object.keys(byVid).map((v) => 'c:' + v);
-    chrome.storage.local.get({ videos: {}, users: {}, ...Object.fromEntries(cKeys.map((k) => [k, []])) }, (store) => {
+    chrome.storage.local.get({ videos: {}, users: {}, products: {}, ...Object.fromEntries(cKeys.map((k) => [k, []])) }, (store) => {
       const now = Date.now();
+      // Sản phẩm: lưu lịch sử "đã bán" để tính tốc độ bán (tối đa 1 mốc/giờ, hoặc khi số thay đổi)
+      for (const p of newProducts) {
+        const prev = store.products[p.pid] || {};
+        const m = { ...prev };
+        for (const k in p) if (p[k] != null && p[k] !== '') m[k] = p[k];
+        const hist = prev.hist ? [...prev.hist] : [];
+        const last = hist[hist.length - 1];
+        if (m.sold != null && (!last || (now - last.t > 3600e3) || last.sold !== m.sold)) hist.push({ t: now, sold: m.sold, price: m.price });
+        if (hist.length > 300) hist.splice(0, hist.length - 300);
+        store.products[p.pid] = { ...m, hist, firstSeen: prev.firstSeen || now, updatedAt: now };
+      }
       for (const v of newVideos) {
         const prev = store.videos[v.id];
         if (!prev) sessionCount++;
@@ -46,6 +76,13 @@
         if (hist.length > 300) hist.splice(0, hist.length - 300);
         // Giữ lại các trường chỉ có ở bản cũ (lời thoại, sản phẩm…) nếu bản mới không có
         const merged = { ...prev, ...v, hist };
+        // Quảng cáo: đếm số lần bắt gặp video này dưới dạng quảng cáo khi lướt
+        if (adSeen.has(v.id)) {
+          merged.adSeen = (prev?.adSeen || 0) + adSeen.get(v.id);
+          merged.adFirst = prev?.adFirst || now;
+          merged.adLast = now;
+        }
+        if (prev?.adSeen && !v.isAd) { merged.adSeen = prev.adSeen; merged.adFirst = prev.adFirst; merged.adLast = prev.adLast; }
         if (prev?.products?.length && !v.products?.length) merged.products = prev.products;
         if (prev?.hasSpeech && !v.hasSpeech) merged.hasSpeech = true;
         if (prev?.authorFollowers && v.authorFollowers == null) merged.authorFollowers = prev.authorFollowers;
@@ -63,7 +100,7 @@
         }
         store.users[u.uniqueId] = { ...prev, ...u, history, updatedAt: now };
       }
-      const out = { videos: store.videos, users: store.users };
+      const out = { videos: store.videos, users: store.users, products: store.products };
       for (const vid in byVid) {
         const prev = store['c:' + vid] || [];
         const ids = new Set(prev.map((c) => c.cid));
@@ -93,6 +130,30 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', readHydration);
   else readHydration();
+
+  // ---------- trang chi tiết sản phẩm TikTok Shop ----------
+  const productIdFromUrl = () => (location.href.match(/\/product\/(\d{12,22})/) || [])[1] || '';
+  function readProductPage() {
+    const pid = productIdFromUrl();
+    if (!pid) return;
+    for (const s of document.querySelectorAll('script[type="application/json"], script#__MODERN_ROUTER_DATA__, script#__NEXT_DATA__')) {
+      if (s.__ttaDone || !(s.textContent || '').includes(pid)) continue;
+      s.__ttaDone = true;
+      try { queue({ videos: [], users: [], products: TTA.extract(JSON.parse(s.textContent)).products }); } catch (_) {}
+    }
+    // Dự phòng: đọc tên, giá, "đã bán" ngay trên giao diện
+    const text = document.body?.innerText || '';
+    const sold = text.match(/([\d.,]+\s*[KkMN]?\+?)\s*(?:đã bán|sold)/i);
+    const price = text.match(/₫\s*([\d.,]+)|([\d.,]+)\s*₫/);
+    const title = (document.querySelector('h1')?.innerText || document.title.split('|')[0] || '').trim();
+    if (sold || price) {
+      queue({ videos: [], users: [], products: [{ pid, productId: pid, title: title || null, sold: sold ? TTA.parseCount(sold[1]) : null, price: price ? TTA.parseMoney(price[1] || price[2]) : null, url: location.href }] });
+    }
+  }
+  if (/\/product\/\d/.test(location.href)) {
+    const run = () => { readProductPage(); setTimeout(readProductPage, 3000); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+  }
 
   // ---------- nhãn trên lưới video ----------
   const medians = new Map(); // view trung vị theo kênh
@@ -227,6 +288,6 @@
     if (msg.type === 'autoscroll') { autoScroll(msg.times || 20); reply({ ok: true }); }
     if (msg.type === 'stopScroll') { scrolling = false; reply({ ok: true }); }
     if (msg.type === 'comments') { collectComments(msg.max || 500); reply({ ok: true }); }
-    if (msg.type === 'flushNow') { flush(); setTimeout(() => reply({ ok: true }), 1500); return true; }
+    if (msg.type === 'flushNow') { readProductPage(); setTimeout(() => { flush(); setTimeout(() => reply({ ok: true }), 1500); }, 300); return true; }
   });
 })();

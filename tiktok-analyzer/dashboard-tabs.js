@@ -248,31 +248,107 @@ PANES.trends = (list, author) => {
   };
 };
 
-// ================= 🛒 TikTok Shop =================
-PANES.shop = (list) => {
-  const el = $('#paneShop');
-  const shopV = list.filter((v) => v.products?.length);
-  if (!shopV.length) {
-    el.innerHTML = `<section class="card"><h2>Chưa thấy video gắn giỏ hàng</h2><p class="small">Tiện ích nhận diện video gắn sản phẩm TikTok Shop từ dữ liệu trang. Hãy lướt các kênh bán hàng / affiliate, hoặc mở trực tiếp các video có giỏ hàng 🛒, rồi quay lại đây.</p></section>`;
-    return;
+// ================= 💰 Affiliate & Ads =================
+// Doanh thu là ƯỚC TÍNH: TikTok không công khai doanh thu từng video/kênh.
+//  - Doanh thu sản phẩm = giá × số "đã bán" (tích luỹ) hoặc giá × tốc độ bán × 30 ngày (khi có ≥ 2 lần ghi nhận)
+//  - Phần của kênh = doanh thu sản phẩm × (view các video của kênh gắn SP ÷ view tất cả video đã biết gắn SP đó)
+//  - Phần của từng video = phần của kênh × (view video ÷ tổng view các video của kênh gắn SP)
+function productSales(p) {
+  if (!p) return {};
+  const h = (p.hist || []).filter((x) => x.sold != null);
+  let daily = null;
+  if (h.length >= 2) {
+    const days = (h[h.length - 1].t - h[0].t) / 864e5;
+    if (days >= 0.5) daily = Math.max(0, (h[h.length - 1].sold - h[0].sold) / days);
   }
-  const other = list.filter((v) => !v.products?.length);
-  const medV = (vs) => TTA.median(vs.map((v) => v.views));
-  const medER = (vs) => TTA.median(vs.map(TTA.er));
-  const prods = {};
-  shopV.forEach((v) => v.products.forEach((p) => {
-    const x = (prods[p.title] ||= { title: p.title, price: p.price, vs: [], creators: new Set() });
-    x.vs.push(v); x.creators.add(v.author);
+  return {
+    daily,
+    rev30: daily != null && p.price ? daily * 30 * p.price : null,
+    revAll: p.sold != null && p.price ? p.sold * p.price : null,
+  };
+}
+
+PANES.shop = (list, author) => {
+  const el = $('#paneShop');
+  const commission = Number(state.ttSettings.commission ?? 10);
+  const job = state.job;
+  const prevInput = $('#affInput')?.value || '';
+  const nonAd = state.allVideos;
+  const vidsWith = {};
+  nonAd.forEach((v) => (v.products || []).forEach((p) => { if (p.pid) (vidsWith[p.pid] ||= new Map()).set(v.id, v); }));
+  const shopV = list.filter((v) => v.products?.length);
+
+  // Sản phẩm của kênh/bộ lọc hiện tại
+  const rows = {};
+  shopV.forEach((v) => v.products.forEach((pp) => {
+    const r = (rows[pp.pid] ||= { pid: pp.pid, title: pp.title, vs: [], views: 0 });
+    r.vs.push(v); r.views += v.views;
   }));
-  const pRows = Object.values(prods).map((x) => ({ ...x, views: x.vs.reduce((a, v) => a + v.views, 0), best: [...x.vs].sort((a, b) => b.views - a.views)[0] })).sort((a, b) => b.views - a.views);
-  const cr = {};
-  shopV.forEach((v) => (cr[v.author] ||= []).push(v));
-  const cRows = Object.entries(cr).map(([a, vs]) => ({ a, vs, med: medV(vs), f: state.users[a]?.followers || vs[0].authorFollowers })).sort((x, y) => y.med - x.med);
+  let useMonthly = false;
+  const prods = Object.values(rows).map((r) => {
+    const p = state.products[r.pid] || {};
+    const s = productSales(p);
+    const allViews = [...(vidsWith[r.pid]?.values() || [])].reduce((a, v) => a + v.views, 0) || r.views;
+    const share = allViews ? r.views / allViews : 1;
+    const base = s.rev30 ?? s.revAll;
+    if (s.rev30 != null) useMonthly = true;
+    const creators = new Set([...(vidsWith[r.pid]?.values() || [])].map((v) => v.author));
+    return { ...r, p, ...s, share, creators, est: base != null ? base * share : null, monthly: s.rev30 != null };
+  }).sort((a, b) => (b.est ?? -1) - (a.est ?? -1) || b.views - a.views);
+  const totalEst = prods.reduce((a, r) => a + (r.est || 0), 0);
+  const vEst = (v) => v.products.reduce((a, pp) => { const r = rows[pp.pid] && prods.find((x) => x.pid === pp.pid); return a + (r?.est && r.views ? r.est * v.views / r.views : 0); }, 0);
+  const adsMine = list.filter((v) => v.adSeen);
+  const allAds = state.allVideos.filter((v) => v.adSeen || v.isAd);
+  const branded = list.filter((v) => v.branded);
+  const adByAuthor = {};
+  allAds.forEach((v) => { const a = (adByAuthor[v.author] ||= { author: v.author, vs: [], seen: 0, last: 0 }); a.vs.push(v); a.seen += v.adSeen || 1; a.last = Math.max(a.last, v.adLast || 0); });
+  const money = (x) => {
+    if (x == null || !Number.isFinite(x)) return '–';
+    const f = (n, u) => n.toFixed(n >= 100 ? 0 : 1).replace(/\.0$/, '').replace('.', ',') + u;
+    return x >= 1e9 ? f(x / 1e9, ' tỷđ') : x >= 1e6 ? f(x / 1e6, ' trđ') : x >= 1e3 ? f(x / 1e3, 'kđ') : Math.round(x) + 'đ';
+  };
+  const plink = (r) => (r.p.productId || /^\d{12,}$/.test(r.pid) ? `<a href="https://shop.tiktok.com/view/product/${r.p.productId || r.pid}?region=VN&locale=vi-VN" target="_blank">${esc(r.title.slice(0, 70))}</a>` : esc(r.title.slice(0, 70)));
+
   el.innerHTML = `
-    ${kpiRow([['Video gắn giỏ', `${shopV.length} / ${list.length}`], ['View trung vị: video gắn giỏ', TTA.fmt(medV(shopV))], ['View trung vị: video thường', TTA.fmt(medV(other))],
-      ['ER trung vị: gắn giỏ', TTA.pct(medER(shopV))], ['ER trung vị: thường', TTA.pct(medER(other))], ['Sản phẩm khác nhau', Object.keys(prods).length]])}
-    <section class="card"><h2>📦 Sản phẩm được gắn nhiều view nhất</h2>
-      ${tbl(['Sản phẩm', 'Giá', 'Số video', 'Tổng view', 'Số creator', 'Video tốt nhất'], pRows.slice(0, 50).map((x) => [esc(x.title.slice(0, 80)), esc(x.price || '–'), x.vs.length, TTA.fmt(x.views), x.creators.size, vlink(x.best, TTA.fmt(x.best.views) + ' view')]))}</section>
-    <section class="card"><h2>🤝 Creator đang bán hàng (gợi ý hợp tác affiliate)</h2>
-      ${tbl(['Creator', 'Follower', 'Video gắn giỏ', 'View trung vị', 'ER trung vị'], cRows.map((c) => [`<a href="https://www.tiktok.com/@${esc(c.a)}" target="_blank">@${esc(c.a)}</a>`, TTA.fmt(c.f ?? NaN), c.vs.length, TTA.fmt(c.med), TTA.pct(medER(c.vs))]))}</section>`;
+    <section class="card"><h2>🔎 Dán kênh TikTok để phân tích affiliate</h2>
+      <div class="toolbar"><input id="affInput" type="search" placeholder="@tenkenh hoặc https://www.tiktok.com/@tenkenh" style="flex:1;min-width:260px" value="${esc(prevInput)}">
+        <select id="affDepth"><option value="8">Nhanh (~50 video)</option><option value="15" selected>Vừa (~100 video)</option><option value="30">Sâu (~200 video)</option></select>
+        <button id="affGo" class="primary">Phân tích</button></div>
+      <p class="muted small" id="affJob">${job ? esc(job.msg) + (job.step !== 'done' && job.step !== 'error' ? ' (đừng đóng Chrome)' : '') : 'Tiện ích sẽ mở kênh trong tab nền, tự cuộn lấy video, rồi mở trang các sản phẩm gắn giỏ để lấy giá & số "đã bán". Mất khoảng 1–4 phút.'}</p>
+      <p class="muted small">Muốn có <b>doanh thu 30 ngày</b> (chính xác hơn doanh thu tích luỹ): phân tích lại cùng kênh sau 1–3 ngày để tiện ích tính được tốc độ bán thực tế của từng sản phẩm.</p></section>
+    ${!shopV.length ? `<section class="card"><p>${author ? `Chưa thấy video gắn giỏ của @${esc(author)} trong khoảng thời gian đang lọc.` : 'Chọn một kênh ở bộ lọc phía trên, hoặc dán kênh để phân tích.'}</p></section>` : `
+    ${kpiRow([['Video gắn giỏ', `${shopV.length} / ${list.length} (${TTA.pct(shopV.length / (list.length || 1), 0)})`],
+      [useMonthly ? 'Doanh thu ước tính / 30 ngày' : 'Doanh thu ước tính (tích luỹ)', money(totalEst)],
+      [`Hoa hồng ước tính (${commission}%)`, money(totalEst * commission / 100)],
+      ['Sản phẩm đang bán', prods.length],
+      ['View TB: video gắn giỏ / thường', `${TTA.fmt(TTA.median(shopV.map((v) => v.views)))} / ${TTA.fmt(TTA.median(list.filter((v) => !v.products?.length).map((v) => v.views)))}`],
+      ['Video thấy chạy ads', adsMine.length]])}
+    <section class="card"><div class="tablehead"><h2>📦 Sản phẩm nào ra đơn?</h2>
+      <label class="small">Hoa hồng affiliate % <input id="affCom" type="number" value="${commission}" min="0" max="80" style="width:70px"></label></div>
+      <p class="muted small">Doanh thu SP = giá × đã bán (hoặc × tốc độ bán 30 ngày khi có ≥ 2 lần ghi nhận). Phần của kênh = doanh thu SP × tỉ lệ view của kênh trên mọi video đã biết gắn SP này. <b>Chỉ là ước tính.</b></p>
+      ${tbl(['Sản phẩm', 'Giá', 'Đã bán', 'Bán/ngày', 'Doanh thu SP', 'Video của kênh', 'View', 'Thị phần view', 'Quy cho kênh', 'Creator khác'],
+        prods.map((r) => [plink(r), money(r.p.price), TTA.fmt(r.p.sold ?? NaN), r.daily != null ? TTA.fmt(r.daily) : '–', money(r.rev30 ?? r.revAll) + (r.monthly ? ' /30n' : ''),
+          r.vs.length, TTA.fmt(r.views), TTA.pct(r.share, 0), `<b>${money(r.est)}</b>`, r.creators.size - 1]),
+        'Chưa có dữ liệu sản phẩm')}</section>
+    <section class="card"><h2>🎬 Video bán hàng</h2>
+      ${tbl(['Video', 'Ngày', 'View', 'ER', 'Sản phẩm', 'Doanh thu ước tính', 'Ads'],
+        [...shopV].sort((a, b) => vEst(b) - vEst(a) || b.views - a.views).slice(0, 100).map((v) => [vlink(v), TTA.fmtDate(v.createTime), TTA.fmt(v.views), TTA.pct(TTA.er(v)),
+          esc(v.products.map((p) => p.title).join(', ').slice(0, 60)), `<b>${money(vEst(v) || null)}</b>`, v.adSeen ? `📣 ${v.adSeen}` : v.branded ? '🤝' : '']))}</section>`}
+    <section class="card"><h2>📣 Quảng cáo bắt gặp khi lướt TikTok</h2>
+      <p class="muted small">Video mang nhãn “Được tài trợ / Sponsored” xuất hiện khi bạn lướt For You hoặc tìm kiếm. Lướt nhiều trong ngách của bạn để thấy đối thủ đang chạy ads gì. 🤝 = nội dung hợp tác thương hiệu (${branded.length} video của bộ lọc hiện tại).</p>
+      ${tbl(['Nhà quảng cáo', 'Số mẫu QC', 'Lần bắt gặp', 'Gần nhất', 'Mẫu nhiều lượt bắt gặp nhất', 'Gắn giỏ'],
+        Object.values(adByAuthor).sort((a, b) => b.seen - a.seen).slice(0, 40).map((a) => { const best = [...a.vs].sort((x, y) => (y.adSeen || 0) - (x.adSeen || 0))[0];
+          return [`<a href="https://www.tiktok.com/@${esc(a.author)}" target="_blank">@${esc(a.author)}</a>`, a.vs.length, a.seen, a.last ? new Date(a.last).toLocaleDateString('vi-VN') : '–', vlink(best), a.vs.some((v) => v.products?.length) ? '🛒' : '']; }),
+        'Chưa bắt gặp quảng cáo nào. Hãy lướt For You một lúc.')}</section>`;
+
+  $('#affGo').onclick = async () => {
+    const v = $('#affInput').value.trim();
+    if (!v) return;
+    await chrome.runtime.sendMessage({ type: 'analyzeChannel', username: v, scrolls: Number($('#affDepth').value) });
+    $('#affJob').textContent = 'Đã bắt đầu… (tiến trình cập nhật tự động)';
+    const u = v.replace(/^.*tiktok\.com\/@/, '').replace(/^@/, '').split(/[/?#\s]/)[0];
+    $('#fAuthor').value = '';
+    history.replaceState(null, '', `?author=${encodeURIComponent(u)}#shop`);
+  };
+  if ($('#affCom')) $('#affCom').onchange = () => chrome.storage.local.set({ ttSettings: { ...state.ttSettings, commission: Number($('#affCom').value) || 0 } });
 };

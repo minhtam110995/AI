@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TikTok Analyzer",
-  "version": "1.2.0",
-  "description": "Phân tích kênh & video TikTok: lượt xem, tương tác, hook, công thức viral, bình luận & ý định mua, theo dõi đối thủ, trend âm thanh, TikTok Shop, lời thoại gốc.",
+  "version": "1.3.0",
+  "description": "Phân tích kênh & video TikTok: doanh thu affiliate ước tính, sản phẩm ra đơn, quảng cáo, hook, công thức viral, bình luận, theo dõi đối thủ, lời thoại gốc.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -38,7 +38,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.tiktok.com/*"
+        "https://www.tiktok.com/*",
+        "https://shop.tiktok.com/*"
       ],
       "js": [
         "src/inject.js"
@@ -48,7 +49,8 @@
     },
     {
       "matches": [
-        "https://www.tiktok.com/*"
+        "https://www.tiktok.com/*",
+        "https://shop.tiktok.com/*"
       ],
       "js": [
         "src/common.js",

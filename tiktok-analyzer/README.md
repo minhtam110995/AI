@@ -25,6 +25,19 @@ Tiện ích cũng ghi dữ liệu khi bạn xem trang hashtag, trang tìm kiếm
 - **Bộ lọc:** theo kênh, khoảng thời gian, từ khoá hoặc hashtag.
 - **Xuất CSV** (mở được bằng Excel hoặc Google Sheets) và **sao lưu/nhập JSON** để chuyển dữ liệu sang máy khác.
 
+## 💰 Affiliate & Ads (bản 1.3)
+- **Dán kênh để phân tích:** dán `@kenh` hoặc link kênh vào tab **💰 Affiliate & Ads**. Tiện ích mở kênh trong tab nền và tự cuộn để lấy video, rồi mở trang các sản phẩm gắn giỏ để lấy **giá, số "đã bán", tên shop**.
+- **Sản phẩm nào ra đơn:** gồm giá, đã bán, **bán/ngày** (khi phân tích lại sau 1–3 ngày), doanh thu sản phẩm, số video và lượt xem của kênh cho sản phẩm, **phần doanh thu quy cho kênh**, số creator khác cũng đang bán.
+- **Video bán hàng:** doanh thu ước tính từng video, kèm đánh dấu 📣 nếu video đã từng xuất hiện dưới dạng quảng cáo.
+- **Hoa hồng ước tính:** tự nhập % hoa hồng.
+- **Quảng cáo bắt gặp khi lướt:** nhà quảng cáo, số mẫu, số lần bắt gặp, mẫu nổi nhất, có gắn giỏ hay không.
+
+> ⚠️ Doanh thu là **ước tính**, vì TikTok không công khai doanh thu từng video hay từng kênh. Cách tính:
+> - **Doanh thu sản phẩm** = giá × đã bán. Nếu đã có ít nhất 2 lần ghi nhận thì dùng giá × tốc độ bán × 30 ngày.
+> - **Phần của kênh** = doanh thu sản phẩm × (lượt xem video của kênh gắn sản phẩm ÷ lượt xem mọi video đã biết gắn sản phẩm đó).
+>
+> Số "đã bán" là của **cả sản phẩm** (mọi kênh và cả shop), nên nếu bạn chưa thu thập video của các creator khác, phần quy cho kênh sẽ bị **cao hơn thực tế**.
+
 ## Tính năng mới (bản 1.2) – chạy hoàn toàn trong tiện ích, không cần API key
 - **Nhãn trên lưới video TikTok:** ER · share · lưu · 🔥 *gấp X lần view trung vị của kênh* (viền đỏ khi ≥ 3×) · 🛒 nếu video gắn giỏ.
 - **🎬 Nội dung & Hook** (Dashboard):
