@@ -683,3 +683,29 @@ a { color: var(--orange); text-decoration: none; }
 .attach-x { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; }
 .cal-cell .d.blue { background: var(--blue); }
 .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+/* ================= v2.1: đăng nhập Google ================= */
+.g-btn {
+  height: 52px; width: 100%; border-radius: 14px; border: 1.5px solid var(--border); background: #fff;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  font-size: 15.5px; font-weight: 700; color: var(--text); box-shadow: 0 4px 12px -8px rgba(30, 35, 50, .25);
+}
+.g-btn:disabled { opacity: .6; }
+.g-btn svg { flex-shrink: 0; }
+details.alt { border-top: 1px solid var(--line); padding-top: 4px; }
+details.alt summary { list-style: none; cursor: pointer; text-align: center; font-size: 13.5px; font-weight: 600; color: var(--muted); padding: 10px 0 4px; }
+details.alt summary::-webkit-details-marker { display: none; }
+details.alt summary::after { content: ' ▾'; }
+details.alt[open] summary::after { content: ' ▴'; }
+.alt-body { display: flex; flex-direction: column; gap: 14px; padding-top: 10px; }
+.g-accs { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.g-acc { display: flex; align-items: center; gap: 12px; padding: 11px 14px; text-align: left; border-top: 1px solid var(--line-2); width: 100%; }
+.g-acc:first-child { border-top: 0; }
+.g-acc .av { width: 34px; height: 34px; border-radius: 50%; background: var(--orange-soft); color: var(--orange); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.g-acc b { display: block; font-size: 14px; }
+.g-acc small { font-size: 12px; color: var(--muted); }
+.row-in { display: flex; gap: 8px; }
+.row-in input { flex: 1; min-width: 0; }
+.btn-sm-o { padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--border); font-weight: 600; font-size: 14px; background: #fff; }
+.dialog .field input { width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-size: 15px; outline: none; }
+.dialog-msg .field label { font-size: 13px; font-weight: 600; }

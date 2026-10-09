@@ -177,11 +177,38 @@
   const chip = status => { const [cls, txt] = STATUS[status] || STATUS.pending; return `<span class="chip ${cls}">${txt}</span>`; };
 
   // ---------------------------------------------------------------- login / create company
+  const GOOGLE_SVG = '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+
+  /** Chế độ dùng thử: mô phỏng cửa sổ chọn tài khoản Google. Bản thật dùng cửa sổ của Google. */
+  function pickGoogleAccount() {
+    if (API.mode !== 'demo') return Promise.resolve(null);
+    return new Promise(async resolve => {
+      const accs = await API.demoAccounts();
+      const d = dialog('Chọn tài khoản Google', `
+        <div class="hint" style="margin:-4px 0 10px">Chế độ dùng thử mô phỏng bước chọn tài khoản. Bản thật sẽ mở cửa sổ đăng nhập của Google.</div>
+        <div class="g-accs">${accs.map(a => `<button class="g-acc tap" data-email="${esc(a.email)}"><span class="av">${esc(initials(a.name))}</span><span><b>${esc(a.name)}</b><small>${esc(a.email)}${a.invited ? ' · được mời, chưa đăng nhập' : ''}</small></span></button>`).join('')}</div>
+        <div class="field" style="margin-top:12px"><label for="gOther">Hoặc nhập Gmail khác</label><div class="row-in"><input id="gOther" type="email" placeholder="ten@gmail.com"><button class="btn-sm-o" id="gGo">Tiếp tục</button></div></div>`);
+      let done = false;
+      const finish = v => { if (done) return; done = true; d.remove(); resolve(v); };
+      d.addEventListener('click', e => { const b = e.target.closest('[data-email]'); if (b) finish(b.dataset.email); });
+      d.querySelector('#gGo').onclick = () => { const v = d.querySelector('#gOther').value.trim(); if (v) finish(v); };
+      new MutationObserver((m, o) => { if (!d.isConnected) { o.disconnect(); finish(null); } }).observe(document.body, { childList: true });
+    });
+  }
+  async function afterLogin(session, account, wantFace) {
+    S.session = session; S.user = session.user; S.locked = false;
+    if (account) { lsSet('ccg.lastAccount', account); lsSet('ccg.lastCode', session.cid); }
+    await loadAll();
+    if (wantFace) { try { await faceRegister(S.user, account || S.user.email); toast('Đã bật đăng nhập bằng Face ID'); } catch (err) { toast('Chưa bật được Face ID trên máy này'); } }
+    go('home'); render();
+  }
+
   function renderLogin() {
     const isCreate = route().parts[0] === 'company' && !S.session;
     const lastCode = lsGet('ccg.lastCode') || (API.mode === 'demo' ? 'DEMO' : '');
     const lastAcc = lsGet('ccg.lastAccount') || '';
     const locked = S.session && S.locked;
+    const googleBtn = (id, text) => `<button class="g-btn tap" type="button" id="${id}">${GOOGLE_SVG}<span>${text}</span></button>`;
     $app.innerHTML = `<div class="login2">
       <div class="login2-brand">
         <div class="logo"><i class="icon-scan-face"></i></div>
@@ -190,55 +217,84 @@
       </div>
       <div class="login2-card">
       ${isCreate ? `
-        <form class="form" id="createForm" autocomplete="off">
+        <form class="form" id="createForm" autocomplete="off" novalidate>
           <div class="field"><label for="cName">Tên công ty <em>*</em></label><input id="cName" name="name" required placeholder="Công ty TNHH ABC"></div>
           <div class="field"><label for="cCode">Mã công ty <em>*</em></label><input id="cCode" name="code" required placeholder="VD: ABC" autocapitalize="characters" maxlength="20">
-            <div class="hint">Nhân viên nhập mã này khi đăng nhập. Chỉ gồm chữ, số, dấu gạch ngang.</div></div>
+            <div class="hint">Mã riêng của công ty bạn, chỉ gồm chữ, số, dấu gạch ngang.</div></div>
           <div class="field"><label for="cAdmin">Họ tên quản trị <em>*</em></label><input id="cAdmin" name="adminName" required placeholder="Trần Thị Hương"></div>
-          <div class="field"><label for="cAcc">Tài khoản quản trị <em>*</em></label><input id="cAcc" name="account" required placeholder="admin hoặc email" autocapitalize="none"></div>
-          <div class="field"><label for="cPw">Mật khẩu <em>*</em></label><input id="cPw" name="password" type="password" required minlength="6" placeholder="Ít nhất 6 ký tự" autocomplete="new-password"></div>
-          <button class="btn-primary" type="submit">Tạo công ty</button>
+          ${googleBtn('cGoogle', 'Tạo công ty bằng tài khoản Google')}
+          <details class="alt"><summary>Hoặc dùng tài khoản và mật khẩu</summary>
+            <div class="alt-body">
+              <div class="field"><label for="cAcc">Tài khoản quản trị</label><input id="cAcc" name="account" placeholder="admin hoặc email" autocapitalize="none"></div>
+              <div class="field"><label for="cPw">Mật khẩu</label><input id="cPw" name="password" type="password" minlength="6" placeholder="Ít nhất 6 ký tự" autocomplete="new-password"></div>
+              <button class="btn-primary" type="submit">Tạo công ty</button>
+            </div></details>
           <button class="link-btn" type="button" data-go="home">Đã có tài khoản? Đăng nhập</button>
         </form>` : `
-        <form class="form" id="loginForm" autocomplete="on">
+        <div class="form">
           ${locked ? `<button class="face-btn tap" type="button" id="faceBtn"><i class="icon-scan-face"></i><span><b>Đăng nhập bằng Face ID</b><small>hoặc vân tay trên máy này</small></span></button>
-            <div class="or"><span>hoặc nhập mật khẩu</span></div>` : ''}
-          <div class="field"><label for="lCode">Mã công ty</label>
-            <div class="input-ico"><i class="icon-building-2"></i><input id="lCode" name="code" required value="${esc(lastCode)}" placeholder="VD: ABC" autocapitalize="characters"></div></div>
-          <div class="field"><label for="lAcc">Tài khoản</label>
-            <div class="input-ico"><i class="icon-user-round"></i><input id="lAcc" name="account" required value="${esc(lastAcc)}" placeholder="Tên đăng nhập hoặc email" autocapitalize="none" autocomplete="username"></div></div>
-          <div class="field"><label for="lPw">Mật khẩu</label>
-            <div class="input-ico"><i class="icon-lock-keyhole"></i><input id="lPw" name="password" type="password" required placeholder="Mật khẩu" autocomplete="current-password">
-            <button type="button" class="eye" id="eye" aria-label="Hiện mật khẩu"><i class="icon-eye"></i></button></div></div>
-          <div class="login-row">
-            <label class="check" id="faceOptWrap" hidden><input type="checkbox" id="faceOpt"> Đăng nhập bằng Face ID</label>
-            <button class="link-sm" type="button" id="forgot">Quên mật khẩu?</button>
-          </div>
-          <button class="btn-primary" type="submit">Đăng nhập</button>
+            <div class="or"><span>hoặc</span></div>` : ''}
+          ${googleBtn('gBtn', locked ? 'Đăng nhập lại bằng Google' : 'Đăng nhập bằng Google')}
+          <label class="check" id="faceOptWrap" hidden><input type="checkbox" id="faceOpt"> Bật đăng nhập bằng Face ID trên máy này</label>
+          <div class="hint" style="text-align:center">Dùng Gmail mà công ty đã đăng ký cho bạn.</div>
+          <details class="alt" ${lsGet('ccg.loginAlt') === '1' ? 'open' : ''} id="altBox"><summary>Đăng nhập bằng mã công ty và mật khẩu</summary>
+          <form class="alt-body" id="loginForm" autocomplete="on">
+            <div class="field"><label for="lCode">Mã công ty</label>
+              <div class="input-ico"><i class="icon-building-2"></i><input id="lCode" name="code" required value="${esc(lastCode)}" placeholder="VD: ABC" autocapitalize="characters"></div></div>
+            <div class="field"><label for="lAcc">Tài khoản</label>
+              <div class="input-ico"><i class="icon-user-round"></i><input id="lAcc" name="account" required value="${esc(lastAcc.includes('@') && API.mode === 'demo' ? '' : lastAcc)}" placeholder="Tên đăng nhập hoặc email" autocapitalize="none" autocomplete="username"></div></div>
+            <div class="field"><label for="lPw">Mật khẩu</label>
+              <div class="input-ico"><i class="icon-lock-keyhole"></i><input id="lPw" name="password" type="password" required placeholder="Mật khẩu" autocomplete="current-password">
+              <button type="button" class="eye" id="eye" aria-label="Hiện mật khẩu"><i class="icon-eye"></i></button></div></div>
+            <div class="login-row"><button class="link-sm" type="button" id="forgot">Quên mật khẩu?</button></div>
+            <button class="btn-primary" type="submit">Đăng nhập</button>
+          </form></details>
           ${locked ? '<button class="link-btn" type="button" id="otherAcc">Đăng nhập tài khoản khác</button>'
             : '<button class="link-btn" type="button" data-go="company">Chưa có công ty? Tạo công ty mới</button>'}
-        </form>`}
-      ${API.mode === 'demo' && !isCreate ? `<div class="demo-note"><i class="icon-info"></i><div><b>Chế độ dùng thử</b> (chưa nối Firebase). Mã công ty <b>DEMO</b>, tài khoản <b>admin</b> (quản trị) hoặc <b>nv01</b>…<b>nv05</b> (nhân viên), mật khẩu <b>123456</b>.</div></div>` : ''}
+        </div>`}
+      ${API.mode === 'demo' && !isCreate ? `<div class="demo-note"><i class="icon-info"></i><div><b>Chế độ dùng thử.</b> Bấm <b>Đăng nhập bằng Google</b> để chọn tài khoản mẫu, hoặc dùng mã công ty <b>DEMO</b>, tài khoản <b>admin</b> / <b>nv01</b>…<b>nv05</b>, mật khẩu <b>123456</b>.</div></div>` : ''}
       </div>
     </div>`;
 
     if (isCreate) {
       const f = document.getElementById('createForm');
+      const base = () => {
+        const d = Object.fromEntries(new FormData(f));
+        for (const k of ['name', 'code', 'adminName']) if (!String(d[k] || '').trim()) { toast('Nhập tên công ty, mã công ty và họ tên quản trị'); f[k].focus(); return null; }
+        return d;
+      };
+      document.getElementById('cGoogle').onclick = e => {
+        const d = base(); if (!d) return;
+        busy(e.currentTarget, async () => {
+          const email = await pickGoogleAccount();
+          if (API.mode === 'demo' && !email) return;
+          const s = await API.createCompany({ ...d, google: true, email });
+          toast('Đã tạo công ty. Hãy thêm địa điểm và nhân viên ở trang quản trị.');
+          await afterLogin(s, s.user.email, false);
+        });
+      };
       f.addEventListener('submit', e => {
         e.preventDefault();
-        const d = Object.fromEntries(new FormData(f));
-        if (d.password.length < 6) return toast('Mật khẩu cần ít nhất 6 ký tự');
+        const d = base(); if (!d) return;
+        if (!String(d.account || '').trim()) return toast('Nhập tài khoản quản trị');
+        if (String(d.password || '').length < 6) return toast('Mật khẩu cần ít nhất 6 ký tự');
         busy(f.querySelector('[type=submit]'), async () => {
-          S.session = await API.createCompany(d);
-          lsSet('ccg.lastCode', API.normCode(d.code)); lsSet('ccg.lastAccount', d.account.trim().toLowerCase());
-          S.user = S.session.user; S.locked = false;
-          await loadAll();
+          const s = await API.createCompany(d);
           toast('Đã tạo công ty. Hãy thêm địa điểm và nhân viên ở trang quản trị.');
-          go('home'); render();
+          await afterLogin(s, d.account.trim().toLowerCase(), false);
         });
       });
       return;
     }
+    const wantFace = () => !!document.getElementById('faceOpt')?.checked;
+    if (!locked) faceAvailable().then(ok => { const w = document.getElementById('faceOptWrap'); if (w) w.hidden = !ok; });
+    document.getElementById('altBox').addEventListener('toggle', e => lsSet('ccg.loginAlt', e.target.open ? '1' : null));
+    document.getElementById('gBtn').onclick = e => busy(e.currentTarget, async () => {
+      const email = await pickGoogleAccount();
+      if (API.mode === 'demo' && !email) return;
+      const s = await API.signInGoogle(email);
+      await afterLogin(s, s.user.email, wantFace());
+    });
     const f = document.getElementById('loginForm');
     document.getElementById('eye').onclick = () => { const p = f.password; p.type = p.type === 'password' ? 'text' : 'password'; };
     document.getElementById('forgot').onclick = async () => {
@@ -246,27 +302,19 @@
       try { dialog('Quên mật khẩu', esc(await API.resetPassword(f.code.value, f.account.value))); }
       catch (e) { toast(errMsg(e)); }
     };
-    if (!locked) faceAvailable().then(ok => { const w = document.getElementById('faceOptWrap'); if (w) w.hidden = !ok; });
     const fb = document.getElementById('faceBtn');
-    if (fb) {
-      fb.onclick = async () => {
-        try { if (await faceVerify()) { S.locked = false; go('home'); render(); } }
-        catch (e) { toast('Không xác thực được Face ID. Hãy nhập mật khẩu.'); }
-      };
-    }
+    if (fb) fb.onclick = async () => {
+      try { if (await faceVerify()) { S.locked = false; go('home'); render(); } }
+      catch (e) { toast('Không xác thực được Face ID. Hãy đăng nhập lại.'); }
+    };
     const other = document.getElementById('otherAcc');
     if (other) other.onclick = async () => { lsSet(FACE_KEY, null); await signOut(); };
     f.addEventListener('submit', e => {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(f));
-      const wantFace = document.getElementById('faceOpt')?.checked;
       busy(f.querySelector('[type=submit]'), async () => {
-        S.session = await API.signIn(d.code, d.account, d.password);
-        lsSet('ccg.lastCode', API.normCode(d.code)); lsSet('ccg.lastAccount', d.account.trim().toLowerCase());
-        S.user = S.session.user; S.locked = false;
-        await loadAll();
-        if (wantFace) { try { await faceRegister(S.user, d.account); toast('Đã bật đăng nhập bằng Face ID'); } catch (err) { toast('Chưa bật được Face ID trên máy này'); } }
-        go('home'); render();
+        const s = await API.signIn(d.code, d.account, d.password);
+        await afterLogin(s, d.account.trim().toLowerCase(), wantFace());
       });
     });
   }
@@ -869,7 +917,8 @@
         <div class="card list">
           <button class="list-row tap" data-go="info"><i class="icon-user-round-pen lead"></i><span class="name">Thông tin cá nhân</span><span class="val"></span><i class="icon-chevron-right"></i></button>
           <button class="list-row tap" data-go="info"><i class="icon-calendar-clock lead"></i><span class="name">Ca làm việc</span><span class="val">${esc(sh.start)} – ${esc(sh.end)}</span><i class="icon-chevron-right"></i></button>
-          <button class="list-row tap" data-go="password"><i class="icon-lock-keyhole lead"></i><span class="name">Đổi mật khẩu</span><span class="val"></span><i class="icon-chevron-right"></i></button>
+          ${S.session.provider === 'google' ? `<div class="list-row"><i class="icon-mail lead"></i><span class="name">Tài khoản Google</span><span class="val">${esc(S.user.email || '')}</span></div>`
+            : '<button class="list-row tap" data-go="password"><i class="icon-lock-keyhole lead"></i><span class="name">Đổi mật khẩu</span><span class="val"></span><i class="icon-chevron-right"></i></button>'}
           <button class="list-row tap" data-act="faceid" id="faceRow" hidden><i class="icon-scan-face lead"></i><span class="name">Đăng nhập bằng Face ID</span><span class="val">${faceOn() ? 'Đang bật' : 'Đang tắt'}</span><i class="icon-chevron-right"></i></button>
           <button class="list-row tap" data-act="device"><i class="icon-smartphone lead"></i><span class="name">Thiết bị đăng ký</span><span class="val">${esc(deviceName())}</span><i class="icon-chevron-right"></i></button>
           <button class="list-row tap" data-act="lang"><i class="icon-languages lead"></i><span class="name">Ngôn ngữ</span><span class="val">Tiếng Việt</span><i class="icon-chevron-right"></i></button>
@@ -884,7 +933,7 @@
   function renderInfo() {
     const u = S.user, sh = shift();
     const locs = myLocations().map(l => l.name).join(', ') || '—';
-    const rows = [['Họ và tên', u.name], ['Mã nhân viên', u.code || '—'], ['Tài khoản', u.account || '—'], ['Phòng ban', u.dept || '—'], ['Chức danh', u.title || '—'],
+    const rows = [['Họ và tên', u.name], ['Mã nhân viên', u.code || '—'], ['Tài khoản', S.session.provider === 'google' ? `Google · ${u.email}` : (u.account || '—')], ['Phòng ban', u.dept || '—'], ['Chức danh', u.title || '—'],
       ['Quyền', C.ROLES[u.role] || u.role], ['Công ty', `${S.company.name} (${S.company.code})`], ['Ca làm việc', `${sh.name} ${sh.start} – ${sh.end}`],
       ['Ngày làm việc', (sh.workdays || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => DOW_SHORT[i]).join(', ')], ['Địa điểm chấm công', locs],
       ['Phép năm', `${u.leaveTotal ?? S.company.settings.leavePerYear} ngày`]];

@@ -12,6 +12,7 @@
 
   const normCode = c => String(c || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
   const normAccount = a => String(a || '').trim().toLowerCase();
+  const normEmail = e => String(e || '').trim().toLowerCase();
   const toEmail = (code, account) => account.includes('@') ? account : `${account}@${code.toLowerCase()}.chamcong.app`;
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
@@ -20,7 +21,7 @@
 
   // ====================================================================== DEMO
   function demoBackend() {
-    const KEY = 'ccg.demo.v1';
+    const KEY = 'ccg.demo.v2';
     let store = null;
     const load = () => {
       if (store) return store;
@@ -46,16 +47,16 @@
       const shS = { id: id(), name: 'Ca sáng', start: '06:00', end: '14:00', workdays: [1, 2, 3, 4, 5, 6, 0], grace: 5 };
       const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
       const people = [
-        ['admin', 'Trần Thị Hương', 'Trưởng phòng Nhân sự', 'Phòng Nhân sự', 'admin', 'NV-0001'],
-        ['nv01', 'Nguyễn Văn An', 'Nhân viên kinh doanh', 'Phòng Kinh doanh', 'employee', 'NV-0248'],
-        ['nv02', 'Lê Minh Châu', 'Kế toán', 'Phòng Kế toán', 'employee', 'NV-0251'],
-        ['nv03', 'Phạm Quốc Bảo', 'Nhân viên kỹ thuật', 'Phòng Kỹ thuật', 'employee', 'NV-0263'],
-        ['nv04', 'Đỗ Thu Hà', 'Chăm sóc khách hàng', 'Phòng Kinh doanh', 'employee', 'NV-0270'],
-        ['nv05', 'Vũ Hoàng Nam', 'Nhân viên kho', 'Phòng Vận hành', 'employee', 'NV-0284']
+        ['admin', 'Trần Thị Hương', 'Trưởng phòng Nhân sự', 'Phòng Nhân sự', 'admin', 'NV-0001', 'huong.tran.demo@gmail.com'],
+        ['nv01', 'Nguyễn Văn An', 'Nhân viên kinh doanh', 'Phòng Kinh doanh', 'employee', 'NV-0248', 'an.nguyen.demo@gmail.com'],
+        ['nv02', 'Lê Minh Châu', 'Kế toán', 'Phòng Kế toán', 'employee', 'NV-0251', 'chau.le.demo@gmail.com'],
+        ['nv03', 'Phạm Quốc Bảo', 'Nhân viên kỹ thuật', 'Phòng Kỹ thuật', 'employee', 'NV-0263', 'bao.pham.demo@gmail.com'],
+        ['nv04', 'Đỗ Thu Hà', 'Chăm sóc khách hàng', 'Phòng Kinh doanh', 'employee', 'NV-0270', 'ha.do.demo@gmail.com'],
+        ['nv05', 'Vũ Hoàng Nam', 'Nhân viên kho', 'Phòng Vận hành', 'employee', 'NV-0284', 'nam.vu.demo@gmail.com']
       ];
       const users = {};
-      people.forEach(([account, name, title, dept, role, code], i) => {
-        const u = { uid: id(), account, password: '123456', name, title, dept, role, code, active: true, shiftId: shHC.id, locationIds: [], leaveTotal: 12, createdAt: start };
+      people.forEach(([account, name, title, dept, role, code, email], i) => {
+        const u = { uid: id(), account, email, password: '123456', name, title, dept, role, code, active: true, shiftId: shHC.id, locationIds: [], leaveTotal: 12, createdAt: start };
         if (i === 5) { u.shiftId = shS.id; }
         if (i === 4) { u.locationIds = [locHCM.id]; }
         users[u.uid] = u;
@@ -103,15 +104,17 @@
       s.companies.DEMO = {
         id: 'DEMO', name: 'Công ty TNHH ChấmCông Demo', code: 'DEMO', ownerUid: admin.uid, settings: { ...DEFAULT_SETTINGS }, createdAt: start,
         users, locations: { [locHN.id]: locHN, [locHCM.id]: locHCM }, shifts: { [shHC.id]: shHC, [shS.id]: shS },
-        logs: Object.fromEntries(logs.map(l => [l.id, l])), requests: Object.fromEntries(reqs.map(r => [r.id, r])), attachments: {}, notis: Object.fromEntries(notis.map(n => [n.id, n]))
+        logs: Object.fromEntries(logs.map(l => [l.id, l])), requests: Object.fromEntries(reqs.map(r => [r.id, r])), attachments: {}, notis: Object.fromEntries(notis.map(n => [n.id, n])),
+        invites: { 'ngoc.ngo.demo@gmail.com': { email: 'ngoc.ngo.demo@gmail.com', name: 'Ngô Bảo Ngọc', title: 'Nhân viên kế toán', dept: 'Phòng Kế toán', role: 'employee', code: 'NV-0291', shiftId: shHC.id, locationIds: [], leaveTotal: 12, created: t - 2 * 3600e3 } }
       };
+      s.emailIndex = Object.fromEntries([...list.map(u => [u.email, 'DEMO']), ['ngoc.ngo.demo@gmail.com', 'DEMO']]);
     }
     const session = () => {
       const s = load();
       if (!s.session) return null;
       const c = s.companies[s.session.cid], u = c && c.users[s.session.uid];
       if (!u || !u.active) { s.session = null; persist(); return null; }
-      return { cid: c.id, uid: u.uid, user: pub(clone(u)), company: companyPub(c) };
+      return { cid: c.id, uid: u.uid, user: pub(clone(u)), company: companyPub(c), provider: s.session.provider || 'password' };
     };
     const companyPub = c => ({ id: c.id, name: c.name, code: c.code, ownerUid: c.ownerUid, settings: clone(c.settings) });
     const notify = (c, uid, text) => { const n = { id: C.uid(), uid, ts: Date.now(), text, read: false }; c.notis[n.id] = n; };
@@ -128,21 +131,58 @@
         if (!c) fail('Không tìm thấy mã công ty ' + code);
         if (!u || u.password !== password) fail('Sai tài khoản hoặc mật khẩu');
         if (!u.active) fail('Tài khoản đã bị khoá. Liên hệ quản trị.');
-        s.session = { cid: code, uid: u.uid }; persist(); lsSet(CID_KEY, code);
+        s.session = { cid: code, uid: u.uid, provider: 'password' }; persist(); lsSet(CID_KEY, code);
         return delay(session());
       },
+      // Bản dùng thử mô phỏng cửa sổ chọn tài khoản Google: app truyền email người dùng chọn.
+      async signInGoogle(email) {
+        email = normEmail(email);
+        const s = load();
+        const cid = (s.emailIndex || {})[email];
+        const c = cid && s.companies[cid];
+        if (!c) fail(`Email ${email} chưa được công ty nào thêm. Hãy nhờ quản trị thêm email này vào mục Nhân viên.`);
+        let u = Object.values(c.users).find(x => x.email === email);
+        if (!u) {
+          const inv = (c.invites || {})[email];
+          if (!inv) fail(`Email ${email} chưa được công ty nào thêm.`);
+          u = { uid: C.uid(), account: email, email, name: inv.name, title: inv.title || '', dept: inv.dept || '', role: inv.role || 'employee', code: inv.code || '', active: true, shiftId: inv.shiftId || '', locationIds: inv.locationIds || [], leaveTotal: inv.leaveTotal ?? 12, createdAt: Date.now() };
+          c.users[u.uid] = u; delete c.invites[email];
+        }
+        if (!u.active) fail('Tài khoản đã bị khoá. Liên hệ quản trị.');
+        s.session = { cid, uid: u.uid, provider: 'google' }; persist(); lsSet(CID_KEY, cid);
+        return delay(session());
+      },
+      async demoAccounts() {
+        const s = load(), out = [];
+        Object.entries(s.emailIndex || {}).forEach(([email, cid]) => {
+          const c = s.companies[cid]; if (!c) return;
+          const u = Object.values(c.users).find(x => x.email === email), inv = (c.invites || {})[email];
+          if (u || inv) out.push({ email, name: (u || inv).name, company: c.name, invited: !u });
+        });
+        return out;
+      },
       async signOut() { load().session = null; persist(); },
-      async createCompany({ name, code, adminName, account, password }) {
-        code = normCode(code); account = normAccount(account);
+      async createCompany({ name, code, adminName, account, password, google, email }) {
+        code = normCode(code);
         const s = load();
         if (!code) fail('Mã công ty chỉ gồm chữ, số và dấu gạch ngang');
         if (s.companies[code]) fail('Mã công ty ' + code + ' đã được dùng');
-        if (password.length < 6) fail('Mật khẩu cần ít nhất 6 ký tự');
-        const u = { uid: C.uid(), account, password, name: adminName, title: 'Quản trị', dept: '', role: 'admin', code: '', active: true, shiftId: '', locationIds: [], leaveTotal: 12, createdAt: Date.now() };
+        s.emailIndex = s.emailIndex || {};
+        if (google) {
+          email = normEmail(email);
+          if (!email) fail('Chọn tài khoản Google');
+          if (s.emailIndex[email]) fail(`Email ${email} đã thuộc một công ty khác`);
+          account = email;
+        } else {
+          account = normAccount(account);
+          if (String(password || '').length < 6) fail('Mật khẩu cần ít nhất 6 ký tự');
+        }
+        const u = { uid: C.uid(), account, email: google ? email : '', password: google ? undefined : password, name: adminName, title: 'Quản trị', dept: '', role: 'admin', code: '', active: true, shiftId: '', locationIds: [], leaveTotal: 12, createdAt: Date.now() };
         const sh = { ...C.DEFAULT_SHIFT, id: C.uid() };
         u.shiftId = sh.id;
-        s.companies[code] = { id: code, name, code, ownerUid: u.uid, settings: { ...DEFAULT_SETTINGS }, createdAt: Date.now(), users: { [u.uid]: u }, locations: {}, shifts: { [sh.id]: sh }, logs: {}, requests: {}, attachments: {}, notis: {} };
-        s.session = { cid: code, uid: u.uid }; persist();
+        s.companies[code] = { id: code, name, code, ownerUid: u.uid, settings: { ...DEFAULT_SETTINGS }, createdAt: Date.now(), users: { [u.uid]: u }, locations: {}, shifts: { [sh.id]: sh }, logs: {}, requests: {}, attachments: {}, notis: {}, invites: {} };
+        if (google) s.emailIndex[email] = code;
+        s.session = { cid: code, uid: u.uid, provider: google ? 'google' : 'password' }; persist(); lsSet(CID_KEY, code);
         return session();
       },
       async resetPassword() { return 'Chế độ dùng thử: mật khẩu của mọi tài khoản mẫu là 123456. Tài khoản bạn tự tạo: nhờ quản trị đặt lại trong mục Nhân viên.'; },
@@ -170,6 +210,22 @@
         Object.assign(u, rest);
         if (password) { if (password.length < 6) fail('Mật khẩu cần ít nhất 6 ký tự'); u.password = password; }
         persist(); return pub(clone(u));
+      },
+      async listInvites() { needAdmin(); return Object.values(co().invites || {}).map(clone); },
+      async saveInvite(d) {
+        needAdmin(); const s = load(), c = co(); const email = normEmail(d.email);
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail('Email không hợp lệ');
+        s.emailIndex = s.emailIndex || {}; c.invites = c.invites || {};
+        if (s.emailIndex[email] && s.emailIndex[email] !== c.id) fail(`Email ${email} đã thuộc một công ty khác`);
+        if (Object.values(c.users).some(u => u.email === email)) fail(`Email ${email} đã có tài khoản trong công ty`);
+        c.invites[email] = { ...d, email, created: (c.invites[email] || {}).created || Date.now() };
+        s.emailIndex[email] = c.id; persist(); return clone(c.invites[email]);
+      },
+      async deleteInvite(email) {
+        needAdmin(); const s = load(), c = co(); email = normEmail(email);
+        if (c.invites) delete c.invites[email];
+        if (s.emailIndex && s.emailIndex[email] === c.id) delete s.emailIndex[email];
+        persist();
       },
       async listLocations() { return Object.values(co().locations).map(clone); },
       async saveLocation(l) { needAdmin(); const c = co(); const id = l.id || C.uid(); c.locations[id] = { ...l, id }; persist(); return id; },
@@ -255,6 +311,9 @@
             'auth/too-many-requests': 'Đăng nhập sai quá nhiều lần. Hãy thử lại sau ít phút.',
             'auth/network-request-failed': 'Không có kết nối mạng', 'auth/weak-password': 'Mật khẩu cần ít nhất 6 ký tự',
             'auth/email-already-in-use': 'Tài khoản này đã tồn tại', 'auth/requires-recent-login': 'Hãy đăng xuất rồi đăng nhập lại trước khi đổi mật khẩu',
+            'auth/internal-error': 'Không kết nối được tới Google. Kiểm tra mạng rồi thử lại.',
+            'auth/popup-blocked': 'Trình duyệt đã chặn cửa sổ đăng nhập Google. Hãy cho phép cửa sổ bật lên rồi thử lại.',
+            'auth/account-exists-with-different-credential': 'Email này đã đăng ký bằng cách đăng nhập khác. Hãy dùng mã công ty và mật khẩu.',
             'permission-denied': 'Bạn không có quyền thực hiện thao tác này', 'unavailable': 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.'
           };
           console.error(e);
@@ -271,7 +330,50 @@
       if (user.active === false) { await auth.signOut(); fail('Tài khoản đã bị khoá. Liên hệ quản trị.'); }
       meCache = user;
       const c = norm(cs);
-      return { cid, uid: u.uid, user, company: { ...c, settings: { ...DEFAULT_SETTINGS, ...(c.settings || {}) } } };
+      const provider = (u.providerData || []).some(p => p && p.providerId === 'google.com') ? 'google' : 'password';
+      return { cid, uid: u.uid, user, provider, company: { ...c, settings: { ...DEFAULT_SETTINGS, ...(c.settings || {}) } } };
+    }
+
+    // ---- Đăng nhập Google ----
+    const googleProvider = () => { const p = new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' }); return p; };
+    async function googlePopup(allowRedirect) {
+      try { return await auth.signInWithPopup(googleProvider()); }
+      catch (e) {
+        if (['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/user-cancelled'].includes(e.code)) fail('Bạn đã đóng cửa sổ đăng nhập Google');
+        if (allowRedirect && ['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'].includes(e.code)) {
+          await auth.signInWithRedirect(googleProvider());
+          return new Promise(() => {}); // trang sẽ chuyển sang Google rồi quay lại
+        }
+        if (e.code === 'auth/popup-blocked') fail('Trình duyệt đã chặn cửa sổ đăng nhập Google. Hãy cho phép cửa sổ bật lên rồi thử lại.');
+        if (e.code === 'auth/operation-not-allowed') fail('Firebase chưa bật đăng nhập Google (Authentication › Sign-in method › Google).');
+        if (e.code === 'auth/unauthorized-domain') fail('Tên miền này chưa được thêm vào Firebase (Authentication › Settings › Authorized domains).');
+        throw e;
+      }
+    }
+    /** Sau khi Google xác thực: tìm công ty theo email, nhận lời mời nếu là lần đầu. */
+    async function afterGoogle(user) {
+      const email = normEmail(user.email);
+      const deny = async msg => { await auth.signOut(); fail(msg); };
+      if (!email) return deny('Tài khoản Google này không có email');
+      let idx;
+      try { idx = await fs.collection('emailIndex').doc(email).get(); } catch (e) { idx = null; }
+      if (!idx || !idx.exists) return deny(`Email ${email} chưa được công ty nào thêm. Hãy nhờ quản trị thêm email này vào mục Nhân viên.`);
+      cid = idx.data().cid; lsSet(CID_KEY, cid);
+      const us = await col('users').doc(user.uid).get();
+      if (!us.exists) {
+        const inv = await col('invites').doc(email).get();
+        if (!inv.exists) return deny(`Email ${email} chưa được công ty nào thêm.`);
+        const d = inv.data();
+        await col('users').doc(user.uid).set(strip({
+          account: email, email, name: d.name || user.displayName || email, title: d.title || '', dept: d.dept || '', role: d.role || 'employee',
+          code: d.code || '', active: true, shiftId: d.shiftId || '', locationIds: d.locationIds || [], leaveTotal: d.leaveTotal ?? DEFAULT_SETTINGS.leavePerYear,
+          createdAt: FV.serverTimestamp()
+        }));
+        await inv.ref.delete().catch(() => {});
+      }
+      const s = await loadSession();
+      if (!s) return deny(`Email ${email} chưa được công ty nào thêm.`);
+      return s;
     }
     const authReady = new Promise(res => { const off = auth.onAuthStateChanged(() => { off(); res(); }); });
 
@@ -289,7 +391,13 @@
 
     return {
       mode: 'firebase',
-      ready: wrap(async () => { await authReady; return loadSession().catch(() => null); }),
+      ready: wrap(async () => {
+        await authReady;
+        const r = await auth.getRedirectResult().catch(() => null);
+        if (r && r.user) return afterGoogle(r.user);
+        return loadSession().catch(() => null);
+      }),
+      signInGoogle: wrap(async () => { const cred = await googlePopup(true); return afterGoogle(cred.user); }),
       signIn: wrap(async (code, account, password) => {
         code = normCode(code); account = normAccount(account);
         if (!code) fail('Nhập mã công ty');
@@ -300,21 +408,31 @@
         return s;
       }),
       signOut: wrap(async () => { meCache = null; await auth.signOut(); }),
-      createCompany: wrap(async ({ name, code, adminName, account, password }) => {
+      createCompany: wrap(async ({ name, code, adminName, account, password, google }) => {
         code = normCode(code); account = normAccount(account);
         if (!code) fail('Mã công ty chỉ gồm chữ, số và dấu gạch ngang');
-        const cred = await auth.createUserWithEmailAndPassword(toEmail(code, account), password);
+        let cred, email = '';
+        if (google) {
+          cred = await googlePopup(false);
+          email = normEmail(cred.user.email);
+          const idx = await fs.collection('emailIndex').doc(email).get().catch(() => null);
+          if (!idx || idx.exists) { await auth.signOut(); fail(`Email ${email} đã thuộc một công ty khác`); }
+          account = email;
+        } else {
+          cred = await auth.createUserWithEmailAndPassword(toEmail(code, account), password);
+        }
         const uid = cred.user.uid;
         cid = code; lsSet(CID_KEY, code);
         try {
           await cref().set({ name, code, ownerUid: uid, settings: { ...DEFAULT_SETTINGS }, createdAt: FV.serverTimestamp() });
         } catch (e) {
-          await cred.user.delete().catch(() => {});
+          if (google) await auth.signOut(); else await cred.user.delete().catch(() => {});
           if (e.code === 'permission-denied') fail('Mã công ty ' + code + ' đã được dùng');
           throw e;
         }
         const sh = col('shifts').doc();
-        await col('users').doc(uid).set({ account, name: adminName, title: 'Quản trị', dept: '', role: 'admin', code: '', active: true, shiftId: sh.id, locationIds: [], leaveTotal: DEFAULT_SETTINGS.leavePerYear, createdAt: FV.serverTimestamp() });
+        await col('users').doc(uid).set(strip({ account, email: email || undefined, name: adminName, title: 'Quản trị', dept: '', role: 'admin', code: '', active: true, shiftId: sh.id, locationIds: [], leaveTotal: DEFAULT_SETTINGS.leavePerYear, createdAt: FV.serverTimestamp() }));
+        if (email) await fs.collection('emailIndex').doc(email).set({ cid: code });
         const { id, ...shift } = C.DEFAULT_SHIFT;
         await sh.set(shift);
         return loadSession();
@@ -356,6 +474,26 @@
         const { password, account, uid: _u, id, createdAt, ...rest } = patch;
         if (password) fail('Firebase không cho đổi mật khẩu người khác từ trình duyệt. Hãy dùng email đặt lại mật khẩu, hoặc xoá và tạo lại tài khoản trong Firebase Console.');
         await col('users').doc(uid).update(strip(rest));
+      }),
+      listInvites: wrap(() => all(col('invites'))),
+      saveInvite: wrap(async d => {
+        const email = normEmail(d.email);
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail('Email không hợp lệ');
+        const idxRef = fs.collection('emailIndex').doc(email);
+        let idx;
+        try { idx = await idxRef.get(); } catch (e) { fail(`Email ${email} đã thuộc một công ty khác`); }
+        if (idx.exists && idx.data().cid !== cid) fail(`Email ${email} đã thuộc một công ty khác`);
+        const dup = await col('users').where('email', '==', email).get();
+        if (!dup.empty) fail(`Email ${email} đã có tài khoản trong công ty`);
+        const { id, created, ...rest } = d;
+        await col('invites').doc(email).set(strip({ ...rest, email, created: FV.serverTimestamp() }));
+        if (!idx.exists) await idxRef.set({ cid });
+        return { ...rest, email, created: Date.now() };
+      }),
+      deleteInvite: wrap(async email => {
+        email = normEmail(email);
+        await col('invites').doc(email).delete();
+        await fs.collection('emailIndex').doc(email).delete().catch(() => {});
       }),
       listLocations: wrap(() => all(col('locations'))),
       saveLocation: wrap(async l => { const { id, ...rest } = l; const ref = id ? col('locations').doc(id) : col('locations').doc(); await ref.set(strip(rest)); return ref.id; }),

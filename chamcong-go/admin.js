@@ -5,7 +5,7 @@
   const { pad, esc, hm, dmy, dayKey, fromKey, keyToDmy, num, initials, relTime, KIND, REQ_TYPES, LEAVE_TYPES, STATUS, ROLES, DOW_SHORT } = C;
   const $root = document.getElementById('admin');
 
-  const A = { session: null, me: null, company: null, users: [], locations: [], shifts: [], reqs: [], logs: [], range: null };
+  const A = { session: null, me: null, company: null, users: [], invites: [], locations: [], shifts: [], reqs: [], logs: [], range: null };
   const ui = { reqTab: 'pending', reqType: '', userQ: '', userDept: '', locSel: null, month: null };
 
   // ---------------------------------------------------------------- utils
@@ -39,8 +39,8 @@
   const pendingLogs = () => A.logs.filter(l => l.status === 'pending');
 
   async function loadBase() {
-    const [company, users, locations, shifts, reqs] = await Promise.all([API.getCompany(), API.listUsers(), API.listLocations(), API.listShifts(), API.allRequests()]);
-    Object.assign(A, { company, users, locations, shifts, reqs });
+    const [company, users, locations, shifts, reqs, invites] = await Promise.all([API.getCompany(), API.listUsers(), API.listLocations(), API.listShifts(), API.allRequests(), API.listInvites()]);
+    Object.assign(A, { company, users, locations, shifts, reqs, invites });
   }
   async function loadLogs(from, to) {
     if (A.range && A.range[0] <= from && A.range[1] >= to) return;
@@ -139,24 +139,48 @@
           <h2>Đăng nhập quản trị</h2>
           <div class="sub">Dành cho bộ phận nhân sự và quản lý.</div>
           ${msg ? `<div class="chip bad" style="white-space:normal;padding:10px 12px;border-radius:12px">${esc(msg)}</div>` : ''}
+          <button type="button" class="btn g-btn" id="aGoogle"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Đăng nhập bằng Google</button>
+          <div class="or"><span>hoặc dùng mã công ty và mật khẩu</span></div>
           <div class="field"><label for="aCode">Mã công ty</label><input class="input" id="aCode" name="code" required value="${esc(lastCode)}"></div>
           <div class="field"><label for="aAcc">Tài khoản</label><input class="input" id="aAcc" name="account" required autocomplete="username" value="${esc(localStorage.getItem('ccg.lastAccount') || '')}"></div>
           <div class="field"><label for="aPw">Mật khẩu</label><input class="input" id="aPw" name="password" type="password" required autocomplete="current-password"></div>
           <button class="btn btn-p" style="height:46px" type="submit">Đăng nhập</button>
           <a class="link" href="index.html#/company" style="text-align:center">Chưa có công ty? Tạo công ty mới</a>
-          ${API.mode === 'demo' ? '<div class="demo-box"><b>Chế độ dùng thử:</b> mã công ty <b>DEMO</b>, tài khoản <b>admin</b>, mật khẩu <b>123456</b>.</div>' : ''}
+          ${API.mode === 'demo' ? '<div class="demo-box"><b>Chế độ dùng thử:</b> mã công ty <b>DEMO</b>, tài khoản <b>admin</b>, mật khẩu <b>123456</b>. Hoặc bấm Google và nhập <b>huong.tran.demo@gmail.com</b>.</div>' : ''}
         </form>
       </div>
     </div>`;
     const f = document.getElementById('aLogin');
+    // Hai trường này chỉ bắt buộc khi đăng nhập bằng mật khẩu.
+    f.querySelectorAll('[required]').forEach(i => { i.required = false; });
+    document.getElementById('aGoogle').onclick = e => busy(e.currentTarget, async () => {
+      let email;
+      if (API.mode === 'demo') {
+        email = await askEmail();
+        if (!email) return;
+      }
+      await enter(await API.signInGoogle(email));
+    });
     f.addEventListener('submit', e => {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(f));
+      if (!d.code.trim() || !d.account.trim() || !d.password) return toast('Nhập mã công ty, tài khoản và mật khẩu');
       busy(f.querySelector('[type=submit]'), async () => {
         const s = await API.signIn(d.code, d.account, d.password);
         try { localStorage.setItem('ccg.lastCode', API.normCode(d.code)); localStorage.setItem('ccg.lastAccount', d.account.trim().toLowerCase()); } catch (err) { /* ignore */ }
         await enter(s);
       });
+    });
+  }
+  function askEmail() {
+    return new Promise(resolve => {
+      const m = modal('Chọn tài khoản Google', `<div class="modal-b"><div class="full hint">Chế độ dùng thử mô phỏng bước chọn tài khoản Google.</div>
+        <div class="field full"><label for="gEmail">Gmail</label><input class="input" id="gEmail" type="email" value="huong.tran.demo@gmail.com"></div></div>`,
+        '<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-p" id="gOk">Tiếp tục</button>', { size: 'sm' });
+      let done = false;
+      const fin = v => { if (!done) { done = true; m.remove(); resolve(v); } };
+      m.querySelector('#gOk').onclick = () => fin(m.querySelector('#gEmail').value.trim());
+      new MutationObserver((x, o) => { if (!m.isConnected) { o.disconnect(); fin(null); } }).observe(document.body, { childList: true });
     });
   }
   async function enter(s) {
@@ -196,6 +220,7 @@
   async function pOverview(page) {
     const today = dayKey(new Date());
     await loadLogs(daysAgo(13), today);
+    if (!page.isConnected) return; // người dùng đã chuyển trang trong lúc tải
     const states = activeUsers().map(u => ({ u, ...todayStatus(u) }));
     const cnt = s => states.filter(x => x.state === s).length;
     const expected = states.filter(x => !['off', 'leave', 'trip'].includes(x.state)).length;
@@ -262,7 +287,7 @@
           </div>
         </div>
       </div>`;
-    drawChart(document.getElementById('chart'), series);
+    drawChart(page.querySelector('#chart'), series);
     bindDecide(page);
   }
 
@@ -365,6 +390,7 @@
 
   async function pApprovals(page) {
     await loadLogs(daysAgo(62), dayKey(new Date()));
+    if (!page.isConnected) return; // người dùng đã chuyển trang trong lúc tải
     const tabs = [['pending', 'Chờ duyệt'], ['approved', 'Đã duyệt'], ['rejected', 'Từ chối'], ['all', 'Tất cả'], ['logs', 'Chấm công chờ duyệt']];
     const count = k => k === 'logs' ? pendingLogs().length : A.reqs.filter(r => k === 'all' || r.status === k).length;
     let body;
@@ -409,31 +435,49 @@
 
   // ---------------------------------------------------------------- users
   async function pUsers(page) {
-    const depts = [...new Set(A.users.map(u => u.dept).filter(Boolean))].sort();
+    const depts = [...new Set(A.users.concat(A.invites).map(u => u.dept).filter(Boolean))].sort();
     const q = ui.userQ.toLowerCase();
-    const list = A.users.filter(u => (!q || [u.name, u.account, u.code, u.title].join(' ').toLowerCase().includes(q)) && (!ui.userDept || u.dept === ui.userDept));
+    const match = u => (!q || [u.name, u.account, u.email, u.code, u.title].join(' ').toLowerCase().includes(q)) && (!ui.userDept || u.dept === ui.userDept);
+    const list = A.users.filter(match), invs = A.invites.filter(match);
+    const locsOf = u => (u.locationIds || []).length ? u.locationIds.map(id => (A.locations.find(l => l.id === id) || {}).name).filter(Boolean).join(', ') : 'Tất cả';
+    const login = u => u.email ? `<span class="g-dot">G</span>${esc(u.email)}` : esc(u.account || '');
     page.innerHTML = `<div class="row">
-        <div class="search"><i class="icon-search"></i><input class="input" id="uq" placeholder="Tìm theo tên, tài khoản, mã NV" value="${esc(ui.userQ)}"></div>
+        <div class="search"><i class="icon-search"></i><input class="input" id="uq" placeholder="Tìm theo tên, email, mã NV" value="${esc(ui.userQ)}"></div>
         <select class="select" id="ud"><option value="">Tất cả phòng ban</option>${depts.map(d => `<option${d === ui.userDept ? ' selected' : ''}>${esc(d)}</option>`).join('')}</select>
         <div class="grow"></div>
-        <span class="muted">${A.users.filter(u => u.active !== false).length} đang làm · ${A.users.filter(u => u.active === false).length} đã khoá</span>
+        <span class="muted">${A.users.filter(u => u.active !== false).length} đang làm · ${A.invites.length} chờ đăng nhập · ${A.users.filter(u => u.active === false).length} đã khoá</span>
         <button class="btn btn-p" id="addU"><i class="icon-user-plus"></i>Thêm nhân viên</button>
       </div>
-      <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nhân viên</th><th>Tài khoản</th><th>Phòng ban</th><th>Chức danh</th><th>Ca làm việc</th><th>Địa điểm</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead><tbody>
-      ${list.map(u => { const sh = shiftOf(u); const locs = (u.locationIds || []).length ? u.locationIds.map(id => (A.locations.find(l => l.id === id) || {}).name).filter(Boolean).join(', ') : 'Tất cả'; return `<tr>
+      <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nhân viên</th><th>Đăng nhập bằng</th><th>Phòng ban</th><th>Chức danh</th><th>Ca làm việc</th><th>Địa điểm</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      ${invs.map(u => { const sh = shiftOf(u); return `<tr class="invite-row">
         <td><div class="who"><div class="av sm">${esc(initials(u.name))}</div><div><b>${esc(u.name)}</b><small>${esc(u.code || '—')}</small></div></div></td>
-        <td>${esc(u.account || '')}</td><td>${esc(u.dept || '—')}</td><td>${esc(u.title || '—')}</td>
-        <td>${esc(sh.name)} <span class="muted">${esc(sh.start)}–${esc(sh.end)}</span></td><td>${esc(locs)}</td>
+        <td>${login(u)}</td><td>${esc(u.dept || '—')}</td><td>${esc(u.title || '—')}</td>
+        <td>${esc(sh.name)} <span class="muted">${esc(sh.start)}–${esc(sh.end)}</span></td><td>${esc(locsOf(u))}</td>
+        <td><span class="chip ${u.role === 'admin' ? 'admin' : 'gray'}">${ROLES[u.role] || u.role}</span></td>
+        <td><span class="chip pending" title="Đã thêm email, nhân viên chưa đăng nhập lần nào">Chờ đăng nhập</span></td>
+        <td><div class="acts"><button class="icon-b" data-einv="${esc(u.email)}" title="Sửa"><i class="icon-pencil"></i></button><button class="icon-b" data-dinv="${esc(u.email)}" title="Huỷ lời mời"><i class="icon-trash-2"></i></button></div></td></tr>`; }).join('')}
+      ${list.map(u => { const sh = shiftOf(u); return `<tr>
+        <td><div class="who"><div class="av sm">${esc(initials(u.name))}</div><div><b>${esc(u.name)}</b><small>${esc(u.code || '—')}</small></div></div></td>
+        <td>${login(u)}</td><td>${esc(u.dept || '—')}</td><td>${esc(u.title || '—')}</td>
+        <td>${esc(sh.name)} <span class="muted">${esc(sh.start)}–${esc(sh.end)}</span></td><td>${esc(locsOf(u))}</td>
         <td><span class="chip ${u.role === 'admin' ? 'admin' : 'gray'}">${ROLES[u.role] || u.role}</span>${u.uid === A.company.ownerUid ? ' <span class="chip blue">Chủ</span>' : ''}</td>
         <td>${u.active === false ? '<span class="chip bad">Đã khoá</span>' : '<span class="chip ok">Đang làm</span>'}</td>
         <td><div class="acts"><button class="icon-b" data-edit="${u.uid}" title="Sửa"><i class="icon-pencil"></i></button>
-          ${u.uid !== A.company.ownerUid && u.uid !== A.me.uid ? `<button class="icon-b" data-lock="${u.uid}" title="${u.active === false ? 'Mở khoá' : 'Khoá tài khoản'}"><i class="icon-${u.active === false ? 'lock-open' : 'lock'}"></i></button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="9"><div class="empty">Không có nhân viên phù hợp</div></td></tr>'}
+          ${u.uid !== A.company.ownerUid && u.uid !== A.me.uid ? `<button class="icon-b" data-lock="${u.uid}" title="${u.active === false ? 'Mở khoá' : 'Khoá tài khoản'}"><i class="icon-${u.active === false ? 'lock-open' : 'lock'}"></i></button>` : ''}</div></td></tr>`; }).join('')}
+      ${!list.length && !invs.length ? '<tr><td colspan="9"><div class="empty">Không có nhân viên phù hợp</div></td></tr>' : ''}
       </tbody></table></div></div>`;
     const uq = page.querySelector('#uq');
     uq.oninput = () => { ui.userQ = uq.value; clearTimeout(uq._t); uq._t = setTimeout(() => { pUsers(page).then(() => { const n = page.querySelector('#uq'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); }, 250); };
     page.querySelector('#ud').onchange = e => { ui.userDept = e.target.value; pUsers(page); };
     page.querySelector('#addU').onclick = () => userModal(null);
     page.querySelectorAll('[data-edit]').forEach(b => { b.onclick = () => userModal(A.users.find(u => u.uid === b.dataset.edit)); });
+    page.querySelectorAll('[data-einv]').forEach(b => { b.onclick = () => userModal(A.invites.find(u => u.email === b.dataset.einv), true); });
+    page.querySelectorAll('[data-dinv]').forEach(b => {
+      const inv = A.invites.find(u => u.email === b.dataset.dinv);
+      b.onclick = () => confirmModal('Huỷ lời mời', `${inv.name} (${inv.email}) sẽ không đăng nhập được nữa.`, 'Huỷ lời mời', async () => {
+        await API.deleteInvite(inv.email); A.invites = A.invites.filter(x => x.email !== inv.email); toast('Đã huỷ lời mời'); pUsers(page);
+      });
+    });
     page.querySelectorAll('[data-lock]').forEach(b => {
       const u = A.users.find(x => x.uid === b.dataset.lock);
       b.onclick = () => confirmModal(u.active === false ? 'Mở khoá tài khoản' : 'Khoá tài khoản',
@@ -441,32 +485,58 @@
         u.active === false ? 'Mở khoá' : 'Khoá', async () => { await API.updateUser(u.uid, { active: u.active === false }); u.active = u.active === false; toast('Đã cập nhật'); pUsers(page); });
     });
   }
-  function userModal(u) {
+  /** Thêm / sửa nhân viên. isInvite: đang sửa một lời mời Google chưa đăng nhập. */
+  function userModal(u, isInvite = false) {
     const isNew = !u; u = u || { role: 'employee', locationIds: [], shiftId: (A.shifts[0] || {}).id, leaveTotal: A.company.settings.leavePerYear };
-    const m = modal(isNew ? 'Thêm nhân viên' : 'Sửa thông tin nhân viên', `<form class="modal-b" id="uf">
+    const title = isNew ? 'Thêm nhân viên' : isInvite ? 'Sửa lời mời' : 'Sửa thông tin nhân viên';
+    const loginBlock = isNew ? `
+      <div class="field full"><label>Cách đăng nhập</label>
+        <div class="seg2"><label><input type="radio" name="method" value="google" checked><span>Gmail (Đăng nhập bằng Google)</span></label><label><input type="radio" name="method" value="password"><span>Tài khoản + mật khẩu</span></label></div></div>
+      <div class="field full" data-m="google"><label for="u_email">Gmail của nhân viên <em>*</em></label><input class="input" id="u_email" name="email" type="email" placeholder="ten.nhanvien@gmail.com" autocomplete="off">
+        <div class="hint">Nhân viên mở app, bấm <b>Đăng nhập bằng Google</b> và chọn đúng Gmail này. Không cần mật khẩu, không cần mã công ty.</div></div>
+      <div class="field" data-m="password" hidden><label for="u_acc">Tài khoản đăng nhập <em>*</em></label><input class="input" id="u_acc" name="account" placeholder="vd: an.nguyen" autocomplete="off"></div>
+      <div class="field" data-m="password" hidden><label for="u_pw">Mật khẩu <em>*</em></label><input class="input" id="u_pw" name="password" type="text" placeholder="Ít nhất 6 ký tự" autocomplete="new-password"></div>`
+      : isInvite ? `<div class="field full"><label>Gmail</label><input class="input" value="${esc(u.email)}" disabled><div class="hint">Muốn đổi email: huỷ lời mời này rồi thêm lại.</div></div>`
+      : u.email ? `<div class="field full"><label>Đăng nhập bằng</label><input class="input" value="Google · ${esc(u.email)}" disabled></div>`
+      : `<div class="field"><label>Tài khoản đăng nhập</label><input class="input" value="${esc(u.account || '')}" disabled></div>
+         <div class="field"><label for="u_pw">Đặt lại mật khẩu</label><input class="input" id="u_pw" name="password" type="text" placeholder="${API.mode === 'demo' ? 'Để trống nếu không đổi' : 'Chỉ đổi được qua email (Firebase)'}" ${API.mode !== 'demo' ? 'disabled' : ''} autocomplete="new-password"></div>`;
+    const m = modal(title, `<form class="modal-b" id="uf">
       <div class="field"><label for="u_name">Họ và tên <em>*</em></label><input class="input" id="u_name" name="name" required value="${esc(u.name || '')}"></div>
       <div class="field"><label for="u_code">Mã nhân viên</label><input class="input" id="u_code" name="code" value="${esc(u.code || '')}" placeholder="NV-0001"></div>
-      <div class="field"><label for="u_acc">Tài khoản đăng nhập <em>*</em></label><input class="input" id="u_acc" name="account" ${isNew ? 'required' : 'disabled'} value="${esc(u.account || '')}" placeholder="vd: an.nguyen hoặc email" autocomplete="off"></div>
-      <div class="field"><label for="u_pw">${isNew ? 'Mật khẩu <em>*</em>' : 'Đặt lại mật khẩu'}</label><input class="input" id="u_pw" name="password" type="text" ${isNew ? 'required minlength="6"' : ''} placeholder="${isNew ? 'Ít nhất 6 ký tự' : (API.mode === 'demo' ? 'Để trống nếu không đổi' : 'Chỉ đổi được qua email (Firebase)')}" ${!isNew && API.mode !== 'demo' ? 'disabled' : ''} autocomplete="new-password"></div>
+      ${loginBlock}
       <div class="field"><label for="u_dept">Phòng ban</label><input class="input" id="u_dept" name="dept" value="${esc(u.dept || '')}" list="deptList"><datalist id="deptList">${[...new Set(A.users.map(x => x.dept).filter(Boolean))].map(d => `<option value="${esc(d)}">`).join('')}</datalist></div>
       <div class="field"><label for="u_title">Chức danh</label><input class="input" id="u_title" name="title" value="${esc(u.title || '')}"></div>
       <div class="field"><label for="u_shift">Ca làm việc</label><select class="select" id="u_shift" name="shiftId">${A.shifts.map(s => `<option value="${s.id}"${s.id === u.shiftId ? ' selected' : ''}>${esc(s.name)} ${s.start}–${s.end}</option>`).join('')}</select></div>
-      <div class="field"><label for="u_role">Quyền</label><select class="select" id="u_role" name="role" ${u.uid === A.company.ownerUid ? 'disabled' : ''}>${Object.entries(ROLES).map(([k, n]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label for="u_role">Quyền</label><select class="select" id="u_role" name="role" ${u.uid && u.uid === A.company.ownerUid ? 'disabled' : ''}>${Object.entries(ROLES).map(([k, n]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
       <div class="field"><label for="u_leave">Số ngày phép năm</label><input class="input" id="u_leave" name="leaveTotal" type="number" min="0" max="60" step="0.5" value="${u.leaveTotal ?? 12}"></div>
       <div class="field"><label>Địa điểm được chấm</label><div class="days">${A.locations.map(l => `<label><input type="checkbox" name="loc" value="${l.id}"${(u.locationIds || []).includes(l.id) ? ' checked' : ''}>${esc(l.name)}</label>`).join('') || '<span class="hint">Chưa có địa điểm</span>'}</div><div class="hint">Không chọn = được chấm ở mọi địa điểm.</div></div>
-      ${isNew ? `<div class="full hint">Gửi cho nhân viên: mã công ty <b>${esc(A.company.code)}</b>, tài khoản và mật khẩu trên. Nhân viên mở app chấm công để đăng nhập.</div>` : ''}
+      ${isNew ? `<div class="full hint" data-m="password" hidden>Gửi cho nhân viên: mã công ty <b>${esc(A.company.code)}</b>, tài khoản và mật khẩu trên.</div>` : ''}
     </form>`, `<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-p" id="saveU">${isNew ? 'Thêm nhân viên' : 'Lưu thay đổi'}</button>`);
+    const f = m.querySelector('#uf');
+    const method = () => (f.querySelector('input[name=method]:checked') || {}).value;
+    f.querySelectorAll('input[name=method]').forEach(r => { r.onchange = () => f.querySelectorAll('[data-m]').forEach(el => { el.hidden = el.dataset.m !== method(); }); });
     m.querySelector('#saveU').onclick = e => {
-      const f = m.querySelector('#uf'), fd = new FormData(f), d = Object.fromEntries(fd);
+      const fd = new FormData(f), d = Object.fromEntries(fd);
       if (!String(d.name || '').trim()) return toast('Nhập họ và tên');
-      if (isNew && !String(d.account || '').trim()) return toast('Nhập tài khoản đăng nhập');
-      if (isNew && String(d.password || '').length < 6) return toast('Mật khẩu cần ít nhất 6 ký tự');
       const data = { name: d.name.trim(), code: d.code.trim(), dept: d.dept.trim(), title: d.title.trim(), shiftId: d.shiftId || '', leaveTotal: Number(d.leaveTotal) || 0, locationIds: fd.getAll('loc') };
-      if (d.role) data.role = d.role;
+      data.role = d.role || u.role || 'employee';
+      if (isNew && method() === 'google' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(d.email || '').trim())) return toast('Nhập Gmail hợp lệ của nhân viên');
+      if (isNew && method() === 'password') {
+        if (!String(d.account || '').trim()) return toast('Nhập tài khoản đăng nhập');
+        if (String(d.password || '').length < 6) return toast('Mật khẩu cần ít nhất 6 ký tự');
+      }
       busy(e.currentTarget, async () => {
-        if (isNew) { const nu = await API.createUser({ ...data, account: d.account, password: d.password }); A.users.push(nu); toast(`Đã thêm ${nu.name}`); }
-        else {
+        if (isNew && method() === 'google') {
+          const inv = await API.saveInvite({ ...data, email: d.email.trim() });
+          A.invites.push(inv); toast(`Đã thêm ${inv.name}. Nhân viên đăng nhập bằng Google với ${inv.email}.`);
+        } else if (isNew) {
+          const nu = await API.createUser({ ...data, account: d.account, password: d.password }); A.users.push(nu); toast(`Đã thêm ${nu.name}`);
+        } else if (isInvite) {
+          const inv = await API.saveInvite({ ...data, email: u.email });
+          Object.assign(u, inv); toast('Đã lưu lời mời');
+        } else {
           if (d.password) data.password = d.password;
+          if (u.uid === A.company.ownerUid) delete data.role;
           await API.updateUser(u.uid, data);
           delete data.password; Object.assign(u, data);
           toast('Đã lưu thông tin');
@@ -619,6 +689,7 @@
     const mk = monthKey(), y = +mk.slice(0, 4), m = +mk.slice(5) - 1;
     const last = new Date(y, m + 1, 0).getDate(), today = dayKey(new Date());
     await loadLogs(`${mk}-01`, `${mk}-${pad(last)}`);
+    if (!page.isConnected) return; // người dùng đã chuyển trang trong lúc tải
     const users = A.users.filter(u => u.active !== false || logsOf(u.uid).some(l => l.day.startsWith(mk)));
     const days = Array.from({ length: last }, (_, i) => new Date(y, m, i + 1));
     const rows = users.map(u => {
@@ -679,6 +750,7 @@
   async function pReports(page) {
     const mk = monthKey(), y = +mk.slice(0, 4), m = +mk.slice(5) - 1, last = new Date(y, m + 1, 0).getDate();
     await loadLogs(`${mk}-01`, `${mk}-${pad(last)}`);
+    if (!page.isConnected) return; // người dùng đã chuyển trang trong lúc tải
     const rows = A.users.filter(u => u.active !== false).map(u => ({ u, s: C.monthSummary({ logs: logsOf(u.uid), reqs: reqsOf(u.uid), y, m, shift: shiftOf(u), startKey: startKeyOf(u) }) }));
     const tot = rows.reduce((a, r) => { Object.keys(r.s).forEach(k => { a[k] = (a[k] || 0) + r.s[k]; }); return a; }, {});
     const depts = {};
