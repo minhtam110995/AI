@@ -46,7 +46,39 @@ const TTA = (() => {
     const out = [v.playAddr, v.downloadAddr];
     (v.bitrateInfo || []).forEach((b) => (b.PlayAddr?.UrlList || b.playAddr?.urlList || []).forEach((u) => out.push(u)));
     (v.PlayAddrStruct?.UrlList || []).forEach((u) => out.push(u));
-    return [...new Set(out.filter((u) => typeof u === 'string' && /^https?:/.test(u)))].slice(0, 6);
+    // Quét sâu: mọi chuỗi trông giống địa chỉ file video
+    const seen = new WeakSet();
+    const walk = (o, d) => {
+      if (!o || typeof o !== 'object' || d > 8 || seen.has(o)) return;
+      seen.add(o);
+      for (const k in o) {
+        const x = o[k];
+        if (typeof x === 'string' && isVideoUrl(x)) out.push(x);
+        else if (x && typeof x === 'object' && !/cover|avatar|thumb|image|music|author/i.test(k)) walk(x, d + 1);
+      }
+    };
+    walk(v, 0);
+    return [...new Set(out.filter((u) => typeof u === 'string' && /^https?:/.test(u)))].slice(0, 8);
+  }
+  const isVideoUrl = (u) => /^https?:\/\//.test(u) && /(mime_type=video|\/video\/tos\/|\.mp4(\?|$)|video_mp4|\/aweme\/v1\/play)/i.test(u) && !/\.(jpe?g|png|webp|image)(\?|$|~)/i.test(u);
+
+  // Tìm mã / tên sản phẩm ở bất kỳ đâu trong dữ liệu video (khi không có "anchors")
+  function deepProducts(it) {
+    let raw = '';
+    try { raw = JSON.stringify(it); } catch (_) { return []; }
+    raw = raw.replace(/\\u002F/gi, '/').replace(/\\"/g, '"');
+    const ids = new Map();
+    for (const re of [/product_?id["'=:\s\\]+(\d{15,22})/gi, /\/view\/product\/(\d{15,22})/gi, /"productId"\s*:\s*"?(\d{15,22})/gi]) {
+      let m;
+      while ((m = re.exec(raw))) {
+        const id = m[1];
+        if (ids.has(id)) continue;
+        const near = raw.slice(Math.max(0, m.index - 600), m.index + 600);
+        const t = near.match(/"(?:product_name|productName|title|keyword|name)"\s*:\s*"([^"]{4,140})"/);
+        ids.set(id, t ? t[1] : null);
+      }
+    }
+    return [...ids].slice(0, 6).map(([pid, title]) => ({ id: pid, pid, productId: pid, title: title || 'Sản phẩm #' + pid.slice(-6), price: null, thumb: '' }));
   }
 
   // "199.000₫" → 199000, "₫1,2tr" → 1200000, số giữ nguyên
@@ -92,6 +124,7 @@ const TTA = (() => {
         });
       }
     }
+    if (!out.length) out.push(...deepProducts(it));
     if (!out.length && it.isECVideo) out.push({ id: 'ec-' + it.id, pid: 'ec-' + it.id, title: '(Sản phẩm TikTok Shop)', price: null, thumb: '' });
     return out;
   }
@@ -302,6 +335,6 @@ const TTA = (() => {
   return {
     extract, normalizeVideo, normalizeUser, engagement, er, fmt, pct, median, fmtDate, load, toCSV, download,
     hookType, formatType, isIntent, isQuestion, phrases, hookText, viewVelocity, HOOKS, FORMATS,
-    parseMoney, parseCount, productKey, normalizeProduct, playUrlsOf,
+    parseMoney, parseCount, productKey, normalizeProduct, playUrlsOf, isVideoUrl, deepProducts,
   };
 })();

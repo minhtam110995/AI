@@ -202,44 +202,81 @@
     }
   }
 
+  const escH = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function productLinks(v, products) {
+    const real = (products || []).filter((p) => p.productId);
+    const words = String(v.desc || '').replace(/#\S+/g, '').trim().split(/\s+/).slice(0, 8).join(' ');
+    if (real.length) {
+      return real.map((p) => `<a href="https://shop.tiktok.com/view/product/${p.productId}?region=VN&locale=vi-VN" target="_blank">🛒 ${escH(p.title)}${p.priceNum ? ' · ' + p.priceNum.toLocaleString('vi-VN') + 'đ' : ''}</a>`).join('');
+    }
+    return `<span>🛒 TikTok không gửi tên sản phẩm của video này lên web.</span>
+      ${words ? `<a href="https://www.tiktok.com/search?q=${encodeURIComponent(words)}" target="_blank">🔎 Tìm sản phẩm theo nội dung video</a>` : ''}
+      ${v.author ? `<a href="https://www.tiktok.com/@${encodeURIComponent(v.author)}" target="_blank">👤 Xem kênh @${escH(v.author)} (tab Cửa hàng nếu có)</a>` : ''}`;
+  }
+
   async function openPlayer(id) {
     document.getElementById('tta-player')?.remove();
-    const v = mem.get(id) || {};
+    const v = mem.get(id) || { id };
+    const link = `https://www.tiktok.com/@${v.author || '_'}/video/${id}`;
     const box = document.createElement('div');
     box.id = 'tta-player';
-    box.innerHTML = `<div class="tta-pl-inner"><div class="tta-pl-head"><span>▶ ${(v.author ? '@' + v.author + ' · ' : '')}${String(v.desc || '').replace(/</g, '&lt;').slice(0, 80)}</span><button class="tta-pl-x" title="Đóng">✕</button></div>
-      <video controls autoplay playsinline ${v.cover ? `poster="${v.cover}"` : ''}></video><div class="tta-pl-msg">Đang tải video…</div>
-      ${v.products?.length ? `<div class="tta-pl-prod">🛒 ${v.products.map((p) => p.title).join(' · ').replace(/</g, '&lt;').slice(0, 160)}</div>` : ''}</div>`;
+    box.innerHTML = `<div class="tta-pl-inner"><div class="tta-pl-head"><span>▶ ${v.author ? '@' + escH(v.author) + ' · ' : ''}${escH(String(v.desc || '').slice(0, 80))}</span><button class="tta-pl-x" title="Đóng">✕</button></div>
+      <div class="tta-pl-stage"><video controls autoplay playsinline ${v.cover ? `poster="${escH(v.cover)}"` : ''}></video></div>
+      <div class="tta-pl-msg">Đang tải video…</div><div class="tta-pl-alt"></div>
+      <div class="tta-pl-prod">${productLinks(v, v.products)}</div></div>`;
     document.body.appendChild(box);
     const close = () => { box.querySelector('video')?.pause(); box.remove(); document.removeEventListener('keydown', esc); };
     const esc = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', esc);
     box.querySelector('.tta-pl-x').onclick = close;
     box.addEventListener('click', (e) => { if (e.target === box) close(); });
+    const stage = box.querySelector('.tta-pl-stage');
     const video = box.querySelector('video');
     const msg = box.querySelector('.tta-pl-msg');
+    const alt = box.querySelector('.tta-pl-alt');
+    const diag = { id, fromPage: (v.playUrls || []).length, tried: [], fresh: null, products: (v.products || []).map((p) => p.productId || p.pid) };
     let urls = [...(v.playUrls || [])];
-    let fresh = false;
-    const tryNext = async () => {
+    let fresh = false, cur = null, timer = null;
+    const triedUrls = new Set();
+
+    const embed = (src) => {
+      video.pause(); video.removeAttribute('src');
+      stage.innerHTML = `<iframe src="${src}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe>`;
+    };
+    const giveUp = () => {
+      msg.innerHTML = `⚠️ Không phát trực tiếp được (${diag.tried.length ? diag.tried.length + ' địa chỉ đều bị TikTok từ chối' : 'TikTok không gửi địa chỉ video này lên web'}). Thử các cách dưới đây:`;
+      alt.innerHTML = `<button data-a="p1">Trình phát nhúng 1</button><button data-a="p2">Trình phát nhúng 2</button><button data-a="copy">📱 Copy link mở trên điện thoại</button><button data-a="diag">📋 Copy chẩn đoán</button>`;
+      alt.onclick = (e) => {
+        const a = e.target.dataset?.a;
+        if (a === 'p1') embed(`https://www.tiktok.com/player/v1/${id}?autoplay=1&controls=1&description=1`);
+        if (a === 'p2') embed(`https://www.tiktok.com/embed/v2/${id}`);
+        if (a === 'copy') navigator.clipboard.writeText(link).then(() => (e.target.textContent = '✓ Đã copy link'));
+        if (a === 'diag') navigator.clipboard.writeText(JSON.stringify({ ...diag, version: chrome.runtime.getManifest().version }, null, 1)).then(() => (e.target.textContent = '✓ Đã copy, dán gửi người hỗ trợ'));
+      };
+    };
+    const tryNext = async (reason) => {
+      clearTimeout(timer);
+      if (cur) diag.tried.push({ host: (() => { try { return new URL(cur).host; } catch (_) { return '?'; } })(), reason, code: video.error?.code || null });
       if (!urls.length && !fresh) {
         fresh = true;
-        msg.textContent = 'Đang lấy địa chỉ video mới…';
-        const r = await chrome.runtime.sendMessage({ type: 'getPlayUrls', id, author: v.author });
-        if (r?.ok) urls = r.urls;
+        msg.textContent = 'Đang tìm địa chỉ video ở nguồn khác…';
+        const r = await chrome.runtime.sendMessage({ type: 'getPlayUrls', id, author: v.author }).catch(() => null);
+        diag.fresh = r?.diag || null;
+        if (r?.urls?.length) urls = r.urls.filter((u) => !triedUrls.has(u));
+        if (r?.products?.length) box.querySelector('.tta-pl-prod').innerHTML = productLinks(v, r.products);
       }
-      const u = urls.shift();
-      if (u) { video.src = u; video.play().catch(() => {}); return; }
-      // Không phát trực tiếp được: thử trình phát nhúng chính thức của TikTok
-      video.remove();
-      msg.innerHTML = 'Không phát trực tiếp được, đang thử trình phát nhúng của TikTok… Nếu vẫn không xem được, video này chỉ xem được trong ứng dụng.';
-      const f = document.createElement('iframe');
-      f.src = `https://www.tiktok.com/player/v1/${id}?autoplay=1&controls=1&music_info=1&description=1`;
-      f.allow = 'autoplay; fullscreen; encrypted-media';
-      box.querySelector('.tta-pl-inner').insertBefore(f, msg);
+      cur = urls.shift();
+      if (!cur) { giveUp(); return; }
+      triedUrls.add(cur);
+      msg.textContent = `Đang phát (nguồn ${diag.tried.length + 1})…`;
+      video.src = cur;
+      video.play().catch(() => {});
+      timer = setTimeout(() => { if (video.readyState < 2) tryNext('timeout'); }, 9000); // treo quá lâu → nguồn tiếp
     };
-    video.addEventListener('error', tryNext);
-    video.addEventListener('playing', () => { msg.textContent = ''; });
-    video.addEventListener('loadeddata', () => { msg.textContent = ''; });
+    video.addEventListener('error', () => tryNext('error'));
+    const ok = () => { clearTimeout(timer); msg.textContent = ''; };
+    video.addEventListener('playing', ok);
+    video.addEventListener('loadeddata', ok);
     tryNext();
   }
 
@@ -283,7 +320,13 @@
     #tta-player .tta-pl-x{background:#333;color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer}
     #tta-player video,#tta-player iframe{width:100%;aspect-ratio:9/16;max-height:78vh;background:#000;border:0;border-radius:8px;display:block}
     #tta-player .tta-pl-msg{color:#bbb;font-size:12px;margin-top:6px;min-height:14px}
-    #tta-player .tta-pl-prod{margin-top:6px;color:#25f4ee;font-size:12px}
+    #tta-player .tta-pl-stage video,#tta-player .tta-pl-stage iframe{width:100%;aspect-ratio:9/16;max-height:74vh;background:#000;border:0;border-radius:8px;display:block}
+    #tta-player .tta-pl-alt{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+    #tta-player .tta-pl-alt button{background:#2a2a2e;color:#fff;border:1px solid #444;border-radius:6px;padding:5px 9px;font:600 12px system-ui;cursor:pointer}
+    #tta-player .tta-pl-prod{margin-top:8px;display:grid;gap:4px;font-size:12.5px}
+    #tta-player .tta-pl-prod a{color:#25f4ee;text-decoration:none}
+    #tta-player .tta-pl-prod a:hover{text-decoration:underline}
+    #tta-player .tta-pl-prod span{color:#bbb}
   `;
   (document.head || document.documentElement).appendChild(style);
 

@@ -9,12 +9,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
 
   // Lấy nội dung gốc (caption + lời thoại) của 1 video, lưu kèm vào dữ liệu video.
   // Lấy địa chỉ phát mới nhất của 1 video (dùng cho trình phát video gắn giỏ)
-  if (msg.type === 'getPlayUrls') {
-    Transcript.fetchPageItem(`https://www.tiktok.com/@${msg.author || '_'}/video/${msg.id}`, String(msg.id))
-      .then((item) => reply({ ok: true, urls: TTA.playUrlsOf(item), cover: item.video?.cover || '' }))
-      .catch((e) => reply({ ok: false, error: e.message }));
-    return true;
-  }
+  if (msg.type === 'getPlayUrls') { getPlayUrls(msg).then(reply); return true; }
   if (msg.type === 'getOriginal') {
     Transcript.getOriginal(msg)
       .then((r) => new Promise((done) => {
@@ -147,4 +142,29 @@ async function analyzeChannel(input, scrolls, maxProducts) {
     await setJob({ username, step: 'error', msg: 'Lỗi: ' + (e.message || e) });
   }
   analyzing = false;
+}
+
+// ---------- địa chỉ phát cho video gắn giỏ bị chặn trên web ----------
+// 1) trang video (dữ liệu nhúng), 2) trang nhúng embed/v2. Trả kèm thông tin chẩn đoán.
+async function getPlayUrls({ id, author }) {
+  const diag = { id };
+  let urls = [], products = [], item = null;
+  try {
+    item = await Transcript.fetchPageItem(`https://www.tiktok.com/@${author || '_'}/video/${id}`, String(id));
+    urls = TTA.playUrlsOf(item);
+    products = TTA.normalizeVideo(item)?.products || [];
+    diag.page = { urls: urls.length, itemKeys: Object.keys(item).slice(0, 60), videoKeys: Object.keys(item.video || {}).slice(0, 60), isECVideo: item.isECVideo, anchors: (item.anchors || []).length };
+  } catch (e) { diag.page = { error: e.message }; }
+  if (!urls.length) {
+    try {
+      const html = await (await fetch(`https://www.tiktok.com/embed/v2/${id}`, { credentials: 'include' })).text();
+      const found = new Set();
+      const text = html.replace(/\\u002F/gi, '/').replace(/\\\//g, '/');
+      for (const m of text.matchAll(/https?:\/\/[^"'\s<>]+/g)) if (TTA.isVideoUrl(m[0])) found.add(m[0].replace(/&amp;/g, '&'));
+      urls = [...found].slice(0, 6);
+      diag.embed = { status: 'ok', urls: urls.length, size: html.length };
+      if (!products.length) products = TTA.deepProducts({ html: text });
+    } catch (e) { diag.embed = { error: e.message }; }
+  }
+  return { ok: true, urls, products, cover: item?.video?.cover || '', diag };
 }
