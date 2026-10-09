@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "TikTok Analyzer",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Phân tích kênh & video TikTok: doanh thu affiliate ước tính, sản phẩm ra đơn, quảng cáo, hook, công thức viral, bình luận, theo dõi đối thủ, lời thoại gốc.",
   "permissions": [
     "storage",
     "unlimitedStorage",
     "tabs",
     "alarms",
-    "notifications"
+    "notifications",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "https://*.tiktok.com/*",
@@ -72,5 +73,17 @@
   ],
   "background": {
     "service_worker": "src/background.js"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "player.html",
+        "src/player.js"
+      ],
+      "matches": [
+        "https://www.tiktok.com/*",
+        "https://shop.tiktok.com/*"
+      ]
+    }
+  ]
 }

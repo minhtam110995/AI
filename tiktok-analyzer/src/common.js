@@ -44,7 +44,9 @@ const TTA = (() => {
   function playUrlsOf(it) {
     const v = it?.video || {};
     const out = [v.playAddr, v.downloadAddr];
-    (v.bitrateInfo || []).forEach((b) => (b.PlayAddr?.UrlList || b.playAddr?.urlList || []).forEach((u) => out.push(u)));
+    // ưu tiên bản H.264 (mọi trình duyệt đều phát được) trước bản H.265
+    const h265 = (b) => /265|hevc|bytevc1/i.test(b.CodecType || b.codecType || '');
+    [...(v.bitrateInfo || [])].sort((a, b) => h265(a) - h265(b)).forEach((b) => (b.PlayAddr?.UrlList || b.playAddr?.urlList || []).forEach((u) => out.push(u)));
     (v.PlayAddrStruct?.UrlList || []).forEach((u) => out.push(u));
     // Quét sâu: mọi chuỗi trông giống địa chỉ file video
     const seen = new WeakSet();

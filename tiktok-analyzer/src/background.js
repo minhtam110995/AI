@@ -1,5 +1,20 @@
 importScripts('common.js', 'transcript.js');
 
+// Trình phát của tiện ích: gửi kèm Referer tiktok.com khi tải video từ máy chủ TikTok
+// (giống khi xem trên chính trang TikTok). Chỉ áp dụng cho yêu cầu do tiện ích tạo ra.
+chrome.declarativeNetRequest.updateSessionRules({
+  removeRuleIds: [1],
+  addRules: [{
+    id: 1, priority: 1,
+    action: { type: 'modifyHeaders', requestHeaders: [{ header: 'referer', operation: 'set', value: 'https://www.tiktok.com/' }] },
+    condition: {
+      initiatorDomains: [chrome.runtime.id],
+      requestDomains: ['tiktok.com', 'tiktokcdn.com', 'tiktokcdn-us.com', 'tiktokcdn-eu.com', 'tiktokv.com', 'tiktokv.us', 'tiktokv.eu', 'byteoversea.com', 'ibytedtos.com'],
+      resourceTypes: ['media', 'xmlhttprequest', 'other'],
+    },
+  }],
+}).catch(() => {});
+
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   // Mở trang Dashboard khi người dùng bấm nút nổi trên TikTok.
   if (msg.type === 'openDashboard') {
