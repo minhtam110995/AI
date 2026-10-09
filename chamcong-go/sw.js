@@ -1,7 +1,7 @@
 // Service worker: lưu sẵn giao diện app để mở được khi mạng yếu.
-const CACHE = 'chamcong-go-v1';
-const SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png'];
-const CDN = ['https://unpkg.com/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/'];
+const CACHE = 'chamcong-go-v2';
+const SHELL = ['./', './index.html', './styles.css', './config.js', './core.js', './data.js', './app.js', './admin.html', './admin.css', './admin.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png'];
+const CDN = ['https://unpkg.com/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/', 'https://www.gstatic.com/firebasejs/'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

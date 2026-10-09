@@ -1,45 +1,104 @@
-# ChấmCông Go – App chấm công GPS
+# ChấmCông Go – Chấm công GPS cho doanh nghiệp
 
-Web app (PWA) chấm công trên điện thoại, dựng theo bản thiết kế *ChấmCông Go App* (iPhone 15, 393×852). Mở trên trình duyệt điện thoại rồi **Thêm vào Màn hình chính** là dùng như app.
+Gồm 2 phần, dùng chung một dữ liệu:
+
+| Phần | File | Dành cho |
+|---|---|---|
+| **App chấm công** (điện thoại, cài như app) | `index.html` | Nhân viên và quản trị |
+| **Trang quản trị** (máy tính, 1440px) | `admin.html` | Bộ phận nhân sự (quyền Quản trị) |
+
+## Phân quyền
+
+| | Nhân viên | Quản trị |
+|---|:-:|:-:|
+| Chấm công GPS / Wifi, làm thêm giờ, trực ca | ✓ | ✓ |
+| Xem bảng công, đơn, thông báo **của mình** | ✓ | ✓ |
+| Gửi đơn (nghỉ phép, đi muộn, làm thêm, công tác, giải trình, đổi ca) | ✓ | ✓ |
+| Xem dữ liệu của người khác | ✗ | ✓ |
+| Duyệt / từ chối đơn, duyệt lượt chấm Wifi | ✗ | ✓ |
+| Thêm, sửa, khoá nhân viên; cấp quyền quản trị | ✗ | ✓ |
+| Cài địa điểm chấm công, ca làm việc, cài đặt công ty | ✗ | ✓ |
+| Bảng công, báo cáo, xuất Excel cả công ty | ✗ | ✓ |
+
+Khi dùng Firebase, quyền được **máy chủ** kiểm tra (file `firestore.rules`), nên nhân viên không thể "lách" bằng cách sửa app. Ví dụ: nhân viên không đọc được dữ liệu người khác, không tự duyệt đơn, không tự nâng quyền, không sửa giờ chấm công (giờ chấm luôn lấy theo đồng hồ máy chủ).
 
 ## Tính năng
-| Màn hình | Chức năng |
-|---|---|
-| Trang chủ | Lời chào, ca làm việc hôm nay, nút **Chấm công** (tự biết là vào ca hay ra ca), khoảng cách tới văn phòng, chấm làm thêm giờ / trực ca kíp, chi tiết chấm công hôm nay |
-| Popup chấm công | Chọn xác thực bằng **Wifi** hoặc **GPS** |
-| Chấm công GPS | Bản đồ có vùng chấm công, vị trí văn phòng và vị trí của bạn. Hiện khoảng cách, độ chính xác GPS, bán kính. Trong vùng thì xác nhận chấm công; ngoài vùng hoặc lỗi định vị thì **Gửi giải trình** / **Định vị lại**. Tín hiệu yếu (sai số > 150m) thì không cho chấm |
-| Chấm công Wifi | Kiểm tra kết nối mạng. Nếu trình duyệt không đọc được Wifi (iPhone), lượt chấm ở trạng thái **Chờ phê duyệt** |
-| Chấm công thành công | Giờ chấm, loại chấm, địa điểm, phương thức, cảnh báo đi muộn |
-| Đề xuất | Nghỉ phép, Đi muộn về sớm, Làm thêm giờ, Công tác, Giải trình chấm công, Đổi ca, kèm danh sách đề xuất của tôi (có thể huỷ khi đang chờ duyệt) |
-| Thông báo | Danh sách thông báo, đánh dấu đã đọc / đọc tất cả |
-| Lịch sử chấm công | Bảng công theo tháng (12 tháng gần nhất), chấm xanh/đỏ/cam từng ngày, số công, giờ vào/ra từng ngày, gửi giải trình cho ngày lỗi. Tab Giải trình |
-| Cá nhân | Ngày phép còn lại, số công, số lần đi muộn. Sửa thông tin cá nhân, ca làm việc, **văn phòng chấm công** (toạ độ, bán kính, tên Wifi), xuất bảng công CSV, đăng xuất |
 
-## Chạy thử
-GPS chỉ hoạt động qua **HTTPS** (hoặc `localhost`).
+**App chấm công (điện thoại)**
+- Đăng nhập: mã công ty, tài khoản, mật khẩu, quên mật khẩu, **đăng nhập bằng Face ID / vân tay** trên máy đã bật.
+- Trang chủ, chấm công GPS (bản đồ, vùng chấm công, tự chọn địa điểm gần nhất) hoặc Wifi, chấm làm thêm giờ, trực ca kíp.
+- **Tạo đơn nghỉ phép**: chọn loại nghỉ (phép năm, nghỉ ốm, việc riêng), từ ngày – đến ngày, nửa ngày sáng/chiều, hiện số ngày phép còn lại, lý do, đính kèm ảnh, chọn người duyệt.
+- **Đơn của tôi**: lọc theo trạng thái *Chờ duyệt* (vàng), *Đã duyệt* (xanh), *Từ chối* (đỏ); xem chi tiết, ảnh đính kèm, ý kiến người duyệt; huỷ đơn đang chờ.
+- Lịch sử chấm công theo tháng, thông báo, cá nhân, đổi mật khẩu.
+
+**Trang quản trị (máy tính)**
+- **Tổng quan**: Có mặt hôm nay, Đi muộn, Vắng mặt, Đơn chờ duyệt; biểu đồ chuyên cần 14 ngày; danh sách chấm công hôm nay và người chưa chấm.
+- **Nhân viên**: thêm (tạo luôn tài khoản), sửa, khoá/mở, gán ca, gán địa điểm, cấp quyền.
+- **Địa điểm chấm công**: bấm lên bản đồ hoặc kéo ghim để đặt văn phòng, kéo thanh trượt bán kính 50–500m, tên Wifi; nhiều địa điểm.
+- **Ca làm việc**: giờ vào/ra, ngày làm việc trong tuần, số phút cho phép đến muộn.
+- **Duyệt đơn**: duyệt / từ chối kèm ý kiến, xem ảnh đính kèm; duyệt giải trình thì tự thêm lượt chấm bù; duyệt lượt chấm Wifi chưa xác minh.
+- **Bảng công**: bảng tháng (nhân viên × ngày) với ký hiệu ✓ / M / T / V / P / CT; bấm ô để xem chi tiết hoặc thêm lượt chấm thủ công; xuất Excel (CSV).
+- **Báo cáo**: công thực tế, phép, đi muộn (lần, phút), về sớm, vắng, thiếu chấm, giờ làm thêm theo từng người; tỉ lệ chuyên cần theo phòng ban; xuất Excel.
+- **Cài đặt**: tên công ty, số ngày phép mặc định, bật/tắt chấm Wifi, đổi mật khẩu, link mời nhân viên.
+
+## Chạy thử ngay (chế độ dùng thử)
+
+Khi `config.js` chưa có cấu hình Firebase, app tự chạy **chế độ dùng thử** với dữ liệu mẫu (lưu trong trình duyệt, chỉ máy đó thấy):
+
+- Mã công ty `DEMO`, mật khẩu `123456`
+- Tài khoản `admin` (quản trị) hoặc `nv01` … `nv05` (nhân viên)
 
 ```bash
 cd chamcong-go
-npx http-server -p 8080      # hoặc: python3 -m http.server 8080
-# mở http://localhost:8080
+npx http-server -p 8080        # mở http://localhost:8080 và http://localhost:8080/admin.html
 ```
 
-Đưa lên mạng: tải cả thư mục `chamcong-go` lên bất kỳ hosting tĩnh nào có HTTPS (GitHub Pages, Netlify, Vercel, Cloudflare Pages…).
+## Dùng thật cho cả công ty (Firebase, miễn phí)
 
-Lần đầu mở app, nhập tên để bắt đầu, hoặc bấm **Dùng thử với dữ liệu mẫu**. Sau đó vào **Cá nhân › Văn phòng chấm công** để đặt đúng toạ độ văn phòng: đứng tại văn phòng và bấm *Dùng vị trí hiện tại của tôi*.
+Gói miễn phí (Spark) của Firebase đủ cho công ty khoảng vài chục người. Ảnh đính kèm được nén và lưu trong Firestore, nên **không cần** gói trả phí.
 
-## Lưu ý
-- **Dữ liệu chỉ lưu trên máy** (localStorage); app chưa có máy chủ. Vì vậy đề xuất luôn ở trạng thái *Chờ duyệt* và không có người duyệt. Muốn quản lý duyệt đơn và xem bảng công cả công ty thì cần thêm backend (API + cơ sở dữ liệu + trang quản trị).
-- Trình duyệt web không cho đọc tên Wifi (SSID). App chỉ biết thiết bị đang dùng Wifi hay 4G (trên Android Chrome); trên iPhone, lượt chấm Wifi luôn chờ duyệt.
-- Bản đồ dùng ô bản đồ Esri World Street Map (giống thiết kế), thư viện Leaflet 1.9.4, icon Lucide 0.460, font Be Vietnam Pro.
+1. Vào <https://console.firebase.google.com> › **Add project** (tạo dự án), tắt Google Analytics cũng được.
+2. **Build › Authentication › Get started › Sign-in method** › bật **Email/Password**.
+3. **Build › Firestore Database › Create database** › chọn vùng `asia-southeast1` (Singapore) › **Start in production mode**.
+4. Trong Firestore › tab **Rules**: xoá hết, dán toàn bộ nội dung file [`firestore.rules`](firestore.rules) › **Publish**.
+5. **Project settings** (bánh răng) › **Your apps** › biểu tượng **Web `</>`** › đặt tên › **Register app**. Chép đoạn `firebaseConfig` hiện ra.
+6. Mở `config.js`, thay `firebase: null` bằng cấu hình vừa chép, ví dụ:
+   ```js
+   window.CCG_CONFIG = {
+     firebase: {
+       apiKey: "AIza...",
+       authDomain: "ten-du-an.firebaseapp.com",
+       projectId: "ten-du-an",
+       appId: "1:123:web:abc"
+     }
+   };
+   ```
+7. Đưa thư mục `chamcong-go` lên hosting có HTTPS (GPS bắt buộc HTTPS):
+   - **GitHub Pages**: Settings › Pages › chọn nhánh. Link: `https://<tên>.github.io/<repo>/chamcong-go/`
+   - hoặc **Firebase Hosting**: `npx firebase-tools deploy --project ten-du-an` trong thư mục `chamcong-go` (đã có sẵn `firebase.json`).
+8. Firebase › Authentication › **Settings › Authorized domains** › thêm tên miền hosting (VD `ten.github.io`).
+9. Mở app › **Tạo công ty mới**: nhập tên công ty, **mã công ty** (VD `ABC`), tài khoản và mật khẩu quản trị. Người tạo là **chủ công ty** (quyền quản trị, không bị khoá hay hạ quyền).
+10. Vào trang quản trị (`admin.html`): thêm địa điểm chấm công, ca làm việc, rồi thêm nhân viên. Gửi cho nhân viên link app, mã công ty, tài khoản và mật khẩu.
+
+### Lưu ý về tài khoản và mật khẩu
+- Tài khoản có thể là tên đăng nhập (VD `an.nguyen`) hoặc email thật. Với **email thật**, nhân viên tự đặt lại được mật khẩu qua nút *Quên mật khẩu*.
+- Trình duyệt không được phép đổi mật khẩu của người khác (giới hạn của Firebase). Nhân viên dùng tên đăng nhập mà quên mật khẩu thì quản trị vào Firebase Console › Authentication, xoá tài khoản đó, rồi tạo lại trong trang quản trị với cùng tài khoản. Lịch sử chấm công cũ gắn với tài khoản đã xoá vẫn còn trong dữ liệu.
+- Nhân viên tự đổi mật khẩu trong app: Cá nhân › Đổi mật khẩu.
+
+### Lưu ý khác
+- **Face ID / vân tay** dùng chuẩn WebAuthn của trình duyệt để mở khoá app trên máy đã đăng nhập (phiên đăng nhập vẫn do Firebase giữ). Cần iOS 16+ / Android 9+ và mở app qua HTTPS.
+- **Wifi**: trình duyệt không đọc được tên Wifi. Trên Android app biết máy đang dùng Wifi hay 4G; trên iPhone lượt chấm Wifi vào mục *Chấm công chờ duyệt* để quản trị duyệt.
+- **GPS** có thể bị làm giả bằng app giả lập vị trí trên máy đã root/jailbreak. App lưu toạ độ, độ chính xác và khoảng cách mỗi lượt chấm để quản trị kiểm tra khi nghi ngờ.
 
 ## Cấu trúc
 ```
 chamcong-go/
-├── index.html            # khung trang, nạp font/icon/Leaflet
-├── styles.css            # giao diện theo thiết kế
-├── app.js                # toàn bộ màn hình, định tuyến (#/...), dữ liệu
-├── sw.js                 # service worker (mở được khi mạng yếu)
-├── manifest.webmanifest  # cài như app
-└── icons/
+├── index.html / styles.css / app.js     # app chấm công (điện thoại)
+├── admin.html / admin.css / admin.js    # trang quản trị (máy tính)
+├── core.js           # tính công, đi muộn, nghỉ phép... (dùng chung)
+├── data.js           # lớp dữ liệu: chế độ dùng thử hoặc Firebase
+├── config.js         # dán cấu hình Firebase vào đây
+├── firestore.rules   # luật phân quyền trên máy chủ
+├── firebase.json     # cấu hình triển khai Firebase (tuỳ chọn)
+├── sw.js, manifest.webmanifest, icons/   # cài như app, mở được khi mạng yếu
 ```

@@ -1,78 +1,33 @@
 'use strict';
-/* ChấmCông Go — app chấm công GPS (PWA, dữ liệu lưu trên máy). */
+/* ChấmCông Go — app nhân viên (PWA). Dữ liệu đi qua window.CCG (data.js). */
 (() => {
-  const VERSION = '1.0.0';
-  const KEY = 'chamcong-go.v1';
+  const VERSION = '2.0.0';
+  const C = window.CCG_CORE, API = window.CCG;
+  const { pad, esc, hm, dmy, longDate, dayKey, fromKey, mins, minsOfTs, fmtDist, num, initials, relTime, haversine,
+    KIND, REQ_TYPES, LEAVE_TYPES, STATUS, reqBg, reqFg, DOW_SHORT } = C;
   const $app = document.getElementById('app');
+  const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
 
-  // ---------------------------------------------------------------- data
-  const defaults = () => ({
-    profile: null, // { name, role, code, dept }
-    createdAt: null,
-    office: {
-      name: 'Văn phòng Hà Nội',
-      address: 'Tầng 12, 72 Trần Hưng Đạo, P. Trần Hưng Đạo, Q. Hoàn Kiếm, Hà Nội',
-      lat: 21.0227, lng: 105.8463, radius: 150, wifi: ''
-    },
-    shift: { name: 'Hành chính', start: '08:00', end: '17:30', workdays: [1, 2, 3, 4, 5, 6] },
-    leaveTotal: 12,
-    logs: [],       // { id, ts, kind: in|out|ot|duty, method: GPS|Wifi, dist, acc, status: ok|pending }
-    proposals: [],  // { id, type, created, status, ...fields }
-    notis: []       // { id, ts, text, read }
-  });
+  // ---------------------------------------------------------------- state
+  // S giữ dữ liệu của người đang đăng nhập; mọi thay đổi ghi qua API rồi cập nhật S.
+  const S = { session: null, company: null, user: null, users: [], locations: [], shifts: [], logs: [], reqs: [], notis: [], locked: false, loadedAt: 0 };
+  const shift = () => C.shiftFor(S.user, S.shifts);
+  const myLocations = () => C.locationsFor(S.user, S.locations);
+  const isAdmin = () => S.user && S.user.role === 'admin';
+  const isWorkday = d => C.isWorkday(d, shift());
+  const startKey = () => S.user && S.user.createdAt ? dayKey(S.user.createdAt) : null;
+  const userName = uid => (S.users.find(u => u.uid === uid) || {}).name || '';
 
-  let db = load();
-  function load() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const d = Object.assign(defaults(), JSON.parse(raw));
-        d.office = Object.assign(defaults().office, d.office);
-        d.shift = Object.assign(defaults().shift, d.shift);
-        return d;
-      }
-    } catch (e) { /* storage unavailable */ }
-    return defaults();
+  async function loadAll() {
+    const [company, users, locations, shifts, logs, reqs, notis] = await Promise.all([
+      API.getCompany(), API.listUsers(), API.listLocations(), API.listShifts(), API.myLogs(), API.myRequests(), API.myNotis()
+    ]);
+    Object.assign(S, { company, users, locations, shifts, logs, reqs, notis, loadedAt: Date.now() });
+    S.user = users.find(u => u.uid === S.session.uid) || S.user;
+    if (S.user && S.user.active === false) { await signOut(); toast('Tài khoản đã bị khoá. Liên hệ quản trị.'); }
   }
-  function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(db)); }
-    catch (e) { toast('Không lưu được dữ liệu trên máy này'); }
-  }
-  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-
-  // ---------------------------------------------------------------- helpers
-  const DOW = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
-  const DOW_SHORT = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-  const pad = n => String(n).padStart(2, '0');
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const hm = ts => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-  const dmy = d => { d = new Date(d); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; };
-  const longDate = d => { d = new Date(d); return `${DOW[d.getDay()]}, ${dmy(d)}`; };
-  const dayKey = d => { d = new Date(d); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-  const fromKey = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
-  const keyToDmy = k => k ? dmy(fromKey(k)) : '';
-  const mins = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); };
-  const minsOfTs = ts => { const d = new Date(ts); return d.getHours() * 60 + d.getMinutes(); };
-  const fmtDist = m => m == null ? '--' : m < 1000 ? `${Math.round(m)}m` : `${(m / 1000).toFixed(1).replace('.', ',')} km`;
-  const initials = name => {
-    const w = String(name || '').trim().split(/\s+/).filter(Boolean);
-    if (!w.length) return '?';
-    return (w.length === 1 ? w[0].slice(0, 2) : w[0][0] + w[w.length - 1][0]).toUpperCase();
-  };
-  function relTime(ts) {
-    const s = Math.max(0, (Date.now() - ts) / 1000);
-    if (s < 60) return 'Vừa xong';
-    if (s < 3600) return `${Math.floor(s / 60)} phút trước`;
-    if (s < 86400) return `${Math.floor(s / 3600)} giờ trước`;
-    if (s < 86400 * 30) return `${Math.floor(s / 86400)} ngày trước`;
-    return dmy(ts);
-  }
-  function haversine(a, b) {
-    const R = 6371000, rad = x => x * Math.PI / 180;
-    const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
-    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
-    return 2 * R * Math.asin(Math.sqrt(h));
-  }
+  const unreadCount = () => S.notis.filter(n => !n.read).length;
 
   let toastTimer;
   function toast(msg) {
@@ -80,63 +35,48 @@
     el.textContent = msg;
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  }
+  const errMsg = e => (e && (e.userMessage || e.message)) || 'Có lỗi xảy ra';
+  async function busy(btn, fn) {
+    if (btn.disabled) return;
+    const html = btn.innerHTML; btn.disabled = true;
+    btn.innerHTML = '<i class="icon-loader-circle spin"></i>Đang xử lý...';
+    try { return await fn(); }
+    catch (e) { toast(errMsg(e)); }
+    finally { if (btn.isConnected) { btn.disabled = false; btn.innerHTML = html; } }
   }
 
-  function addNoti(text) {
-    db.notis.unshift({ id: uid(), ts: Date.now(), text, read: false });
-    db.notis = db.notis.slice(0, 200);
+  // ---------------------------------------------------------------- Face ID (WebAuthn)
+  // Khoá app bằng Face ID / vân tay của máy: lần sau mở app chỉ cần quét thay vì gõ mật khẩu.
+  const FACE_KEY = 'ccg.faceid';
+  const faceGet = () => { try { return JSON.parse(lsGet(FACE_KEY)) || null; } catch (e) { return null; } };
+  const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const rand = n => crypto.getRandomValues(new Uint8Array(n));
+  async function faceAvailable() {
+    try { return !!(window.PublicKeyCredential && window.isSecureContext && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }
+    catch (e) { return false; }
   }
-
-  // ---------------------------------------------------------------- attendance logic
-  const KIND = {
-    in: { label: 'Giờ vào', type: 'Vào ca', cta: 'Xác nhận chấm công vào ca', done: 'giờ vào ca' },
-    out: { label: 'Giờ ra', type: 'Ra ca', cta: 'Xác nhận chấm công ra ca', done: 'giờ ra ca' },
-    ot: { label: 'Làm thêm giờ', type: 'Làm thêm giờ', cta: 'Xác nhận chấm làm thêm giờ', done: 'giờ làm thêm' },
-    duty: { label: 'Trực ca kíp', type: 'Trực ca kíp', cta: 'Xác nhận chấm trực ca kíp', done: 'ca trực' }
-  };
-  const logsOn = key => db.logs.filter(l => dayKey(l.ts) === key).sort((a, b) => a.ts - b.ts);
-  function daySummary(key) {
-    const logs = logsOn(key);
-    const ins = logs.filter(l => l.kind === 'in');
-    const outs = logs.filter(l => l.kind === 'out');
-    const first = ins[0] || null, last = outs[outs.length - 1] || null;
-    const lateBy = first ? Math.max(0, minsOfTs(first.ts) - mins(db.shift.start)) : 0;
-    const earlyBy = last ? Math.max(0, mins(db.shift.end) - minsOfTs(last.ts)) : 0;
-    const extras = logs.filter(l => l.kind === 'ot' || l.kind === 'duty');
-    return { logs, in: first, out: last, lateBy, earlyBy, extras };
+  async function faceRegister(user, account) {
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: rand(32), rp: { name: 'ChấmCông Go' },
+      user: { id: new TextEncoder().encode(user.uid.slice(0, 60)), name: account || user.name, displayName: user.name },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+      timeout: 60000, attestation: 'none'
+    } });
+    lsSet(FACE_KEY, JSON.stringify({ uid: user.uid, id: b64(cred.rawId), name: user.name }));
   }
-  const nextMainKind = () => logsOn(dayKey(new Date())).some(l => l.kind === 'in') ? 'out' : 'in';
-  const isWorkday = d => db.shift.workdays.includes(new Date(d).getDay());
-
-  function monthStats(y, m) {
-    const today = dayKey(new Date());
-    const days = new Date(y, m + 1, 0).getDate();
-    let work = 0, full = 0, late = 0;
-    for (let d = 1; d <= days; d++) {
-      const date = new Date(y, m, d), key = dayKey(date);
-      if (isWorkday(date)) work++;
-      if (key > today) continue;
-      const s = daySummary(key);
-      if (s.in && s.out) full++;
-      if (s.in && s.lateBy > 0) late++;
-    }
-    return { work, full, late };
+  async function faceVerify() {
+    const f = faceGet();
+    if (!f) return false;
+    await navigator.credentials.get({ publicKey: {
+      challenge: rand(32), allowCredentials: [{ type: 'public-key', id: unb64(f.id) }], userVerification: 'required', timeout: 60000
+    } });
+    return true;
   }
-
-  // Trạng thái chấm của một ngày cho chấm màu trên lịch.
-  function dayDot(date) {
-    const key = dayKey(date), today = dayKey(new Date());
-    if (key > today) return '';
-    const s = daySummary(key);
-    const hasLog = s.logs.length > 0;
-    if (!isWorkday(date)) return hasLog ? 'green' : '';
-    const start = db.createdAt ? dayKey(db.createdAt) : today;
-    if (!hasLog) return key < today && key >= start ? (onLeave(key) ? 'amber' : 'red') : '';
-    if (key === today) return s.in && !s.lateBy ? 'green' : 'red';
-    return s.in && s.out && !s.lateBy ? 'green' : 'red';
-  }
-  const onLeave = key => db.proposals.some(p => (p.type === 'leave' || p.type === 'trip') && p.from <= key && key <= (p.to || p.from));
+  const faceOn = () => { const f = faceGet(); return !!(f && S.session && f.uid === S.session.uid); };
 
   // ---------------------------------------------------------------- geolocation
   const geo = { fix: null, err: null, at: 0, watchId: null, listeners: new Set() };
@@ -148,32 +88,34 @@
     return 'Không xác định được vị trí. Hãy bật GPS và thử lại.';
   }
   function onFix(p) {
-    geo.fix = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, ts: p.timestamp || Date.now() };
+    geo.fix = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
     geo.err = null; geo.at = Date.now();
     geo.listeners.forEach(fn => fn());
   }
-  function onGeoErr(e) {
-    geo.err = geoErrText(e);
-    geo.listeners.forEach(fn => fn());
-  }
+  function onGeoErr(e) { geo.err = geoErrText(e); geo.listeners.forEach(fn => fn()); }
+  const geoOk = () => 'geolocation' in navigator && window.isSecureContext;
   function locateOnce() {
-    if (!('geolocation' in navigator) || !window.isSecureContext) { onGeoErr(null); return; }
+    if (!geoOk()) return onGeoErr(null);
     navigator.geolocation.getCurrentPosition(onFix, onGeoErr, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   }
   function startWatch() {
     stopWatch();
-    if (!('geolocation' in navigator) || !window.isSecureContext) { onGeoErr(null); return; }
+    if (!geoOk()) return onGeoErr(null);
     geo.watchId = navigator.geolocation.watchPosition(onFix, onGeoErr, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   }
-  function stopWatch() {
-    if (geo.watchId != null) navigator.geolocation.clearWatch(geo.watchId);
-    geo.watchId = null;
+  function stopWatch() { if (geo.watchId != null) navigator.geolocation.clearWatch(geo.watchId); geo.watchId = null; }
+  /** Địa điểm gần nhất trong số địa điểm nhân viên được phép chấm. */
+  function nearest() {
+    const locs = myLocations();
+    if (!geo.fix || !locs.length) return { loc: locs[0] || null, dist: null };
+    let best = null, dist = Infinity;
+    locs.forEach(l => { const d = haversine(geo.fix, l); if (d < dist) { dist = d; best = l; } });
+    return { loc: best, dist };
   }
-  const officeDist = () => geo.fix ? haversine(geo.fix, db.office) : null;
-  const MAX_ACC = 150; // Độ chính xác tối thiểu (m) để chấp nhận lượt chấm
+  const MAX_ACC = 150;
 
   // ---------------------------------------------------------------- router
-  const ui = { popup: null, histTab: 'cong', histMonth: null, histSel: null };
+  const ui = { popup: null, histTab: 'cong', histMonth: null, histSel: null, reqTab: 'all' };
   let cleanup = [];
   function route() {
     const h = location.hash.replace(/^#\/?/, '') || 'home';
@@ -185,20 +127,21 @@
 
   function render() {
     cleanup.forEach(fn => fn()); cleanup = [];
-    if (!db.profile) return renderLogin();
+    document.querySelectorAll('.overlay').forEach(o => o.remove());
+    if (!S.session || S.locked) return renderLogin();
     const { parts, params } = route();
     const screens = {
       home: renderHome, gps: () => renderGps(params.kind), wifi: () => renderWifi(params.kind),
       success: () => renderSuccess(parts[1]), proposals: renderProposals,
-      proposal: () => renderProposalForm(parts[1], params), notis: renderNotis,
-      history: renderHistory, profile: renderProfile, settings: () => renderSettings(parts[1])
+      proposal: () => renderRequestForm(parts[1], params), requests: renderMyRequests, request: () => renderRequestDetail(parts[1]),
+      notis: renderNotis, history: renderHistory, profile: renderProfile, password: renderPassword, info: renderInfo
     };
     (screens[parts[0]] || renderHome)();
   }
 
   // ---------------------------------------------------------------- shared pieces
   function tabbar(active) {
-    const unread = db.notis.some(n => !n.read);
+    const unread = unreadCount();
     const tabs = [['home', 'house', 'Trang chủ'], ['proposals', 'square-pen', 'Đề xuất'], ['notis', 'bell', 'Thông báo'], ['profile', 'user-round', 'Cá nhân']];
     return `<nav class="tabbar">${tabs.map(([r, icon, label]) => `
       <button class="${r === active ? 'on' : ''}" data-go="${r}">
@@ -208,122 +151,169 @@
   function topbar(title, { back, right, extra = '' } = {}) {
     return `<header class="topbar">
       <div class="topbar-row">
-        ${back ? `<button class="tb-left" data-act="back" data-to="${esc(back)}" aria-label="Quay lại"><i class="icon-arrow-left"></i></button>` : ''}
+        ${back ? `<button class="tb-left" data-go="${esc(back)}" aria-label="Quay lại"><i class="icon-arrow-left"></i></button>` : ''}
         ${esc(title)}
         ${right || ''}
       </div>${extra || '<div class="topbar-pad"></div>'}
     </header>`;
   }
-  function confirmDialog(title, msg, okText, onOk, danger) {
+  function dialog(title, bodyHtml, actions) {
     const wrap = document.createElement('div');
     wrap.className = 'overlay';
     wrap.innerHTML = `<div class="dialog" role="dialog">
-      <div class="dialog-head"><b>${esc(title)}</b></div>
-      <div class="dialog-msg">${esc(msg)}</div>
-      <div class="dialog-actions">
-        <button class="btn-ghost" data-x>Hủy</button>
-        <button class="${danger ? 'btn-danger' : 'btn-primary'}" style="height:46px;border-radius:12px;font-size:15px" data-ok>${esc(okText)}</button>
-      </div></div>`;
+      <div class="dialog-head"><b>${esc(title)}</b><button class="dialog-close" data-x aria-label="Đóng"><i class="icon-x"></i></button></div>
+      <div class="dialog-msg">${bodyHtml}</div>
+      ${actions ? `<div class="dialog-actions">${actions.map((a, i) => `<button class="${a.cls || 'btn-ghost'}" data-i="${i}">${esc(a.text)}</button>`).join('')}</div>` : '<div style="height:12px"></div>'}
+    </div>`;
     wrap.addEventListener('click', e => {
+      const b = e.target.closest('[data-i]');
       if (e.target === wrap || e.target.closest('[data-x]')) wrap.remove();
-      else if (e.target.closest('[data-ok]')) { wrap.remove(); onOk(); }
+      else if (b) { const a = actions[+b.dataset.i]; wrap.remove(); if (a.on) a.on(); }
     });
     document.body.appendChild(wrap);
+    return wrap;
   }
+  const confirmDialog = (title, msg, okText, onOk) => dialog(title, esc(msg), [{ text: 'Hủy' }, { text: okText, cls: 'btn-danger', on: onOk }]);
+  const chip = status => { const [cls, txt] = STATUS[status] || STATUS.pending; return `<span class="chip ${cls}">${txt}</span>`; };
 
-  // ---------------------------------------------------------------- login
+  // ---------------------------------------------------------------- login / create company
   function renderLogin() {
-    $app.innerHTML = `<div class="login">
-      <div class="login-hero">
+    const isCreate = route().parts[0] === 'company' && !S.session;
+    const lastCode = lsGet('ccg.lastCode') || (API.mode === 'demo' ? 'DEMO' : '');
+    const lastAcc = lsGet('ccg.lastAccount') || '';
+    const locked = S.session && S.locked;
+    $app.innerHTML = `<div class="login2">
+      <div class="login2-brand">
         <div class="logo"><i class="icon-scan-face"></i></div>
         <h1>ChấmCông Go</h1>
-        <p>Chấm công bằng GPS hoặc Wifi văn phòng, xem bảng công và gửi đề xuất ngay trên điện thoại.</p>
+        <p>${isCreate ? 'Tạo công ty mới và tài khoản quản trị đầu tiên' : locked ? `Xin chào, ${esc(S.user.name)}` : 'Chấm công GPS cho doanh nghiệp'}</p>
       </div>
-      <form class="form" id="loginForm" autocomplete="on">
-        <div class="field"><label>Họ và tên <em>*</em></label><input name="name" required placeholder="VD: Nguyễn Văn An" autocomplete="name"></div>
-        <div class="row2">
-          <div class="field"><label>Mã nhân viên</label><input name="code" placeholder="NV-0248"></div>
-          <div class="field"><label>Phòng ban</label><input name="dept" placeholder="Phòng Kinh doanh"></div>
-        </div>
-        <div class="field"><label>Chức danh</label><input name="role" placeholder="Nhân viên kinh doanh" autocomplete="organization-title"></div>
-        <button class="btn-primary" type="submit" style="margin-top:6px">Bắt đầu</button>
-        <button class="link-btn" type="button" data-act="demo">Dùng thử với dữ liệu mẫu</button>
-      </form>
+      <div class="login2-card">
+      ${isCreate ? `
+        <form class="form" id="createForm" autocomplete="off">
+          <div class="field"><label for="cName">Tên công ty <em>*</em></label><input id="cName" name="name" required placeholder="Công ty TNHH ABC"></div>
+          <div class="field"><label for="cCode">Mã công ty <em>*</em></label><input id="cCode" name="code" required placeholder="VD: ABC" autocapitalize="characters" maxlength="20">
+            <div class="hint">Nhân viên nhập mã này khi đăng nhập. Chỉ gồm chữ, số, dấu gạch ngang.</div></div>
+          <div class="field"><label for="cAdmin">Họ tên quản trị <em>*</em></label><input id="cAdmin" name="adminName" required placeholder="Trần Thị Hương"></div>
+          <div class="field"><label for="cAcc">Tài khoản quản trị <em>*</em></label><input id="cAcc" name="account" required placeholder="admin hoặc email" autocapitalize="none"></div>
+          <div class="field"><label for="cPw">Mật khẩu <em>*</em></label><input id="cPw" name="password" type="password" required minlength="6" placeholder="Ít nhất 6 ký tự" autocomplete="new-password"></div>
+          <button class="btn-primary" type="submit">Tạo công ty</button>
+          <button class="link-btn" type="button" data-go="home">Đã có tài khoản? Đăng nhập</button>
+        </form>` : `
+        <form class="form" id="loginForm" autocomplete="on">
+          ${locked ? `<button class="face-btn tap" type="button" id="faceBtn"><i class="icon-scan-face"></i><span><b>Đăng nhập bằng Face ID</b><small>hoặc vân tay trên máy này</small></span></button>
+            <div class="or"><span>hoặc nhập mật khẩu</span></div>` : ''}
+          <div class="field"><label for="lCode">Mã công ty</label>
+            <div class="input-ico"><i class="icon-building-2"></i><input id="lCode" name="code" required value="${esc(lastCode)}" placeholder="VD: ABC" autocapitalize="characters"></div></div>
+          <div class="field"><label for="lAcc">Tài khoản</label>
+            <div class="input-ico"><i class="icon-user-round"></i><input id="lAcc" name="account" required value="${esc(lastAcc)}" placeholder="Tên đăng nhập hoặc email" autocapitalize="none" autocomplete="username"></div></div>
+          <div class="field"><label for="lPw">Mật khẩu</label>
+            <div class="input-ico"><i class="icon-lock-keyhole"></i><input id="lPw" name="password" type="password" required placeholder="Mật khẩu" autocomplete="current-password">
+            <button type="button" class="eye" id="eye" aria-label="Hiện mật khẩu"><i class="icon-eye"></i></button></div></div>
+          <div class="login-row">
+            <label class="check" id="faceOptWrap" hidden><input type="checkbox" id="faceOpt"> Đăng nhập bằng Face ID</label>
+            <button class="link-sm" type="button" id="forgot">Quên mật khẩu?</button>
+          </div>
+          <button class="btn-primary" type="submit">Đăng nhập</button>
+          ${locked ? '<button class="link-btn" type="button" id="otherAcc">Đăng nhập tài khoản khác</button>'
+            : '<button class="link-btn" type="button" data-go="company">Chưa có công ty? Tạo công ty mới</button>'}
+        </form>`}
+      ${API.mode === 'demo' && !isCreate ? `<div class="demo-note"><i class="icon-info"></i><div><b>Chế độ dùng thử</b> (chưa nối Firebase). Mã công ty <b>DEMO</b>, tài khoản <b>admin</b> (quản trị) hoặc <b>nv01</b>…<b>nv05</b> (nhân viên), mật khẩu <b>123456</b>.</div></div>` : ''}
+      </div>
     </div>`;
-    document.getElementById('loginForm').addEventListener('submit', e => {
+
+    if (isCreate) {
+      const f = document.getElementById('createForm');
+      f.addEventListener('submit', e => {
+        e.preventDefault();
+        const d = Object.fromEntries(new FormData(f));
+        if (d.password.length < 6) return toast('Mật khẩu cần ít nhất 6 ký tự');
+        busy(f.querySelector('[type=submit]'), async () => {
+          S.session = await API.createCompany(d);
+          lsSet('ccg.lastCode', API.normCode(d.code)); lsSet('ccg.lastAccount', d.account.trim().toLowerCase());
+          S.user = S.session.user; S.locked = false;
+          await loadAll();
+          toast('Đã tạo công ty. Hãy thêm địa điểm và nhân viên ở trang quản trị.');
+          go('home'); render();
+        });
+      });
+      return;
+    }
+    const f = document.getElementById('loginForm');
+    document.getElementById('eye').onclick = () => { const p = f.password; p.type = p.type === 'password' ? 'text' : 'password'; };
+    document.getElementById('forgot').onclick = async () => {
+      if (!f.account.value.trim()) { toast('Nhập mã công ty và tài khoản trước'); f.account.focus(); return; }
+      try { dialog('Quên mật khẩu', esc(await API.resetPassword(f.code.value, f.account.value))); }
+      catch (e) { toast(errMsg(e)); }
+    };
+    if (!locked) faceAvailable().then(ok => { const w = document.getElementById('faceOptWrap'); if (w) w.hidden = !ok; });
+    const fb = document.getElementById('faceBtn');
+    if (fb) {
+      fb.onclick = async () => {
+        try { if (await faceVerify()) { S.locked = false; go('home'); render(); } }
+        catch (e) { toast('Không xác thực được Face ID. Hãy nhập mật khẩu.'); }
+      };
+    }
+    const other = document.getElementById('otherAcc');
+    if (other) other.onclick = async () => { lsSet(FACE_KEY, null); await signOut(); };
+    f.addEventListener('submit', e => {
       e.preventDefault();
-      const f = Object.fromEntries(new FormData(e.target));
-      if (!f.name.trim()) return;
-      db.profile = { name: f.name.trim(), code: f.code.trim(), dept: f.dept.trim(), role: f.role.trim() || 'Nhân viên' };
-      db.createdAt = Date.now();
-      addNoti(`Chào mừng ${db.profile.name} đến với ChấmCông Go. Hãy kiểm tra vị trí văn phòng trong mục Cá nhân › Văn phòng chấm công.`);
-      save(); go('home'); render();
+      const d = Object.fromEntries(new FormData(f));
+      const wantFace = document.getElementById('faceOpt')?.checked;
+      busy(f.querySelector('[type=submit]'), async () => {
+        S.session = await API.signIn(d.code, d.account, d.password);
+        lsSet('ccg.lastCode', API.normCode(d.code)); lsSet('ccg.lastAccount', d.account.trim().toLowerCase());
+        S.user = S.session.user; S.locked = false;
+        await loadAll();
+        if (wantFace) { try { await faceRegister(S.user, d.account); toast('Đã bật đăng nhập bằng Face ID'); } catch (err) { toast('Chưa bật được Face ID trên máy này'); } }
+        go('home'); render();
+      });
     });
   }
-
-  function seedDemo() {
-    db = defaults();
-    db.profile = { name: 'Nguyễn Văn An', code: 'NV-0248', dept: 'Phòng Kinh doanh', role: 'Nhân viên kinh doanh' };
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    db.createdAt = start.getTime();
-    let i = 0;
-    for (let d = new Date(start); dayKey(d) < dayKey(now); d.setDate(d.getDate() + 1)) {
-      if (!isWorkday(d)) continue;
-      i++;
-      const at = (h, m) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m).getTime();
-      const late = i % 9 === 4;
-      db.logs.push({ id: uid(), ts: late ? at(8, 17) : at(7, 50 + (i * 7) % 9), kind: 'in', method: 'GPS', dist: 20 + (i * 13) % 90, acc: 8, status: 'ok' });
-      if (i % 11 !== 6) db.logs.push({ id: uid(), ts: at(17, 30 + (i % 8)), kind: 'out', method: i % 2 ? 'Wifi' : 'GPS', dist: 30, acc: 10, status: 'ok' });
-      if (i % 10 === 3) db.logs.push({ id: uid(), ts: at(18, 5), kind: 'ot', method: 'GPS', dist: 25, acc: 9, status: 'ok' });
-    }
-    const t = now.getTime();
-    db.notis = [
-      { id: uid(), ts: t - 8 * 60e3, text: 'Đơn nghỉ phép của bạn đã được gửi tới quản lý, đang chờ phê duyệt.', read: false },
-      { id: uid(), ts: t - 26 * 3600e3, text: `Dữ liệu chấm công ra lúc 17:35 ${dmy(t - 86400e3)} hợp lệ.`, read: true },
-      { id: uid(), ts: t - 3 * 86400e3, text: 'Nhắc nhở: Bạn có 1 ngày chưa chấm công ra ca. Hãy gửi giải trình.', read: true }
-    ];
-    const next = new Date(now); next.setDate(next.getDate() + 7);
-    db.proposals = [{ id: uid(), type: 'leave', created: t - 8 * 60e3, status: 'pending', from: dayKey(next), to: dayKey(next), part: 'Cả ngày', reason: 'Việc gia đình' }];
-    save();
+  async function signOut() {
+    try { await API.signOut(); } catch (e) { /* ignore */ }
+    Object.assign(S, { session: null, user: null, logs: [], reqs: [], notis: [], locked: false });
+    location.hash = ''; render();
   }
 
   // ---------------------------------------------------------------- home
   function homeLocLine() {
-    const d = officeDist();
-    if (geo.fix && d != null) {
-      const inside = d <= db.office.radius;
-      return `<button class="loc-line ${inside ? 'ok' : 'bad'}" data-act="locate"><span class="pulse"></span>Bạn đang cách văn phòng ${fmtDist(d)} – ${inside ? 'Trong vùng chấm công' : 'Ngoài vùng chấm công'}</button>`;
+    const { loc, dist } = nearest();
+    if (!myLocations().length) return '<span class="loc-line bad"><span class="pulse"></span>Công ty chưa cài địa điểm chấm công</span>';
+    if (geo.fix && dist != null) {
+      const inside = dist <= loc.radius;
+      return `<button class="loc-line ${inside ? 'ok' : 'bad'}" data-act="locate"><span class="pulse"></span>Bạn đang cách ${esc(loc.name)} ${fmtDist(dist)} – ${inside ? 'Trong vùng chấm công' : 'Ngoài vùng'}</button>`;
     }
     if (geo.err) return `<button class="loc-line bad" data-act="locate"><span class="pulse"></span>${esc(geo.err)}</button>`;
-    return `<button class="loc-line idle" data-act="locate"><span class="pulse"></span>Chưa xác định vị trí – bấm để định vị</button>`;
+    return '<button class="loc-line idle" data-act="locate"><span class="pulse"></span>Chưa xác định vị trí – bấm để định vị</button>';
   }
+  const todayLogs = () => S.logs.filter(l => l.day === dayKey(new Date())).sort((a, b) => a.ts - b.ts);
+  const nextMainKind = () => todayLogs().some(l => l.kind === 'in') ? 'out' : 'in';
 
   function renderHome() {
-    const p = db.profile, today = new Date();
-    const unread = db.notis.some(n => !n.read);
-    const logs = logsOn(dayKey(today));
-    const kind = nextMainKind();
+    const u = S.user, today = new Date(), sh = shift();
+    const logs = todayLogs(), kind = nextMainKind();
+    const { loc } = nearest();
     $app.innerHTML = `<div class="screen with-tabs">
       <div class="hero">
         <div class="hero-user">
-          <div class="avatar">${esc(initials(p.name))}</div>
+          <div class="avatar">${esc(initials(u.name))}</div>
           <div style="flex:1;min-width:0">
             <div class="hero-hello">Xin chào,</div>
-            <div class="hero-name">${esc(p.name)}</div>
-            <div class="hero-role">${esc(p.role)}</div>
+            <div class="hero-name">${esc(u.name)}</div>
+            <div class="hero-role">${esc(u.title || C.ROLES[u.role])}</div>
           </div>
-          <button class="icon-btn-glass" data-go="notis" aria-label="Thông báo"><i class="icon-bell"></i>${unread ? '<span class="badge-dot"></span>' : ''}</button>
+          <button class="icon-btn-glass" data-go="notis" aria-label="Thông báo"><i class="icon-bell"></i>${unreadCount() ? '<span class="badge-dot"></span>' : ''}</button>
         </div>
       </div>
       <div class="content lift">
         <div class="card raised shift-card">
           <div class="row-head"><b>Ca làm việc hôm nay</b><span>${longDate(today)}</span></div>
           ${isWorkday(today) ? `<div class="shift-grid">
-            <div><div class="lbl">Vào ca</div><div class="val">${esc(db.shift.start)}</div></div>
+            <div><div class="lbl">Vào ca</div><div class="val">${esc(sh.start)}</div></div>
             <div class="sep"></div>
-            <div style="text-align:right"><div class="lbl">Ra ca</div><div class="val">${esc(db.shift.end)}</div></div>
-          </div>` : `<div style="font-size:14px;color:var(--muted);padding:8px 0">Hôm nay là ngày nghỉ theo lịch làm việc.</div>`}
+            <div style="text-align:right"><div class="lbl">Ra ca</div><div class="val">${esc(sh.end)}</div></div>
+          </div>` : '<div style="font-size:14px;color:var(--muted);padding:8px 0">Hôm nay là ngày nghỉ theo lịch làm việc.</div>'}
         </div>
         <button class="cta-big tap" data-act="popup" data-kind="${kind}">
           <div class="ico"><i class="icon-scan-face"></i></div>
@@ -332,12 +322,13 @@
         </button>
         <div class="loc-status">
           <div id="locLine">${homeLocLine()}</div>
-          <div class="loc-office"><i class="icon-map-pin"></i>${esc(db.office.name)} · ${esc(db.office.address)}</div>
+          ${loc ? `<div class="loc-office"><i class="icon-map-pin"></i>${esc(loc.name)} · ${esc(loc.address)}</div>` : ''}
         </div>
         <div class="quick-grid">
           <button class="quick tap" data-act="popup" data-kind="ot"><div class="ico"><i class="icon-timer"></i></div><span>Chấm làm thêm giờ</span></button>
           <button class="quick tap" data-act="popup" data-kind="duty"><div class="ico"><i class="icon-shield-check"></i></div><span>Chấm trực ca kíp</span></button>
         </div>
+        ${isAdmin() ? '<a class="admin-link tap" href="admin.html"><i class="icon-layout-dashboard"></i><span>Mở trang quản trị</span><i class="icon-chevron-right"></i></a>' : ''}
         <div class="section-head"><b>Chi tiết chấm công hôm nay</b><button data-go="history">Xem lịch sử</button></div>
         ${logs.length ? logs.map(l => `
           <div class="log-item">
@@ -347,36 +338,33 @@
               <div class="t2">Trạng thái: <b style="color:${l.status === 'ok' ? 'var(--green)' : 'var(--red)'}">${l.status === 'ok' ? 'Thành công' : 'Chờ phê duyệt'}</b></div>
             </div>
             <span class="meth">${esc(l.method)}</span>
-          </div>`).join('') : `<div class="card empty"><i class="icon-calendar-clock"></i>Bạn chưa chấm công hôm nay</div>`}
+          </div>`).join('') : '<div class="card empty"><i class="icon-calendar-clock"></i>Bạn chưa chấm công hôm nay</div>'}
       </div>
       ${tabbar('home')}
     </div>`;
     if (ui.popup) showMethodPopup(ui.popup);
-
     const refresh = () => { const el = document.getElementById('locLine'); if (el) el.innerHTML = homeLocLine(); };
     geo.listeners.add(refresh);
     cleanup.push(() => geo.listeners.delete(refresh));
-    // Lấy vị trí khi đã được cấp quyền, để hiện khoảng cách tới văn phòng.
-    if (!geo.fix || Date.now() - geo.at > 60e3) {
-      if (navigator.permissions && navigator.permissions.query) {
-        navigator.permissions.query({ name: 'geolocation' }).then(s => { if (s.state === 'granted') locateOnce(); }).catch(() => {});
-      }
+    if ((!geo.fix || Date.now() - geo.at > 60e3) && navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then(s => { if (s.state === 'granted') locateOnce(); }).catch(() => {});
     }
   }
 
   function showMethodPopup(kind) {
     ui.popup = kind;
     const title = kind === 'ot' ? 'Chấm làm thêm giờ' : kind === 'duty' ? 'Chấm trực ca kíp' : 'Chấm công';
+    const allowWifi = S.company.settings.allowWifi !== false;
     const wrap = document.createElement('div');
-    wrap.className = 'overlay'; wrap.id = 'methodPopup';
+    wrap.className = 'overlay';
     wrap.innerHTML = `<div class="dialog" role="dialog" aria-label="${title}">
       <div class="dialog-head"><b>${title}</b><button class="dialog-close" data-x aria-label="Đóng"><i class="icon-x"></i></button></div>
       <div class="dialog-sub">Chọn cách xác thực vị trí</div>
       <div class="dialog-body">
-        <button class="opt tap" data-m="wifi">
+        ${allowWifi ? `<button class="opt tap" data-m="wifi">
           <div class="sq" style="background:var(--blue-soft);color:var(--blue)"><i class="icon-wifi"></i></div>
           <div class="main"><b>Wifi</b><small>Kết nối mạng Wifi văn phòng</small></div><i class="icon-chevron-right"></i>
-        </button>
+        </button>` : ''}
         <button class="opt tap" data-m="gps">
           <div class="sq" style="background:var(--orange-soft);color:var(--orange)"><i class="icon-locate-fixed"></i></div>
           <div class="main"><b>GPS</b><small>Xác định vị trí hiện tại của bạn</small></div><i class="icon-chevron-right"></i>
@@ -389,30 +377,36 @@
       else if (m) { close(); go(`${m.dataset.m}?kind=${kind}`); }
     });
     document.body.appendChild(wrap);
-    cleanup.push(() => wrap.remove());
+  }
+
+  function saveLog(log, btn) {
+    return busy(btn, async () => {
+      const saved = await API.addLog(log);
+      S.logs.push(saved);
+      if (navigator.vibrate) navigator.vibrate(40);
+      go('success/' + saved.id);
+    });
   }
 
   // ---------------------------------------------------------------- GPS check-in
   function renderGps(kind) {
     kind = KIND[kind] ? kind : nextMainKind();
-    const o = db.office;
+    const locs = myLocations();
+    if (!locs.length) { toast('Công ty chưa cài địa điểm chấm công. Liên hệ quản trị.'); return go('home'); }
     $app.innerHTML = `<div class="gps-screen">
       <div id="map" class="gps-map"></div>
       <div class="gps-top">
-        <button class="float-btn" data-act="back" data-to="home" aria-label="Quay lại"><i class="icon-arrow-left"></i></button>
+        <button class="float-btn" data-go="home" aria-label="Quay lại"><i class="icon-arrow-left"></i></button>
         <div class="float-pill">${kind === 'in' || kind === 'out' ? 'Chấm công GPS' : esc(KIND[kind].label) + ' · GPS'}</div>
       </div>
       <button class="float-btn gps-locate" id="recenter" aria-label="Về vị trí của tôi"><i class="icon-locate-fixed"></i></button>
       <div class="gps-sheet">
         <div class="grabber"></div>
-        <div class="place">
-          <div class="sq"><i class="icon-map-pin"></i></div>
-          <div><b>${esc(o.name)}</b><small>${esc(o.address)}</small></div>
-        </div>
+        <div class="place" id="gPlace"></div>
         <div class="stats3">
           <div><div class="lbl">Khoảng cách</div><div class="val" id="gDist">--</div></div>
           <div><div class="lbl">Độ chính xác</div><div class="val" id="gAcc">--</div></div>
-          <div><div class="lbl">Bán kính</div><div class="val">${Math.round(o.radius)}m</div></div>
+          <div><div class="lbl">Bán kính</div><div class="val" id="gRad">--</div></div>
         </div>
         <div class="banner idle" id="gBanner"></div>
         <div class="spacer"></div>
@@ -421,55 +415,55 @@
       </div>
     </div>`;
 
-    // Bản đồ
     let map = null, userMarker = null, accCircle = null, fitted = false;
     if (window.L) {
-      map = L.map('map', { zoomControl: false, attributionControl: true }).setView([o.lat, o.lng], 16);
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19, attribution: 'Tiles © Esri'
-      }).addTo(map);
+      map = L.map('map', { zoomControl: false }).setView([locs[0].lat, locs[0].lng], 16);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles © Esri' }).addTo(map);
       map.attributionControl.setPrefix(false);
-      L.circle([o.lat, o.lng], { radius: o.radius, color: 'rgba(242,87,43,.7)', weight: 2, fillColor: '#F2572B', fillOpacity: .18 }).addTo(map);
-      L.marker([o.lat, o.lng], {
-        icon: L.divIcon({ className: 'leaflet-div-icon plain', html: '<div class="office-pin"><div class="head"><i class="icon-building-2"></i></div><div class="stem"></div></div>', iconSize: [34, 42], iconAnchor: [17, 42] })
-      }).addTo(map);
-      // Chừa chỗ cho thanh tiêu đề phía trên và tấm thông tin phía dưới.
+      locs.forEach(o => {
+        L.circle([o.lat, o.lng], { radius: o.radius, color: 'rgba(242,87,43,.7)', weight: 2, fillColor: '#F2572B', fillOpacity: .18 }).addTo(map);
+        L.marker([o.lat, o.lng], { icon: L.divIcon({ className: 'leaflet-div-icon plain', html: '<div class="office-pin"><div class="head"><i class="icon-building-2"></i></div><div class="stem"></div></div>', iconSize: [34, 42], iconAnchor: [17, 42] }) }).addTo(map);
+      });
       setTimeout(() => map && map.invalidateSize(), 50);
     } else {
       document.getElementById('map').innerHTML = '<div class="empty" style="padding-top:120px"><i class="icon-map"></i>Không tải được bản đồ (kiểm tra kết nối mạng)</div>';
     }
-
+    const fitBoth = () => {
+      if (!map) return;
+      const { loc } = nearest();
+      const b = L.latLng(loc.lat, loc.lng).toBounds(loc.radius * 2);
+      if (geo.fix) b.extend([geo.fix.lat, geo.fix.lng]);
+      map.fitBounds(b, { paddingTopLeft: [30, 80], paddingBottomRight: [30, 50], maxZoom: 17 });
+    };
     const update = () => {
-      const fix = geo.fix, d = officeDist();
       const $dist = document.getElementById('gDist');
       if (!$dist) return;
-      const $acc = document.getElementById('gAcc'), $b = document.getElementById('gBanner');
-      const $cta = document.getElementById('gCta'), $retry = document.getElementById('gRetry');
+      const fix = geo.fix, { loc, dist } = nearest();
       let state;
-      if (fix && Date.now() - geo.at < 120e3) {
-        state = fix.acc > MAX_ACC ? 'weak' : d <= o.radius ? 'in' : 'out';
-      } else state = geo.err ? 'err' : 'loading';
-
-      $dist.textContent = fix ? fmtDist(d) : '--';
+      if (fix && Date.now() - geo.at < 120e3) state = fix.acc > MAX_ACC ? 'weak' : dist <= loc.radius ? 'in' : 'out';
+      else state = geo.err ? 'err' : 'loading';
+      document.getElementById('gPlace').innerHTML = `<div class="sq"><i class="icon-map-pin"></i></div><div><b>${esc(loc.name)}</b><small>${esc(loc.address)}</small></div>`;
+      document.getElementById('gRad').textContent = `${Math.round(loc.radius)}m`;
+      $dist.textContent = fix ? fmtDist(dist) : '--';
       $dist.style.color = state === 'in' ? 'var(--green)' : state === 'out' ? 'var(--red)' : '';
-      $acc.textContent = fix ? `±${Math.round(fix.acc)}m` : '--';
-
+      document.getElementById('gAcc').textContent = fix ? `±${Math.round(fix.acc)}m` : '--';
       const banners = {
         loading: ['idle', 'loader-circle spin', 'Đang xác định vị trí của bạn...'],
         err: ['bad', 'circle-alert', geo.err],
         weak: ['warn', 'triangle-alert', `Tín hiệu GPS yếu (±${fix ? Math.round(fix.acc) : '--'}m). Hãy ra chỗ thoáng rồi định vị lại.`],
         in: ['ok', 'circle-check', 'Bạn đang trong vùng chấm công'],
-        out: ['bad', 'circle-alert', `Bạn đang ngoài vùng chấm công (cách ${fmtDist(d)})`]
+        out: ['bad', 'circle-alert', `Bạn đang ngoài vùng chấm công (cách ${fmtDist(dist)})`]
       };
       const [cls, icon, text] = banners[state];
+      const $b = document.getElementById('gBanner');
       $b.className = 'banner ' + cls;
       $b.innerHTML = `<i class="icon-${icon}"></i><span>${esc(text)}</span>`;
-
+      const $cta = document.getElementById('gCta');
+      if ($cta.dataset.busy) return;
       if (state === 'in') { $cta.disabled = false; $cta.dataset.mode = 'confirm'; $cta.innerHTML = `<i class="icon-fingerprint"></i>${KIND[kind].cta}`; }
       else if (state === 'out' || state === 'err') { $cta.disabled = false; $cta.dataset.mode = 'explain'; $cta.innerHTML = '<i class="icon-file-pen-line"></i>Gửi giải trình'; }
       else { $cta.disabled = true; $cta.dataset.mode = ''; $cta.innerHTML = state === 'weak' ? '<i class="icon-fingerprint"></i>Chờ tín hiệu GPS tốt hơn' : '<i class="icon-loader-circle spin"></i>Đang định vị...'; }
-      $retry.style.display = state === 'out' || state === 'err' || state === 'weak' ? '' : 'none';
-
+      document.getElementById('gRetry').style.display = state === 'out' || state === 'err' || state === 'weak' ? '' : 'none';
       if (map && fix) {
         const ll = [fix.lat, fix.lng];
         if (!userMarker) {
@@ -479,42 +473,27 @@
         if (!fitted) { fitted = true; fitBoth(); }
       }
     };
-    const fitBoth = () => {
-      if (!map) return;
-      const pts = [[o.lat, o.lng]];
-      if (geo.fix) pts.push([geo.fix.lat, geo.fix.lng]);
-      const office = L.latLng(o.lat, o.lng);
-      const b = L.latLngBounds(pts).extend(office.toBounds(o.radius * 2));
-      map.fitBounds(b, { paddingTopLeft: [30, 80], paddingBottomRight: [30, 50], maxZoom: 17 });
-    };
-
-    // Không dùng vị trí cũ khi vào màn hình chấm công: luôn lấy vị trí mới.
     geo.fix = null; geo.err = null;
     geo.listeners.add(update);
-    startWatch();
-    update();
+    startWatch(); update();
     const tick = setInterval(update, 15e3);
     cleanup.push(() => { geo.listeners.delete(update); stopWatch(); clearInterval(tick); if (map) map.remove(); map = null; });
 
     document.getElementById('recenter').onclick = () => {
-      if (map && geo.fix) map.setView([geo.fix.lat, geo.fix.lng], Math.max(map.getZoom(), 17));
-      else fitBoth();
+      if (map && geo.fix) map.setView([geo.fix.lat, geo.fix.lng], Math.max(map.getZoom(), 17)); else fitBoth();
     };
     document.getElementById('gRetry').onclick = () => { geo.fix = null; geo.err = null; fitted = false; update(); startWatch(); };
     document.getElementById('gCta').onclick = e => {
-      const mode = e.currentTarget.dataset.mode;
+      const btn = e.currentTarget, mode = btn.dataset.mode;
+      const { loc, dist } = nearest();
       if (mode === 'confirm') {
-        const d = officeDist();
-        if (!geo.fix || d > o.radius) return update();
-        const log = { id: uid(), ts: Date.now(), kind, method: 'GPS', dist: Math.round(d), acc: Math.round(geo.fix.acc), status: 'ok' };
-        db.logs.push(log);
-        addNoti(`Chấm công ${KIND[kind].type.toLowerCase()} lúc ${hm(log.ts)} ${dmy(log.ts)} được ghi nhận qua GPS (cách văn phòng ${fmtDist(d)}). Trạng thái: Thành công.`);
-        save();
-        if (navigator.vibrate) navigator.vibrate(40);
-        go('success/' + log.id);
+        if (!geo.fix || dist > loc.radius) return update();
+        btn.dataset.busy = '1';
+        saveLog({ kind, method: 'GPS', dist: Math.round(dist), acc: Math.round(geo.fix.acc), status: 'ok', locationId: loc.id,
+          lat: +geo.fix.lat.toFixed(6), lng: +geo.fix.lng.toFixed(6) }, btn).finally(() => { delete btn.dataset.busy; });
       } else if (mode === 'explain') {
-        const reason = geo.fix ? `Chấm công ngoài vùng (cách văn phòng ${fmtDist(officeDist())})` : 'Không xác định được vị trí GPS';
-        go(`proposal/explain?issue=${encodeURIComponent(geo.fix ? 'Ngoài vùng chấm công' : 'Lỗi định vị GPS')}&time=${hm(Date.now())}&kind=${kind}&note=${encodeURIComponent(reason)}`);
+        const note = geo.fix ? `Chấm công ngoài vùng (cách ${loc.name} ${fmtDist(dist)})` : 'Không xác định được vị trí GPS';
+        go(`proposal/explain?issue=${encodeURIComponent(geo.fix ? 'Ngoài vùng chấm công' : 'Lỗi định vị GPS')}&time=${hm(Date.now())}&kind=${kind}&note=${encodeURIComponent(note)}`);
       }
     };
   }
@@ -524,7 +503,8 @@
     kind = KIND[kind] ? kind : nextMainKind();
     const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     const type = c && c.type;
-    const ssid = db.office.wifi || 'Wifi văn phòng';
+    const locs = myLocations();
+    const ssid = locs.map(l => l.wifi).filter(Boolean).join(' / ') || 'Wifi văn phòng';
     let state = 'unknown';
     if (!navigator.onLine) state = 'offline';
     else if (type === 'wifi' || type === 'ethernet') state = 'wifi';
@@ -542,37 +522,29 @@
       <div class="form">
         <div class="place">
           <div class="sq" style="background:var(--blue-soft);color:var(--blue)"><i class="icon-wifi"></i></div>
-          <div><b>${esc(ssid)}</b><small>${esc(db.office.name)} · ${esc(db.office.address)}</small></div>
+          <div><b>${esc(ssid)}</b><small>${esc(locs.map(l => l.name).join(' · '))}</small></div>
         </div>
         <div class="banner ${cls}"><i class="icon-${icon}"></i><span>${esc(text)}</span></div>
-        ${canSubmit ? `<label style="display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.45;color:var(--text-2)">
-          <input type="checkbox" id="wConfirm" style="width:20px;height:20px;accent-color:#F2572B;margin-top:1px;flex-shrink:0">
-          <span>Tôi xác nhận đang kết nối mạng <b>${esc(ssid)}</b> tại văn phòng.</span></label>` : ''}
+        ${canSubmit ? `<label class="check-line"><input type="checkbox" id="wConfirm"><span>Tôi xác nhận đang kết nối mạng <b>${esc(ssid)}</b> tại văn phòng.</span></label>` : ''}
         <div style="height:8px"></div>
         ${canSubmit ? `<button class="btn-primary" id="wCta" disabled><i class="icon-fingerprint"></i>${KIND[kind].cta}</button>` : ''}
-        <button class="btn-outline" data-act="go" data-to="gps?kind=${kind}"><i class="icon-locate-fixed"></i>Chấm bằng GPS</button>
+        <button class="btn-outline" data-go="gps?kind=${kind}"><i class="icon-locate-fixed"></i>Chấm bằng GPS</button>
       </div>
     </div>`;
     const cb = document.getElementById('wConfirm');
-    if (cb) {
-      const btn = document.getElementById('wCta');
-      cb.onchange = () => { btn.disabled = !cb.checked; };
-      btn.onclick = () => {
-        const status = state === 'wifi' ? 'ok' : 'pending';
-        const log = { id: uid(), ts: Date.now(), kind, method: 'Wifi', ssid, status };
-        db.logs.push(log);
-        addNoti(`Chấm công ${KIND[kind].type.toLowerCase()} lúc ${hm(log.ts)} ${dmy(log.ts)} qua Wifi được ghi nhận. ${status === 'ok' ? 'Trạng thái: Thành công.' : 'Chờ nhân sự phê duyệt.'}`);
-        save();
-        go('success/' + log.id);
-      };
-    }
+    if (!cb) return;
+    const btn = document.getElementById('wCta');
+    cb.onchange = () => { btn.disabled = !cb.checked; };
+    btn.onclick = () => saveLog({ kind, method: 'Wifi', ssid, status: state === 'wifi' ? 'ok' : 'pending', locationId: locs[0] ? locs[0].id : '' }, btn);
   }
 
   // ---------------------------------------------------------------- success
   function renderSuccess(id) {
-    const l = db.logs.find(x => x.id === id);
+    const l = S.logs.find(x => x.id === id);
     if (!l) return go('home');
-    const ok = l.status === 'ok';
+    const ok = l.status === 'ok', sh = shift();
+    const loc = S.locations.find(x => x.id === l.locationId);
+    const late = l.kind === 'in' ? minsOfTs(l.ts) - mins(sh.start) - (sh.grace || 0) : 0;
     $app.innerHTML = `<div class="success">
       <div class="body">
         <div class="halo ${ok ? 'ok' : 'pending'}"><div><i class="icon-${ok ? 'check' : 'hourglass'}"></i></div></div>
@@ -581,146 +553,222 @@
         <div class="clock">${hm(l.ts)}</div>
         <div class="date">${longDate(l.ts)}</div>
         <div class="kv">
-          <div><span>Loại chấm công</span><b>${KIND[l.kind].type} · ${esc(db.shift.name)}</b></div>
-          <div><span>Địa điểm</span><b>${esc(db.office.name)}</b></div>
+          <div><span>Loại chấm công</span><b>${KIND[l.kind].type} · ${esc(sh.name)}</b></div>
+          <div><span>Địa điểm</span><b>${esc(loc ? loc.name : '—')}</b></div>
           <div><span>Phương thức</span><b>${l.method === 'GPS' ? `GPS · cách ${fmtDist(l.dist)}` : `Wifi · ${esc(l.ssid || '')}`}</b></div>
-          ${l.kind === 'in' && minsOfTs(l.ts) > mins(db.shift.start) ? `<div><span>Ghi chú</span><b style="color:var(--red)">Đi muộn ${minsOfTs(l.ts) - mins(db.shift.start)} phút</b></div>` : ''}
+          ${late > 0 ? `<div><span>Ghi chú</span><b style="color:var(--red)">Đi muộn ${late} phút</b></div>` : ''}
         </div>
       </div>
       <div class="foot"><button class="btn-primary" data-go="home">Về trang chủ</button></div>
     </div>`;
   }
 
-  // ---------------------------------------------------------------- proposals
-  const PTYPES = {
-    leave: { icon: 'calendar-days', name: 'Nghỉ phép', hue: 28 },
-    lateearly: { icon: 'clock-alert', name: 'Đi muộn về sớm', hue: 145 },
-    ot: { icon: 'timer', name: 'Làm thêm giờ', hue: 250 },
-    trip: { icon: 'briefcase-business', name: 'Làm việc ngoài công ty / công tác', hue: 300 },
-    explain: { icon: 'file-text', name: 'Giải trình chấm công', hue: 20 },
-    shift: { icon: 'repeat', name: 'Đổi ca', hue: 190 }
-  };
-  const pBg = h => `oklch(0.95 0.04 ${h})`, pFg = h => `oklch(0.58 0.16 ${h})`;
-  const STATUS = { pending: ['pending', 'Chờ duyệt'], approved: ['ok', 'Đã duyệt'], rejected: ['bad', 'Từ chối'] };
+  // ---------------------------------------------------------------- requests
+  const leaveLeft = () => Math.max(0, Number(S.user.leaveTotal ?? S.company.settings.leavePerYear ?? 12) - C.leaveUsed(S.reqs, new Date().getFullYear(), shift()));
+  const admins = () => S.users.filter(u => u.role === 'admin' && u.active !== false && u.uid !== S.user.uid);
 
-  function leaveDays(p) {
-    if (!p.from) return 0;
-    let n = 0;
-    for (let d = fromKey(p.from); dayKey(d) <= (p.to || p.from); d.setDate(d.getDate() + 1)) if (isWorkday(d)) n++;
-    return p.part && p.part !== 'Cả ngày' ? n * 0.5 : n;
-  }
-  function proposalSummary(p) {
-    switch (p.type) {
-      case 'leave': return `${keyToDmy(p.from)}${p.to && p.to !== p.from ? ' – ' + keyToDmy(p.to) : ''} · ${p.part} · ${String(leaveDays(p)).replace('.', ',')} ngày`;
-      case 'lateearly': return `${keyToDmy(p.date)} · ${p.mode} ${p.minutes} phút`;
-      case 'ot': return `${keyToDmy(p.date)} · ${p.start} – ${p.end}`;
-      case 'trip': return `${keyToDmy(p.from)}${p.to && p.to !== p.from ? ' – ' + keyToDmy(p.to) : ''} · ${p.place}`;
-      case 'explain': return `${keyToDmy(p.date)} · ${p.issue}${p.time ? ' · ' + p.time : ''}`;
-      case 'shift': return `${keyToDmy(p.date)} · ${p.target}`;
-    }
-    return '';
-  }
-  function proposalItem(p) {
-    const t = PTYPES[p.type], [cls, txt] = STATUS[p.status] || STATUS.pending;
-    return `<div class="prop-item">
-      <div class="circ" style="width:36px;height:36px;border-radius:50%;background:${pBg(t.hue)};color:${pFg(t.hue)};display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0"><i class="icon-${t.icon}"></i></div>
+  function reqCard(r) {
+    const t = REQ_TYPES[r.type];
+    return `<button class="req-card tap" data-go="request/${r.id}">
+      <div class="circ" style="background:${reqBg(t.hue)};color:${reqFg(t.hue)}"><i class="icon-${t.icon}"></i></div>
       <div class="main">
-        <div class="t1">${t.name}</div>
-        <div class="t2">${esc(proposalSummary(p))}${p.reason ? `<br>Lý do: ${esc(p.reason)}` : ''}</div>
-        <div style="margin-top:6px;display:flex;gap:8px;align-items:center"><span class="chip ${cls}">${txt}</span><span style="font-size:11px;color:var(--muted-3)">Gửi ${relTime(p.created).toLowerCase()}</span></div>
+        <div class="t1">${r.type === 'leave' ? 'Nghỉ phép · ' + (LEAVE_TYPES[r.leaveType] || 'Phép năm') : t.name}</div>
+        <div class="t2">${esc(C.reqSummary(r, shift()))}</div>
+        <div class="t3">${chip(r.status)}<span>Gửi ${relTime(r.created).toLowerCase()}</span>${r.hasAttachment ? '<i class="icon-paperclip"></i>' : ''}</div>
       </div>
-      ${p.status === 'pending' ? `<button class="del" data-act="delprop" data-id="${p.id}" aria-label="Hủy đề xuất"><i class="icon-trash-2"></i></button>` : ''}
-    </div>`;
+      <i class="icon-chevron-right"></i>
+    </button>`;
   }
 
   function renderProposals() {
-    const mine = [...db.proposals].sort((a, b) => b.created - a.created);
+    const pending = S.reqs.filter(r => r.status === 'pending').length;
     $app.innerHTML = `<div class="screen with-tabs">
       ${topbar('Đề xuất')}
       <div class="content" style="padding-top:20px">
+        <button class="card my-req tap" data-go="requests">
+          <div class="circ" style="background:var(--orange-soft);color:var(--orange)"><i class="icon-inbox"></i></div>
+          <div class="main"><b>Đơn của tôi</b><small>${S.reqs.length} đơn${pending ? ` · ${pending} đang chờ duyệt` : ''}</small></div>
+          <i class="icon-chevron-right"></i>
+        </button>
         <div class="label-sm">Tạo đề xuất mới</div>
         <div class="card list">
-          ${Object.entries(PTYPES).map(([k, t]) => `
+          ${Object.entries(REQ_TYPES).map(([k, t]) => `
             <button class="list-row tap" data-go="proposal/${k}">
-              <div class="circ" style="background:${pBg(t.hue)};color:${pFg(t.hue)}"><i class="icon-${t.icon}"></i></div>
+              <div class="circ" style="background:${reqBg(t.hue)};color:${reqFg(t.hue)}"><i class="icon-${t.icon}"></i></div>
               <span class="name">${t.name}</span><i class="icon-chevron-right"></i>
             </button>`).join('')}
         </div>
-        <div class="label-sm" style="margin-top:6px">Đề xuất của tôi (${mine.length})</div>
-        <div class="card list">${mine.length ? mine.map(proposalItem).join('') : '<div class="empty"><i class="icon-inbox"></i>Chưa có đề xuất nào</div>'}</div>
       </div>
       ${tabbar('proposals')}
     </div>`;
   }
 
-  function renderProposalForm(type, params) {
-    const t = PTYPES[type];
+  function renderMyRequests() {
+    const all = [...S.reqs].sort((a, b) => b.created - a.created);
+    const count = s => all.filter(r => s === 'all' || r.status === s).length;
+    const tabs = [['all', 'Tất cả'], ['pending', 'Chờ duyệt'], ['approved', 'Đã duyệt'], ['rejected', 'Từ chối']];
+    const list = all.filter(r => ui.reqTab === 'all' || r.status === ui.reqTab);
+    $app.innerHTML = `<div class="screen">
+      ${topbar('Đơn của tôi', { back: 'proposals' })}
+      <div class="seg-wrap"><div class="seg">${tabs.map(([k, n]) => `<button class="${ui.reqTab === k ? 'on' : ''} seg-${k}" data-act="reqtab" data-tab="${k}">${n}<em>${count(k)}</em></button>`).join('')}</div></div>
+      <div class="content" style="padding-bottom:24px">
+        ${list.length ? list.map(reqCard).join('') : '<div class="card empty"><i class="icon-inbox"></i>Không có đơn nào</div>'}
+        <button class="btn-outline" data-go="proposals"><i class="icon-square-pen"></i>Tạo đề xuất mới</button>
+      </div>
+    </div>`;
+  }
+
+  async function renderRequestDetail(id) {
+    const r = S.reqs.find(x => x.id === id);
+    if (!r) return go('requests');
+    const t = REQ_TYPES[r.type];
+    const rows = [
+      ['Loại đơn', r.type === 'leave' ? 'Nghỉ phép · ' + (LEAVE_TYPES[r.leaveType] || 'Phép năm') : t.name],
+      ['Chi tiết', C.reqSummary(r, shift())],
+      ['Lý do', r.reason],
+      ['Người duyệt', userName(r.approverUid) || 'Quản trị'],
+      ['Ngày gửi', `${hm(r.created)} ${dmy(r.created)}`]
+    ];
+    if (r.decidedAt) rows.push([r.status === 'approved' ? 'Duyệt lúc' : 'Từ chối lúc', `${hm(r.decidedAt)} ${dmy(r.decidedAt)} · ${userName(r.decidedBy)}`]);
+    if (r.comment) rows.push(['Ý kiến người duyệt', r.comment]);
+    $app.innerHTML = `<div class="screen">
+      ${topbar('Chi tiết đơn', { back: 'requests' })}
+      <div class="content" style="padding-top:20px;padding-bottom:24px">
+        <div class="card req-head">
+          <div class="circ" style="background:${reqBg(t.hue)};color:${reqFg(t.hue)}"><i class="icon-${t.icon}"></i></div>
+          <div style="flex:1"><b>${t.name}</b><div style="margin-top:4px">${chip(r.status)}</div></div>
+        </div>
+        <div class="card kv2">${rows.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>
+        ${r.hasAttachment ? '<div class="card attach-view" id="attView"><div class="empty"><i class="icon-loader-circle spin"></i>Đang tải ảnh đính kèm...</div></div>' : ''}
+        ${r.status === 'pending' ? '<button class="btn-outline danger-outline" id="cancelReq"><i class="icon-trash-2"></i>Huỷ đơn</button>' : ''}
+      </div>
+    </div>`;
+    const cb = document.getElementById('cancelReq');
+    if (cb) cb.onclick = () => confirmDialog('Huỷ đơn', 'Bạn có chắc muốn huỷ đơn này?', 'Huỷ đơn', async () => {
+      try { await API.deleteRequest(id); S.reqs = S.reqs.filter(x => x.id !== id); toast('Đã huỷ đơn'); go('requests'); }
+      catch (e) { toast(errMsg(e)); }
+    });
+    if (r.hasAttachment) {
+      const el = () => document.getElementById('attView');
+      try {
+        const data = await API.getAttachment(id);
+        if (el()) el().innerHTML = data ? `<img src="${esc(data)}" alt="Ảnh đính kèm">` : '<div class="empty">Không có ảnh</div>';
+      } catch (e) { if (el()) el().innerHTML = `<div class="empty">${esc(errMsg(e))}</div>`; }
+    }
+  }
+
+  function renderRequestForm(type, params) {
+    const t = REQ_TYPES[type];
     if (!t) return go('proposals');
-    const today = dayKey(new Date());
-    const reason = (ph, val = '') => `<div class="field"><label>Lý do <em>*</em></label><textarea name="reason" required placeholder="${ph}">${esc(val)}</textarea></div>`;
-    const dateF = (name, label, val = today) => `<div class="field"><label>${label} <em>*</em></label><input type="date" name="${name}" value="${val}" required></div>`;
-    const timeF = (name, label, val) => `<div class="field"><label>${label} <em>*</em></label><input type="time" name="${name}" value="${val}" required></div>`;
-    const sel = (name, label, opts, val) => `<div class="field"><label>${label}</label><select name="${name}">${opts.map(o => `<option${o === val ? ' selected' : ''}>${o}</option>`).join('')}</select></div>`;
+    const today = dayKey(new Date()), sh = shift();
+    const reason = (ph, val = '') => `<div class="field"><label for="fReason">Lý do <em>*</em></label><textarea id="fReason" name="reason" required placeholder="${ph}">${esc(val)}</textarea></div>`;
+    const dateF = (name, label, val = today) => `<div class="field"><label for="f_${name}">${label} <em>*</em></label><input id="f_${name}" type="date" name="${name}" value="${val}" required></div>`;
+    const timeF = (name, label, val) => `<div class="field"><label for="f_${name}">${label} <em>*</em></label><input id="f_${name}" type="time" name="${name}" value="${val}" required></div>`;
+    const sel = (name, label, opts, val) => `<div class="field"><label for="f_${name}">${label}</label><select id="f_${name}" name="${name}">${opts.map(o => `<option${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
+    const chips = (name, opts, val) => `<div class="chips" role="radiogroup">${opts.map(([v, l]) => `<label class="chip-opt"><input type="radio" name="${name}" value="${v}"${v === val ? ' checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
     const fields = {
-      leave: `<div class="row2">${dateF('from', 'Từ ngày')}${dateF('to', 'Đến ngày')}</div>
-        ${sel('part', 'Thời gian nghỉ', ['Cả ngày', 'Buổi sáng', 'Buổi chiều'], 'Cả ngày')}
-        <div class="field"><div class="hint">Ngày phép còn lại: <b>${String(leaveLeft()).replace('.', ',')}</b> / ${db.leaveTotal} ngày</div></div>
+      leave: `
+        <div class="field"><label>Loại nghỉ</label>${chips('leaveType', Object.entries(LEAVE_TYPES), 'annual')}</div>
+        <div class="row2">${dateF('from', 'Từ ngày')}${dateF('to', 'Đến ngày')}</div>
+        <div class="field"><label>Thời gian nghỉ</label>${chips('part', [['Cả ngày', 'Cả ngày'], ['Buổi sáng', 'Nửa ngày sáng'], ['Buổi chiều', 'Nửa ngày chiều']], 'Cả ngày')}
+          <div class="hint" id="partHint" hidden>Nghỉ nửa ngày chỉ áp dụng khi từ ngày và đến ngày trùng nhau.</div></div>
+        <div class="leave-box"><div><span>Số ngày phép còn lại</span><b id="leaveLeft">${num(leaveLeft())}</b></div><div><span>Đơn này</span><b id="leaveThis">1 ngày</b></div></div>
         ${reason('VD: Việc gia đình')}`,
       lateearly: `${dateF('date', 'Ngày')}
         <div class="row2">${sel('mode', 'Loại', ['Đi muộn', 'Về sớm'], 'Đi muộn')}
-        <div class="field"><label>Số phút <em>*</em></label><input type="number" name="minutes" min="1" max="480" value="30" inputmode="numeric" required></div></div>
+        <div class="field"><label for="f_min">Số phút <em>*</em></label><input id="f_min" type="number" name="minutes" min="1" max="480" value="30" inputmode="numeric" required></div></div>
         ${reason('VD: Đi gặp khách hàng')}`,
       ot: `${dateF('date', 'Ngày')}
-        <div class="row2">${timeF('start', 'Từ giờ', db.shift.end)}${timeF('end', 'Đến giờ', '20:00')}</div>
+        <div class="row2">${timeF('start', 'Từ giờ', sh.end)}${timeF('end', 'Đến giờ', '20:00')}</div>
         ${reason('VD: Hoàn thành báo cáo cuối tháng')}`,
       trip: `<div class="row2">${dateF('from', 'Từ ngày')}${dateF('to', 'Đến ngày')}</div>
-        <div class="field"><label>Địa điểm <em>*</em></label><input name="place" required placeholder="VD: Khách hàng ABC, Hải Phòng"></div>
+        <div class="field"><label for="f_place">Địa điểm <em>*</em></label><input id="f_place" name="place" required placeholder="VD: Khách hàng ABC, Hải Phòng"></div>
         ${reason('VD: Khảo sát dự án')}`,
       explain: `${dateF('date', 'Ngày cần giải trình', params.date || today)}
         <div class="row2">${sel('issue', 'Vấn đề', ['Quên chấm công vào', 'Quên chấm công ra', 'Ngoài vùng chấm công', 'Lỗi định vị GPS', 'Đi muộn có lý do', 'Khác'], params.issue || 'Quên chấm công ra')}
-        <div class="field"><label>Giờ thực tế</label><input type="time" name="time" value="${esc(params.time || '')}"></div></div>
+        <div class="field"><label for="f_time">Giờ thực tế</label><input id="f_time" type="time" name="time" value="${esc(params.time || '')}"></div></div>
         ${reason('Mô tả lý do', params.note ? params.note + '. ' : '')}`,
       shift: `${dateF('date', 'Ngày đổi ca')}
-        ${sel('target', 'Đổi sang ca', ['Ca sáng 06:00 – 14:00', 'Ca chiều 14:00 – 22:00', 'Ca đêm 22:00 – 06:00', 'Hành chính 08:00 – 17:30'], 'Ca chiều 14:00 – 22:00')}
+        ${sel('target', 'Đổi sang ca', S.shifts.filter(s => s.id !== sh.id).map(s => `${s.name} ${s.start} – ${s.end}`).concat(['Khác (ghi trong lý do)']), '')}
         ${reason('VD: Đổi ca với đồng nghiệp')}`
     }[type];
+    const ad = admins();
+    const approverOpts = ad.length ? ad.map(u => `<option value="${u.uid}">${esc(u.name)}${u.title ? ' · ' + esc(u.title) : ''}</option>`).join('')
+      : isAdmin() ? `<option value="${S.user.uid}">Tự duyệt (bạn là quản trị)</option>` : '<option value="">Chưa có quản trị</option>';
     $app.innerHTML = `<div class="screen">
-      ${topbar(t.name, { back: 'proposals' })}
-      <form class="form" id="pForm">
-        <div class="form-head"><div class="circ" style="background:${pBg(t.hue)};color:${pFg(t.hue)}"><i class="icon-${t.icon}"></i></div><b>${t.name}</b></div>
+      ${topbar(type === 'leave' ? 'Tạo đơn nghỉ phép' : t.name, { back: 'proposals' })}
+      <form class="form" id="pForm" novalidate>
         ${fields}
-        <div class="field"><div class="hint">Người duyệt: quản lý trực tiếp. Bạn sẽ nhận thông báo khi đề xuất được xử lý.</div></div>
+        <div class="field"><label>Ảnh đính kèm</label>
+          <label class="attach" id="attachBox"><input type="file" accept="image/*" id="fFile" hidden>
+            <span class="attach-empty"><i class="icon-image-plus"></i>Thêm ảnh (giấy khám bệnh, chứng từ...)</span></label></div>
+        <div class="field"><label for="f_appr">Người duyệt <em>*</em></label><select id="f_appr" name="approverUid" required>${approverOpts}</select></div>
         <button class="btn-primary" type="submit"><i class="icon-send"></i>Gửi đề xuất</button>
       </form>
     </div>`;
-    document.getElementById('pForm').addEventListener('submit', e => {
+    const form = document.getElementById('pForm');
+    let attachment = null;
+    const fileIn = document.getElementById('fFile'), box = document.getElementById('attachBox');
+    const renderAttachEmpty = () => {
+      box.innerHTML = '<span class="attach-empty"><i class="icon-image-plus"></i>Thêm ảnh (giấy khám bệnh, chứng từ...)</span>';
+      box.appendChild(fileIn); fileIn.value = '';
+    };
+    fileIn.onchange = async () => {
+      const f = fileIn.files[0];
+      if (!f) return;
+      try {
+        attachment = await C.compressImage(f);
+        box.innerHTML = `<img src="${attachment}" alt="Ảnh đính kèm"><button type="button" class="attach-x" aria-label="Bỏ ảnh"><i class="icon-x"></i></button>`;
+        box.appendChild(fileIn);
+        box.querySelector('.attach-x').onclick = ev => { ev.preventDefault(); attachment = null; renderAttachEmpty(); };
+      } catch (e) { toast(errMsg(e)); }
+    };
+    if (type === 'leave') {
+      const upd = () => {
+        const d = Object.fromEntries(new FormData(form));
+        const multi = d.to && d.from && d.to !== d.from;
+        form.querySelectorAll('input[name=part]').forEach(i => { if (i.value !== 'Cả ngày') i.disabled = multi; });
+        if (multi) form.querySelector('input[name=part][value="Cả ngày"]').checked = true;
+        document.getElementById('partHint').hidden = !multi;
+        const part = form.querySelector('input[name=part]:checked').value;
+        const days = C.leaveDays({ from: d.from, to: d.to, part }, sh);
+        document.getElementById('leaveThis').textContent = `${num(days)} ngày`;
+        const annual = form.querySelector('input[name=leaveType]:checked').value === 'annual';
+        document.getElementById('leaveLeft').textContent = annual ? num(leaveLeft()) : `${num(leaveLeft())} (không trừ)`;
+      };
+      form.addEventListener('change', upd); upd();
+    }
+    form.addEventListener('submit', e => {
       e.preventDefault();
-      const f = Object.fromEntries(new FormData(e.target));
-      for (const k of Object.keys(f)) f[k] = String(f[k]).trim();
-      if (f.from && f.to && f.to < f.from) return toast('Ngày kết thúc phải sau ngày bắt đầu');
-      if (type === 'ot' && f.end <= f.start) return toast('Giờ kết thúc phải sau giờ bắt đầu');
-      if (!f.reason) return toast('Vui lòng nhập lý do');
-      const p = Object.assign({ id: uid(), type, created: Date.now(), status: 'pending' }, f);
-      if (type === 'leave' && leaveDays(p) > leaveLeft()) return toast('Số ngày nghỉ vượt quá số ngày phép còn lại');
-      db.proposals.push(p);
-      addNoti(`Đề xuất ${t.name.toLowerCase()} (${proposalSummary(p)}) đã được gửi, đang chờ phê duyệt.`);
-      save();
-      toast('Đã gửi đề xuất');
-      go(type === 'explain' && params.kind ? 'history' : 'proposals');
-      if (type === 'explain' && params.kind) ui.histTab = 'gt';
+      const d = Object.fromEntries(new FormData(form));
+      for (const k of Object.keys(d)) d[k] = String(d[k]).trim();
+      const missing = [...form.querySelectorAll('[required]')].find(i => !String(i.value).trim());
+      if (missing) { toast('Vui lòng điền đủ các ô có dấu *'); missing.focus(); return; }
+      if (d.from && d.to && d.to < d.from) return toast('Ngày kết thúc phải sau ngày bắt đầu');
+      if (type === 'ot' && d.end <= d.start) return toast('Giờ kết thúc phải sau giờ bắt đầu');
+      if (!d.approverUid) return toast('Công ty chưa có quản trị để duyệt đơn');
+      if (type === 'leave') {
+        if (d.to !== d.from) d.part = 'Cả ngày';
+        if (!C.leaveDays(d, sh)) return toast('Khoảng ngày đã chọn không có ngày làm việc nào');
+        if (d.leaveType === 'annual' && C.leaveDays(d, sh) > leaveLeft()) return toast('Số ngày nghỉ vượt quá số ngày phép còn lại');
+      }
+      if (type === 'explain' && params.kind) d.kind = params.kind;
+      if (type === 'lateearly') d.minutes = Number(d.minutes);
+      busy(form.querySelector('[type=submit]'), async () => {
+        const saved = await API.createRequest({ type, ...d }, attachment);
+        S.reqs.push(saved);
+        toast('Đã gửi đề xuất');
+        ui.reqTab = 'all';
+        go('requests');
+      });
     });
   }
-  const leaveLeft = () => {
-    const y = String(new Date().getFullYear());
-    const used = db.proposals.filter(p => p.type === 'leave' && p.status !== 'rejected' && String(p.from).startsWith(y)).reduce((s, p) => s + leaveDays(p), 0);
-    return Math.max(0, db.leaveTotal - used);
-  };
 
   // ---------------------------------------------------------------- notifications
   function renderNotis() {
-    const list = db.notis;
+    const list = [...S.notis].sort((a, b) => b.ts - a.ts);
     $app.innerHTML = `<div class="screen with-tabs white">
-      ${topbar('Thông báo', { right: `<button class="tb-right" data-act="readall" aria-label="Đánh dấu tất cả đã đọc"><i class="icon-check-check"></i></button>` })}
+      ${topbar('Thông báo', { right: '<button class="tb-right" data-act="readall" aria-label="Đánh dấu tất cả đã đọc"><i class="icon-check-check"></i></button>' })}
       <div>${list.length ? list.map(n => `
         <button class="noti ${n.read ? '' : 'unread'}" data-act="readone" data-id="${n.id}">
           <span class="dot"></span>
@@ -731,46 +779,43 @@
   }
 
   // ---------------------------------------------------------------- history
+  const DOT = { full: 'green', late: 'red', missing: 'red', absent: 'red', leave: 'amber', half: 'amber', trip: 'blue' };
   function renderHistory() {
-    const now = new Date();
+    const now = new Date(), sh = shift();
     if (!ui.histMonth) ui.histMonth = { y: now.getFullYear(), m: now.getMonth() };
     const { y, m } = ui.histMonth;
-    if (!ui.histSel || !ui.histSel.startsWith(`${y}-${pad(m + 1)}`)) {
-      ui.histSel = y === now.getFullYear() && m === now.getMonth() ? dayKey(now) : dayKey(new Date(y, m, 1));
-    }
-    const tab = ui.histTab;
+    if (!ui.histSel || !ui.histSel.startsWith(`${y}-${pad(m + 1)}`)) ui.histSel = y === now.getFullYear() && m === now.getMonth() ? dayKey(now) : dayKey(new Date(y, m, 1));
     const months = [];
     for (let i = 0; i < 12; i++) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push([d.getFullYear(), d.getMonth()]); }
-    const last = new Date(y, m + 1, 0).getDate();
-
+    const last = new Date(y, m + 1, 0).getDate(), today = dayKey(now);
+    const stOf = key => C.dayStatus({ logs: S.logs, reqs: S.reqs, key, shift: sh, startKey: startKey(), today });
     let body;
-    if (tab === 'cong') {
-      const lead = (new Date(y, m, 1).getDay() + 6) % 7; // T2 đứng đầu tuần
-      const today = dayKey(now);
+    if (ui.histTab === 'cong') {
+      const lead = (new Date(y, m, 1).getDay() + 6) % 7;
       let cells = '';
       for (let i = 0; i < lead; i++) cells += '<div class="cal-cell"></div>';
       for (let d = 1; d <= last; d++) {
         const date = new Date(y, m, d), key = dayKey(date);
         const cls = ['cal-cell', 'tap', !isWorkday(date) && 'off', key > today && 'future', key === today && 'today', key === ui.histSel && 'sel'].filter(Boolean).join(' ');
-        cells += `<button class="${cls}" data-act="selday" data-key="${key}"><span class="n">${d}</span><span class="d ${dayDot(date)}"></span></button>`;
+        cells += `<button class="${cls}" data-act="selday" data-key="${key}"><span class="n">${d}</span><span class="d ${DOT[stOf(key).code] || ''}"></span></button>`;
       }
-      const st = monthStats(y, m);
-      const sel = fromKey(ui.histSel), s = daySummary(ui.histSel);
-      const future = ui.histSel > today, off = !isWorkday(sel);
-      const empty = future ? 'Chưa đến ngày' : off ? 'Ngày nghỉ' : onLeave(ui.histSel) ? 'Nghỉ phép / công tác' : 'Chưa chấm công';
-      const place = l => `${l.method} · ${esc(db.office.name.replace('Văn phòng', 'VP'))}${l.status === 'pending' ? ' · Chờ duyệt' : ''}`;
+      const ms = C.monthSummary({ logs: S.logs, reqs: S.reqs, y, m, shift: sh, startKey: startKey() });
+      const sel = fromKey(ui.histSel);
+      const st = stOf(ui.histSel), s = st.s;
+      const empty = { future: 'Chưa đến ngày', off: 'Ngày nghỉ', leave: 'Nghỉ phép', half: 'Nghỉ nửa ngày', trip: 'Công tác', absent: 'Vắng mặt' }[st.code] || 'Chưa chấm công';
+      const place = l => `${l.method}${l.status === 'pending' ? ' · Chờ duyệt' : ''}`;
       const inCard = s.in
         ? `<div class="day-card ${s.lateBy ? 'red' : 'green'}"><span class="l"><i class="icon-log-in"></i>Giờ vào</span><span class="t">${hm(s.in.ts)}</span><span class="s">${s.lateBy ? `Đi muộn ${s.lateBy} phút` : place(s.in)}</span></div>`
         : `<div class="day-card gray"><span class="l"><i class="icon-log-in"></i>Giờ vào</span><span class="t">--:--</span><span class="s">${empty}</span></div>`;
       const outCard = s.out
         ? `<div class="day-card blue"><span class="l"><i class="icon-log-out"></i>Giờ ra</span><span class="t">${hm(s.out.ts)}</span><span class="s">${s.earlyBy ? `Về sớm ${s.earlyBy} phút` : place(s.out)}</span></div>`
         : `<div class="day-card gray"><span class="l"><i class="icon-log-out"></i>Giờ ra</span><span class="t">--:--</span><span class="s">${s.in && ui.histSel < today ? 'Thiếu giờ ra' : empty}</span></div>`;
+      const needExplain = ['missing', 'absent'].includes(st.code) || (s.in && s.lateBy);
       body = `
-        <div class="hist-shift">Ca làm việc: <b>${esc(db.shift.name)} ${esc(db.shift.start)} – ${esc(db.shift.end)}</b></div>
+        <div class="hist-shift">Ca làm việc: <b>${esc(sh.name)} ${esc(sh.start)} – ${esc(sh.end)}</b></div>
         <div class="selects">
           <div class="select-box"><span>Tháng lương</span><b>Tháng ${m + 1}/${y}</b><i class="icon-chevron-down"></i>
-            <select data-act="month" aria-label="Chọn tháng">${months.map(([yy, mm]) => `<option value="${yy}-${mm}"${yy === y && mm === m ? ' selected' : ''}>Tháng ${mm + 1}/${yy}</option>`).join('')}</select>
-          </div>
+            <select data-act="month" aria-label="Chọn tháng">${months.map(([yy, mm]) => `<option value="${yy}-${mm}"${yy === y && mm === m ? ' selected' : ''}>Tháng ${mm + 1}/${yy}</option>`).join('')}</select></div>
           <div class="select-box"><span>Kỳ lương</span><b>01/${pad(m + 1)} – ${last}/${pad(m + 1)}</b><i class="icon-chevron-down"></i></div>
         </div>
         <div>
@@ -778,7 +823,7 @@
           <div class="cal">${cells}</div>
         </div>
         <div class="legend">
-          <span class="pill">Số công: ${st.full}/${st.work}</span>
+          <span class="pill">Số công: ${num(ms.work)}/${ms.workdays}</span>
           <span class="lg"><i style="background:var(--green)"></i>Đủ công</span>
           <span class="lg"><i style="background:var(--red)"></i>Thiếu / lỗi</span>
           <span class="lg"><i style="background:var(--amber)"></i>Nghỉ phép</span>
@@ -788,56 +833,87 @@
         ${s.extras.length ? `<div class="extra-logs">${s.extras.map(l => `
           <div class="log-item"><i class="icon-${l.kind === 'ot' ? 'timer' : 'shield-check'}"></i>
             <div class="main"><div class="t1">${KIND[l.kind].label}: ${hm(l.ts)}</div><div class="t2">${place(l)}</div></div></div>`).join('')}</div>` : ''}
-        ${!future && !off && (!s.in || !s.out || s.lateBy) ? `<button class="btn-outline" data-go="proposal/explain?issue=${encodeURIComponent(!s.in ? 'Quên chấm công vào' : !s.out ? 'Quên chấm công ra' : 'Đi muộn có lý do')}&date=${ui.histSel}"><i class="icon-file-pen-line"></i>Gửi giải trình cho ngày này</button>` : ''}`;
+        ${needExplain ? `<button class="btn-outline" data-go="proposal/explain?issue=${encodeURIComponent(!s.in ? 'Quên chấm công vào' : !s.out ? 'Quên chấm công ra' : 'Đi muộn có lý do')}&date=${ui.histSel}"><i class="icon-file-pen-line"></i>Gửi giải trình cho ngày này</button>` : ''}`;
     } else {
-      const ex = db.proposals.filter(p => p.type === 'explain').sort((a, b) => b.created - a.created);
-      body = `<div class="card list">${ex.length ? ex.map(proposalItem).join('') : '<div class="empty"><i class="icon-file-text"></i>Chưa có giải trình nào</div>'}</div>
+      const ex = S.reqs.filter(r => r.type === 'explain').sort((a, b) => b.created - a.created);
+      body = `${ex.length ? ex.map(reqCard).join('') : '<div class="card empty"><i class="icon-file-text"></i>Chưa có giải trình nào</div>'}
         <button class="btn-outline" data-go="proposal/explain"><i class="icon-file-pen-line"></i>Tạo giải trình mới</button>`;
     }
     $app.innerHTML = `<div class="screen white">
-      ${topbar('Lịch sử chấm công', { back: 'home', extra: `<div class="tabs2"><button class="${tab === 'cong' ? 'on' : ''}" data-act="htab" data-tab="cong">Bảng công</button><button class="${tab === 'gt' ? 'on' : ''}" data-act="htab" data-tab="gt">Giải trình</button></div>` })}
+      ${topbar('Lịch sử chấm công', { back: 'home', extra: `<div class="tabs2"><button class="${ui.histTab === 'cong' ? 'on' : ''}" data-act="htab" data-tab="cong">Bảng công</button><button class="${ui.histTab === 'gt' ? 'on' : ''}" data-act="htab" data-tab="gt">Giải trình</button></div>` })}
       <div class="hist">${body}</div>
     </div>`;
-    const ms = $app.querySelector('select[data-act="month"]');
-    if (ms) ms.onchange = () => { const [yy, mm] = ms.value.split('-').map(Number); ui.histMonth = { y: yy, m: mm }; ui.histSel = null; renderHistory(); };
+    const msel = $app.querySelector('select[data-act="month"]');
+    if (msel) msel.onchange = () => { const [yy, mm] = msel.value.split('-').map(Number); ui.histMonth = { y: yy, m: mm }; ui.histSel = null; renderHistory(); };
   }
 
   // ---------------------------------------------------------------- profile
   function renderProfile() {
-    const p = db.profile, now = new Date();
-    const st = monthStats(now.getFullYear(), now.getMonth());
-    const device = deviceName();
-    const meta = [p.code && `Mã NV: ${p.code}`, p.dept].filter(Boolean).join(' · ') || p.role;
+    const u = S.user, now = new Date(), sh = shift();
+    const ms = C.monthSummary({ logs: S.logs, reqs: S.reqs, y: now.getFullYear(), m: now.getMonth(), shift: sh, startKey: startKey() });
+    const meta = [u.code && `Mã NV: ${u.code}`, u.dept].filter(Boolean).join(' · ') || u.title;
     $app.innerHTML = `<div class="screen with-tabs">
       <div class="profile-hero">
-        <div class="avatar">${esc(initials(p.name))}</div>
-        <div class="nm">${esc(p.name)}</div>
+        <div class="avatar">${esc(initials(u.name))}</div>
+        <div class="nm">${esc(u.name)}</div>
         <div class="meta">${esc(meta)}</div>
+        <div class="role-pill">${isAdmin() ? '<i class="icon-shield-check"></i>Quản trị' : '<i class="icon-user-round"></i>Nhân viên'} · ${esc(S.company.name)}</div>
       </div>
       <div class="content" style="margin-top:-50px">
         <div class="card raised pstats">
-          <div><div class="v" style="color:var(--orange)">${String(leaveLeft()).replace('.', ',')}</div><div class="l">Ngày phép<br>còn lại</div></div>
-          <div><div class="v" style="color:var(--green)">${st.full}<small>/${st.work}</small></div><div class="l">Số công<br>tháng này</div></div>
-          <div><div class="v" style="color:var(--red)">${st.late}</div><div class="l">Số lần<br>đi muộn</div></div>
+          <div><div class="v" style="color:var(--orange)">${num(leaveLeft())}</div><div class="l">Ngày phép<br>còn lại</div></div>
+          <div><div class="v" style="color:var(--green)">${num(ms.work)}<small>/${ms.workdays}</small></div><div class="l">Số công<br>tháng này</div></div>
+          <div><div class="v" style="color:var(--red)">${ms.late}</div><div class="l">Số lần<br>đi muộn</div></div>
         </div>
+        ${isAdmin() ? '<a class="card list-row tap admin-row" href="admin.html"><i class="icon-layout-dashboard lead"></i><span class="name">Trang quản trị</span><span class="val">Mở</span><i class="icon-chevron-right"></i></a>' : ''}
         <div class="card list">
-          ${[
-            ['user-round-pen', 'Thông tin cá nhân', '', 'settings/profile'],
-            ['calendar-clock', 'Ca làm việc', `${db.shift.start} – ${db.shift.end}`, 'settings/shift'],
-            ['building-2', 'Văn phòng chấm công', `${db.office.radius}m`, 'settings/office'],
-            ['smartphone', 'Thiết bị đăng ký', device, ''],
-            ['languages', 'Ngôn ngữ', 'Tiếng Việt', ''],
-            ['download', 'Xuất bảng công (CSV)', '', '']
-          ].map(([icon, name, val, to], i) => `
-            <button class="list-row tap" ${to ? `data-go="${to}"` : `data-act="${['', '', '', 'device', 'lang', 'csv'][i]}"`}>
-              <i class="icon-${icon} lead"></i><span class="name">${name}</span><span class="val">${esc(val)}</span><i class="icon-chevron-right"></i>
-            </button>`).join('')}
+          <button class="list-row tap" data-go="info"><i class="icon-user-round-pen lead"></i><span class="name">Thông tin cá nhân</span><span class="val"></span><i class="icon-chevron-right"></i></button>
+          <button class="list-row tap" data-go="info"><i class="icon-calendar-clock lead"></i><span class="name">Ca làm việc</span><span class="val">${esc(sh.start)} – ${esc(sh.end)}</span><i class="icon-chevron-right"></i></button>
+          <button class="list-row tap" data-go="password"><i class="icon-lock-keyhole lead"></i><span class="name">Đổi mật khẩu</span><span class="val"></span><i class="icon-chevron-right"></i></button>
+          <button class="list-row tap" data-act="faceid" id="faceRow" hidden><i class="icon-scan-face lead"></i><span class="name">Đăng nhập bằng Face ID</span><span class="val">${faceOn() ? 'Đang bật' : 'Đang tắt'}</span><i class="icon-chevron-right"></i></button>
+          <button class="list-row tap" data-act="device"><i class="icon-smartphone lead"></i><span class="name">Thiết bị đăng ký</span><span class="val">${esc(deviceName())}</span><i class="icon-chevron-right"></i></button>
+          <button class="list-row tap" data-act="lang"><i class="icon-languages lead"></i><span class="name">Ngôn ngữ</span><span class="val">Tiếng Việt</span><i class="icon-chevron-right"></i></button>
         </div>
         <div class="card list"><button class="list-row danger tap" data-act="logout"><i class="icon-log-out" style="font-size:20px"></i><span class="name">Đăng xuất</span></button></div>
-        <div class="version">Phiên bản ${VERSION}</div>
+        <div class="version">Phiên bản ${VERSION}${API.mode === 'demo' ? ' · Chế độ dùng thử' : ''}</div>
       </div>
       ${tabbar('profile')}
     </div>`;
+    faceAvailable().then(ok => { const r = document.getElementById('faceRow'); if (r) r.hidden = !ok; });
+  }
+  function renderInfo() {
+    const u = S.user, sh = shift();
+    const locs = myLocations().map(l => l.name).join(', ') || '—';
+    const rows = [['Họ và tên', u.name], ['Mã nhân viên', u.code || '—'], ['Tài khoản', u.account || '—'], ['Phòng ban', u.dept || '—'], ['Chức danh', u.title || '—'],
+      ['Quyền', C.ROLES[u.role] || u.role], ['Công ty', `${S.company.name} (${S.company.code})`], ['Ca làm việc', `${sh.name} ${sh.start} – ${sh.end}`],
+      ['Ngày làm việc', (sh.workdays || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => DOW_SHORT[i]).join(', ')], ['Địa điểm chấm công', locs],
+      ['Phép năm', `${u.leaveTotal ?? S.company.settings.leavePerYear} ngày`]];
+    $app.innerHTML = `<div class="screen">
+      ${topbar('Thông tin cá nhân', { back: 'profile' })}
+      <div class="content" style="padding-top:20px;padding-bottom:24px">
+        <div class="card kv2">${rows.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>
+        <div class="hint" style="padding:0 4px">Thông tin do bộ phận nhân sự quản lý. Cần sửa, hãy liên hệ quản trị.</div>
+      </div>
+    </div>`;
+  }
+  function renderPassword() {
+    $app.innerHTML = `<div class="screen">
+      ${topbar('Đổi mật khẩu', { back: 'profile' })}
+      <form class="form" id="pwForm">
+        <div class="field"><label for="pw0">Mật khẩu hiện tại</label><input id="pw0" name="old" type="password" required autocomplete="current-password"></div>
+        <div class="field"><label for="pw1">Mật khẩu mới</label><input id="pw1" name="new1" type="password" required minlength="6" autocomplete="new-password" placeholder="Ít nhất 6 ký tự"></div>
+        <div class="field"><label for="pw2">Nhập lại mật khẩu mới</label><input id="pw2" name="new2" type="password" required autocomplete="new-password"></div>
+        <button class="btn-primary" type="submit">Đổi mật khẩu</button>
+      </form>
+    </div>`;
+    const f = document.getElementById('pwForm');
+    f.addEventListener('submit', e => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(f));
+      if (d.new1.length < 6) return toast('Mật khẩu cần ít nhất 6 ký tự');
+      if (d.new1 !== d.new2) return toast('Hai mật khẩu mới không khớp');
+      busy(f.querySelector('[type=submit]'), async () => { await API.changePassword(d.old, d.new1); toast('Đã đổi mật khẩu'); go('profile'); });
+    });
   }
   function deviceName() {
     const ua = navigator.userAgent;
@@ -849,116 +925,61 @@
     return 'Trình duyệt';
   }
 
-  function renderSettings(which) {
-    let title, fields;
-    if (which === 'profile') {
-      const p = db.profile;
-      title = 'Thông tin cá nhân';
-      fields = `
-        <div class="field"><label>Họ và tên <em>*</em></label><input name="name" required value="${esc(p.name)}"></div>
-        <div class="row2"><div class="field"><label>Mã nhân viên</label><input name="code" value="${esc(p.code)}"></div>
-        <div class="field"><label>Phòng ban</label><input name="dept" value="${esc(p.dept)}"></div></div>
-        <div class="field"><label>Chức danh</label><input name="role" value="${esc(p.role)}"></div>
-        <div class="field"><label>Số ngày phép/năm</label><input type="number" name="leaveTotal" min="0" max="60" step="0.5" value="${db.leaveTotal}"></div>`;
-    } else if (which === 'shift') {
-      const s = db.shift;
-      title = 'Ca làm việc';
-      fields = `
-        <div class="field"><label>Tên ca</label><input name="name" required value="${esc(s.name)}"></div>
-        <div class="row2"><div class="field"><label>Giờ vào ca</label><input type="time" name="start" required value="${esc(s.start)}"></div>
-        <div class="field"><label>Giờ ra ca</label><input type="time" name="end" required value="${esc(s.end)}"></div></div>
-        <div class="field"><label>Ngày làm việc</label><div class="workdays">${[1, 2, 3, 4, 5, 6, 0].map(i => `<label><input type="checkbox" name="wd" value="${i}"${s.workdays.includes(i) ? ' checked' : ''}>${DOW_SHORT[i]}</label>`).join('')}</div></div>
-        <div class="field"><div class="hint">Chấm vào sau giờ vào ca được tính là đi muộn; chấm ra trước giờ ra ca được tính là về sớm.</div></div>`;
-    } else if (which === 'office') {
-      const o = db.office;
-      title = 'Văn phòng chấm công';
-      fields = `
-        <div class="field"><label>Tên địa điểm <em>*</em></label><input name="name" required value="${esc(o.name)}"></div>
-        <div class="field"><label>Địa chỉ</label><textarea name="address" style="min-height:72px">${esc(o.address)}</textarea></div>
-        <div class="row2"><div class="field"><label>Vĩ độ (lat) <em>*</em></label><input name="lat" inputmode="decimal" required value="${o.lat}"></div>
-        <div class="field"><label>Kinh độ (lng) <em>*</em></label><input name="lng" inputmode="decimal" required value="${o.lng}"></div></div>
-        <button type="button" class="btn-outline" id="useHere"><i class="icon-locate-fixed"></i>Dùng vị trí hiện tại của tôi</button>
-        <div class="field"><label>Bán kính chấm công: <b id="rv">${o.radius}</b>m</label><input type="range" name="radius" min="50" max="500" step="10" value="${o.radius}" style="padding:0;min-height:32px;border:0;accent-color:#F2572B;appearance:auto;-webkit-appearance:auto"></div>
-        <div class="field"><label>Tên Wifi văn phòng</label><input name="wifi" value="${esc(o.wifi)}" placeholder="VD: Office-5G"></div>
-        <div class="field"><div class="hint">Mẹo: đứng tại văn phòng rồi bấm "Dùng vị trí hiện tại", hoặc chép toạ độ từ Google Maps (nhấn giữ vào bản đồ để lấy toạ độ).</div></div>`;
-    } else return go('profile');
-    $app.innerHTML = `<div class="screen">
-      ${topbar(title, { back: 'profile' })}
-      <form class="form" id="sForm">${fields}<button class="btn-primary" type="submit" style="margin-top:6px">Lưu</button></form>
-    </div>`;
-    const form = document.getElementById('sForm');
-    const range = form.querySelector('input[type=range]');
-    if (range) range.oninput = () => { document.getElementById('rv').textContent = range.value; };
-    const here = document.getElementById('useHere');
-    if (here) here.onclick = () => {
-      here.innerHTML = '<i class="icon-loader-circle spin"></i>Đang định vị...';
-      if (!('geolocation' in navigator) || !window.isSecureContext) { toast(geoErrText(null)); here.innerHTML = '<i class="icon-locate-fixed"></i>Dùng vị trí hiện tại của tôi'; return; }
-      navigator.geolocation.getCurrentPosition(p => {
-        form.lat.value = p.coords.latitude.toFixed(6); form.lng.value = p.coords.longitude.toFixed(6);
-        here.innerHTML = `<i class="icon-check"></i>Đã lấy vị trí (±${Math.round(p.coords.accuracy)}m)`;
-      }, e => { toast(geoErrText(e)); here.innerHTML = '<i class="icon-locate-fixed"></i>Dùng vị trí hiện tại của tôi'; }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
-    };
-    form.addEventListener('submit', e => {
-      e.preventDefault();
-      const fd = new FormData(form), f = Object.fromEntries(fd);
-      if (which === 'profile') {
-        db.profile = { name: f.name.trim(), code: f.code.trim(), dept: f.dept.trim(), role: f.role.trim() };
-        db.leaveTotal = Math.max(0, Number(f.leaveTotal) || 0);
-      } else if (which === 'shift') {
-        if (f.end <= f.start) return toast('Giờ ra ca phải sau giờ vào ca');
-        db.shift = { name: f.name.trim(), start: f.start, end: f.end, workdays: fd.getAll('wd').map(Number) };
-      } else {
-        const lat = Number(String(f.lat).replace(',', '.')), lng = Number(String(f.lng).replace(',', '.'));
-        if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180) || Number.isNaN(lat) || Number.isNaN(lng)) return toast('Toạ độ không hợp lệ');
-        db.office = { name: f.name.trim(), address: f.address.trim(), lat, lng, radius: Number(f.radius), wifi: f.wifi.trim() };
-      }
-      save(); toast('Đã lưu'); go('profile');
-    });
-  }
-
-  function exportCsv() {
-    const rows = [['Ngày', 'Giờ', 'Loại', 'Phương thức', 'Khoảng cách (m)', 'Độ chính xác (m)', 'Trạng thái']];
-    [...db.logs].sort((a, b) => a.ts - b.ts).forEach(l => rows.push([dmy(l.ts), hm(l.ts), KIND[l.kind].type, l.method, l.dist ?? '', l.acc ?? '', l.status === 'ok' ? 'Thành công' : 'Chờ phê duyệt']));
-    const csv = '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `bang-cong-${dayKey(new Date())}.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  }
-
   // ---------------------------------------------------------------- events
   document.addEventListener('click', e => {
     const g = e.target.closest('[data-go]');
     if (g && $app.contains(g)) { e.preventDefault(); go(g.dataset.go); return; }
     const a = e.target.closest('[data-act]');
     if (!a || a.tagName === 'SELECT') return;
-    const act = a.dataset.act;
-    switch (act) {
-      case 'back': go(a.dataset.to || 'home'); break;
-      case 'go': go(a.dataset.to); break;
+    switch (a.dataset.act) {
       case 'popup': showMethodPopup(a.dataset.kind); break;
-      case 'locate': geo.err = null; locateOnce(); { const el = document.getElementById('locLine'); if (el) el.innerHTML = '<span class="loc-line idle"><span class="pulse"></span>Đang xác định vị trí...</span>'; } break;
-      case 'readall': db.notis.forEach(n => { n.read = true; }); save(); renderNotis(); toast('Đã đánh dấu tất cả là đã đọc'); break;
-      case 'readone': { const n = db.notis.find(x => x.id === a.dataset.id); if (n && !n.read) { n.read = true; save(); a.classList.remove('unread'); if (!db.notis.some(x => !x.read)) renderNotis(); } break; }
+      case 'locate': {
+        geo.err = null; locateOnce();
+        const el = document.getElementById('locLine');
+        if (el) el.innerHTML = '<span class="loc-line idle"><span class="pulse"></span>Đang xác định vị trí...</span>';
+        break;
+      }
+      case 'readall':
+        API.markAllRead().then(() => { S.notis.forEach(n => { n.read = true; }); renderNotis(); toast('Đã đánh dấu tất cả là đã đọc'); }).catch(err => toast(errMsg(err)));
+        break;
+      case 'readone': {
+        const n = S.notis.find(x => x.id === a.dataset.id);
+        if (n && !n.read) { n.read = true; a.classList.remove('unread'); API.markRead(n.id).catch(() => {}); if (!unreadCount()) renderNotis(); }
+        break;
+      }
       case 'htab': ui.histTab = a.dataset.tab; renderHistory(); break;
       case 'selday': ui.histSel = a.dataset.key; renderHistory(); break;
-      case 'delprop': confirmDialog('Hủy đề xuất', 'Bạn có chắc muốn hủy đề xuất này?', 'Hủy đề xuất', () => {
-        db.proposals = db.proposals.filter(p => p.id !== a.dataset.id); save(); render();
-      }, true); break;
+      case 'reqtab': ui.reqTab = a.dataset.tab; renderMyRequests(); break;
       case 'device': toast(`Thiết bị đang dùng: ${deviceName()}`); break;
       case 'lang': toast('Hiện ứng dụng hỗ trợ Tiếng Việt'); break;
-      case 'csv': exportCsv(); break;
-      case 'demo': seedDemo(); go('home'); render(); toast('Đã tạo dữ liệu mẫu'); break;
-      case 'logout': confirmDialog('Đăng xuất', 'Dữ liệu chấm công lưu trên máy này sẽ bị xoá. Hãy xuất bảng công (CSV) trước nếu cần giữ lại.', 'Đăng xuất', () => {
-        try { localStorage.removeItem(KEY); } catch (err) { /* ignore */ }
-        db = defaults(); location.hash = ''; render();
-      }, true); break;
+      case 'faceid':
+        if (faceOn()) confirmDialog('Face ID', 'Tắt đăng nhập bằng Face ID trên máy này?', 'Tắt', () => { lsSet(FACE_KEY, null); renderProfile(); });
+        else faceRegister(S.user, S.user.account).then(() => { toast('Đã bật đăng nhập bằng Face ID'); renderProfile(); }).catch(() => toast('Chưa bật được Face ID trên máy này'));
+        break;
+      case 'logout': confirmDialog('Đăng xuất', 'Bạn có chắc muốn đăng xuất khỏi tài khoản này?', 'Đăng xuất', () => { lsSet(FACE_KEY, null); signOut(); }); break;
     }
   });
 
+  // Tải lại dữ liệu khi quay lại app (đơn có thể vừa được duyệt).
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !S.session || S.locked || Date.now() - S.loadedAt < 30e3) return;
+    const p = route().parts[0];
+    loadAll().then(() => { if (['home', 'notis', 'requests', 'proposals', 'history', 'profile'].includes(p)) render(); }).catch(() => {});
+  });
+
   // ---------------------------------------------------------------- boot
-  render();
+  (async () => {
+    $app.innerHTML = '<div class="boot"><div class="logo"><i class="icon-scan-face"></i></div></div>';
+    try {
+      S.session = await API.ready();
+      if (S.session) {
+        S.user = S.session.user;
+        await loadAll();
+        if (faceOn() && await faceAvailable()) S.locked = true;
+      }
+    } catch (e) { S.session = null; toast(errMsg(e)); }
+    render();
+  })();
   if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }

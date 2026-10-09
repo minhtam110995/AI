@@ -1,0 +1,78 @@
+rules_version = '2';
+// Luật phân quyền ChấmCông Go. Dán toàn bộ file này vào Firebase Console › Firestore › Rules.
+//  - Nhân viên: chấm công cho chính mình (giờ lấy theo máy chủ), xem dữ liệu của mình, gửi/huỷ đơn.
+//  - Quản trị: xem và sửa mọi dữ liệu trong công ty, duyệt đơn, quản lý nhân viên, địa điểm, ca.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /companies/{cid} {
+      function signedIn() { return request.auth != null; }
+      function me() { return get(/databases/$(database)/documents/companies/$(cid)/users/$(request.auth.uid)).data; }
+      function isMember() {
+        return signedIn() && exists(/databases/$(database)/documents/companies/$(cid)/users/$(request.auth.uid)) && me().active == true;
+      }
+      function isAdmin() { return isMember() && me().role == 'admin'; }
+      function owner() { return get(/databases/$(database)/documents/companies/$(cid)).data.ownerUid; }
+      function onlyKeys(keys) { return request.resource.data.keys().hasOnly(keys); }
+
+      // Công ty: ai cũng tạo được công ty mới (mã chưa có) và trở thành chủ.
+      allow read: if isMember();
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAdmin() && request.resource.data.ownerUid == resource.data.ownerUid
+                    && request.resource.data.code == resource.data.code;
+
+      match /users/{uid} {
+        allow read: if isMember() || (signedIn() && request.auth.uid == uid);
+        // Chủ công ty tự tạo hồ sơ quản trị đầu tiên; sau đó chỉ quản trị thêm người.
+        allow create: if isAdmin()
+                      || (signedIn() && request.auth.uid == uid && owner() == uid && request.resource.data.role == 'admin');
+        allow update: if isAdmin()
+                      && (uid != owner() || (request.resource.data.role == 'admin' && request.resource.data.active == true));
+        allow delete: if isAdmin() && uid != owner();
+      }
+
+      match /locations/{id} {
+        allow read: if isMember();
+        allow write: if isAdmin();
+      }
+      match /shifts/{id} {
+        allow read: if isMember();
+        allow write: if isAdmin() || (signedIn() && owner() == request.auth.uid);
+      }
+
+      match /logs/{id} {
+        allow read: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
+        // Nhân viên chỉ chấm cho chính mình, thời điểm phải là giờ máy chủ.
+        allow create: if isAdmin()
+                      || (isMember() && request.resource.data.uid == request.auth.uid
+                          && request.resource.data.ts == request.time
+                          && request.resource.data.kind in ['in', 'out', 'ot', 'duty']
+                          && request.resource.data.status in ['ok', 'pending']);
+        allow update, delete: if isAdmin();
+      }
+
+      match /requests/{id} {
+        allow read: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
+        allow create: if isMember() && request.resource.data.uid == request.auth.uid
+                      && request.resource.data.status == 'pending';
+        allow update: if isAdmin() && request.resource.data.uid == resource.data.uid;
+        allow delete: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid && resource.data.status == 'pending');
+      }
+
+      match /attachments/{id} {
+        allow read: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
+        allow create: if isMember() && request.resource.data.uid == request.auth.uid
+                      && request.resource.data.data is string && request.resource.data.data.size() < 900000;
+        allow delete: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
+      }
+
+      match /notis/{id} {
+        allow read: if isMember() && resource.data.uid == request.auth.uid;
+        allow create: if isMember() && onlyKeys(['uid', 'text', 'read', 'ts']) && request.resource.data.read == false
+                      && request.resource.data.ts == request.time && request.resource.data.text.size() < 600;
+        allow update: if isMember() && resource.data.uid == request.auth.uid
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow delete: if isMember() && resource.data.uid == request.auth.uid;
+      }
+    }
+  }
+}
