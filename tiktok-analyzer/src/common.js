@@ -21,6 +21,7 @@ const TTA = (() => {
       createTime: num(it.createTime),
       duration: num(it.video?.duration),
       cover: it.video?.cover || it.video?.originCover || '',
+      playUrls: playUrlsOf(it),
       music: it.music ? `${it.music.title || ''}${it.music.authorName ? ' – ' + it.music.authorName : ''}` : '',
       isAd: !!(it.isAd || it.adLabelVersion),
       branded: !!(it.brandOrganicType || it.isPaidPartnership || it.paidPartnership || it.brandedContentType),
@@ -37,6 +38,15 @@ const TTA = (() => {
       products: shopProducts(it),
       seenAt: Date.now(),
     };
+  }
+
+  // Các địa chỉ phát video mà TikTok gửi kèm (chỉ dùng để xem, không lưu lâu dài)
+  function playUrlsOf(it) {
+    const v = it?.video || {};
+    const out = [v.playAddr, v.downloadAddr];
+    (v.bitrateInfo || []).forEach((b) => (b.PlayAddr?.UrlList || b.playAddr?.urlList || []).forEach((u) => out.push(u)));
+    (v.PlayAddrStruct?.UrlList || []).forEach((u) => out.push(u));
+    return [...new Set(out.filter((u) => typeof u === 'string' && /^https?:/.test(u)))].slice(0, 6);
   }
 
   // "199.000₫" → 199000, "₫1,2tr" → 1200000, số giữ nguyên
@@ -292,6 +302,6 @@ const TTA = (() => {
   return {
     extract, normalizeVideo, normalizeUser, engagement, er, fmt, pct, median, fmtDate, load, toCSV, download,
     hookType, formatType, isIntent, isQuestion, phrases, hookText, viewVelocity, HOOKS, FORMATS,
-    parseMoney, parseCount, productKey, normalizeProduct,
+    parseMoney, parseCount, productKey, normalizeProduct, playUrlsOf,
   };
 })();

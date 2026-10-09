@@ -25,6 +25,16 @@ Tiện ích cũng ghi dữ liệu khi bạn xem trang hashtag, trang tìm kiếm
 - **Bộ lọc:** theo kênh, khoảng thời gian, từ khoá hoặc hashtag.
 - **Xuất CSV** (mở được bằng Excel hoặc Google Sheets) và **sao lưu/nhập JSON** để chuyển dữ liệu sang máy khác.
 
+## ▶ Xem video gắn giỏ trên máy tính (bản 1.5)
+Khi TikTok báo video gắn giỏ "chỉ xem được trên ứng dụng", tiện ích tự gắn nút **▶ Xem trên máy tính** ngay chỗ thông báo. Ngoài ra, khi đang mở một video, bạn có thể bấm biểu tượng tiện ích và chọn **▶ Xem video này trên máy tính**.
+
+Video phát trong khung riêng, kèm tên sản phẩm gắn giỏ. Tiện ích phát video theo thứ tự sau:
+1. Dùng địa chỉ video TikTok đã gửi về trang.
+2. Nếu địa chỉ đó hết hạn, lấy địa chỉ mới.
+3. Nếu vẫn không phát được, dùng trình phát nhúng chính thức của TikTok.
+
+Tiện ích chỉ hỗ trợ **xem**, không tải video xuống.
+
 ## 🤝 Nhà sáng tạo – số liệu thật từ Trung tâm liên kết TikTok Shop (bản 1.4)
 Chỉ cần **tài khoản người bán TikTok Shop của bạn**, không cần đăng nhập tài khoản của từng creator.
 1. Đăng nhập [affiliate.tiktok.com](https://affiliate.tiktok.com), vào **Khám phá các nhà sáng tạo → Tìm nhà sáng tạo** (hoặc Bảng xếp hạng), rồi chọn bộ lọc ngành.

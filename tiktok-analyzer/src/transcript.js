@@ -123,5 +123,5 @@ const Transcript = (() => {
     };
   }
 
-  return { getOriginal, parseLink, parseCaption, listTracks };
+  return { getOriginal, parseLink, parseCaption, listTracks, fetchPageItem };
 })();

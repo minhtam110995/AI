@@ -8,6 +8,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   }
 
   // Lấy nội dung gốc (caption + lời thoại) của 1 video, lưu kèm vào dữ liệu video.
+  // Lấy địa chỉ phát mới nhất của 1 video (dùng cho trình phát video gắn giỏ)
+  if (msg.type === 'getPlayUrls') {
+    Transcript.fetchPageItem(`https://www.tiktok.com/@${msg.author || '_'}/video/${msg.id}`, String(msg.id))
+      .then((item) => reply({ ok: true, urls: TTA.playUrlsOf(item), cover: item.video?.cover || '' }))
+      .catch((e) => reply({ ok: false, error: e.message }));
+    return true;
+  }
   if (msg.type === 'getOriginal') {
     Transcript.getOriginal(msg)
       .then((r) => new Promise((done) => {

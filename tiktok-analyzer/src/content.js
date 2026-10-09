@@ -86,7 +86,8 @@
         if (prev?.products?.length && !v.products?.length) merged.products = prev.products;
         if (prev?.hasSpeech && !v.hasSpeech) merged.hasSpeech = true;
         if (prev?.authorFollowers && v.authorFollowers == null) merged.authorFollowers = prev.authorFollowers;
-        store.videos[v.id] = merged;
+        const { playUrls, ...toStore } = merged; // địa chỉ phát có hạn dùng, chỉ giữ trong phiên
+        store.videos[v.id] = toStore;
         mem.set(v.id, merged);
       }
       for (const u of newUsers) {
@@ -167,7 +168,83 @@
   let decoTimer = null;
   const scheduleDecorate = () => { clearTimeout(decoTimer); decoTimer = setTimeout(decorate, 500); };
 
+  // ---------- xem video gắn giỏ bị chặn trên web ----------
+  const BLOCKED = /(chỉ (có thể )?xem (được )?trên ứng dụng|không (khả dụng|xem được|hỗ trợ) (trên|ở) (web|máy tính|trình duyệt)|xem (video )?(này )?trên ứng dụng tiktok|not available on (the )?web|only (available|viewable) (on|in) the (tiktok )?app|watch (it )?(on|in) the (tiktok )?app|open (it )?in the tiktok app)/i;
+  function videoIdNear(el) {
+    const onPage = (location.pathname.match(/\/video\/(\d+)/) || [])[1];
+    let node = el;
+    for (let i = 0; i < 12 && node && node !== document.body; i++) {
+      const a = node.querySelector?.('a[href*="/video/"]');
+      const id = (a?.getAttribute('href').match(/\/video\/(\d+)/) || [])[1] || (node.id?.match(/(\d{15,22})/) || [])[1];
+      if (id) return id;
+      node = node.parentElement;
+    }
+    return onPage || null;
+  }
+  function fixBlocked() {
+    if (!document.body) return;
+    // Duyệt các đoạn chữ ngắn (nhanh hơn đọc nội dung của từng khối lớn)
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.nodeValue.length > 8 && n.nodeValue.length < 220 && BLOCKED.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
+    });
+    const hits = [];
+    while (walker.nextNode()) hits.push(walker.currentNode.parentElement);
+    for (const el of hits) {
+      if (!el || el.dataset.ttaPlay || el.closest('#tta-player')) continue;
+      const id = videoIdNear(el);
+      if (!id) continue;
+      el.dataset.ttaPlay = id;
+      const btn = document.createElement('button');
+      btn.className = 'tta-play';
+      btn.textContent = '▶ Xem trên máy tính (TikTok Analyzer)';
+      btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openPlayer(id); }, true);
+      el.insertAdjacentElement('afterend', btn);
+    }
+  }
+
+  async function openPlayer(id) {
+    document.getElementById('tta-player')?.remove();
+    const v = mem.get(id) || {};
+    const box = document.createElement('div');
+    box.id = 'tta-player';
+    box.innerHTML = `<div class="tta-pl-inner"><div class="tta-pl-head"><span>▶ ${(v.author ? '@' + v.author + ' · ' : '')}${String(v.desc || '').replace(/</g, '&lt;').slice(0, 80)}</span><button class="tta-pl-x" title="Đóng">✕</button></div>
+      <video controls autoplay playsinline ${v.cover ? `poster="${v.cover}"` : ''}></video><div class="tta-pl-msg">Đang tải video…</div>
+      ${v.products?.length ? `<div class="tta-pl-prod">🛒 ${v.products.map((p) => p.title).join(' · ').replace(/</g, '&lt;').slice(0, 160)}</div>` : ''}</div>`;
+    document.body.appendChild(box);
+    const close = () => { box.querySelector('video')?.pause(); box.remove(); document.removeEventListener('keydown', esc); };
+    const esc = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', esc);
+    box.querySelector('.tta-pl-x').onclick = close;
+    box.addEventListener('click', (e) => { if (e.target === box) close(); });
+    const video = box.querySelector('video');
+    const msg = box.querySelector('.tta-pl-msg');
+    let urls = [...(v.playUrls || [])];
+    let fresh = false;
+    const tryNext = async () => {
+      if (!urls.length && !fresh) {
+        fresh = true;
+        msg.textContent = 'Đang lấy địa chỉ video mới…';
+        const r = await chrome.runtime.sendMessage({ type: 'getPlayUrls', id, author: v.author });
+        if (r?.ok) urls = r.urls;
+      }
+      const u = urls.shift();
+      if (u) { video.src = u; video.play().catch(() => {}); return; }
+      // Không phát trực tiếp được: thử trình phát nhúng chính thức của TikTok
+      video.remove();
+      msg.innerHTML = 'Không phát trực tiếp được, đang thử trình phát nhúng của TikTok… Nếu vẫn không xem được, video này chỉ xem được trong ứng dụng.';
+      const f = document.createElement('iframe');
+      f.src = `https://www.tiktok.com/player/v1/${id}?autoplay=1&controls=1&music_info=1&description=1`;
+      f.allow = 'autoplay; fullscreen; encrypted-media';
+      box.querySelector('.tta-pl-inner').insertBefore(f, msg);
+    };
+    video.addEventListener('error', tryNext);
+    video.addEventListener('playing', () => { msg.textContent = ''; });
+    video.addEventListener('loadeddata', () => { msg.textContent = ''; });
+    tryNext();
+  }
+
   function decorate() {
+    fixBlocked();
     for (const a of document.querySelectorAll('a[href*="/video/"]')) {
       const id = (a.getAttribute('href').match(/\/video\/(\d+)/) || [])[1];
       const v = id && mem.get(id);
@@ -198,6 +275,15 @@
   style.textContent = `
     .tta-badge{position:absolute;left:4px;top:4px;right:4px;z-index:3;background:rgba(18,18,20,.82);color:#fff;font:600 11px/1.3 system-ui,sans-serif;padding:3px 6px;border-radius:6px;pointer-events:none;white-space:normal}
     .tta-badge.tta-hot{box-shadow:0 0 0 2px #fe2c55}
+    .tta-play{display:block;margin:12px auto 0;padding:10px 16px;border:0;border-radius:999px;background:#fe2c55;color:#fff;font:700 14px system-ui,sans-serif;cursor:pointer;position:relative;z-index:20;pointer-events:auto}
+    #tta-player{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center}
+    #tta-player .tta-pl-inner{background:#121214;border-radius:12px;padding:10px;width:min(440px,92vw);color:#fff;font:13px system-ui,sans-serif}
+    #tta-player .tta-pl-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px}
+    #tta-player .tta-pl-head span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    #tta-player .tta-pl-x{background:#333;color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer}
+    #tta-player video,#tta-player iframe{width:100%;aspect-ratio:9/16;max-height:78vh;background:#000;border:0;border-radius:8px;display:block}
+    #tta-player .tta-pl-msg{color:#bbb;font-size:12px;margin-top:6px;min-height:14px}
+    #tta-player .tta-pl-prod{margin-top:6px;color:#25f4ee;font-size:12px}
   `;
   (document.head || document.documentElement).appendChild(style);
 
@@ -288,6 +374,7 @@
     if (msg.type === 'autoscroll') { autoScroll(msg.times || 20); reply({ ok: true }); }
     if (msg.type === 'stopScroll') { scrolling = false; reply({ ok: true }); }
     if (msg.type === 'comments') { collectComments(msg.max || 500); reply({ ok: true }); }
+    if (msg.type === 'play') { const id = msg.id || currentVideo(); if (id) openPlayer(id); reply({ ok: !!id }); }
     if (msg.type === 'flushNow') { readProductPage(); setTimeout(() => { flush(); setTimeout(() => reply({ ok: true }), 1500); }, 300); return true; }
   });
 })();

@@ -38,7 +38,7 @@ async function init() {
     try {
       const ctx = await chrome.tabs.sendMessage(tab.id, { type: 'context' });
       profile = ctx?.profile || '';
-      if (ctx?.video) $('#cmts').classList.remove('hidden');
+      if (ctx?.video) { $('#cmts').classList.remove('hidden'); $('#play').classList.remove('hidden'); }
       if (profile) {
         const { watchChannels = [] } = await chrome.storage.local.get('watchChannels');
         $('#watchCh').textContent = watchChannels.includes(profile) ? `★ Đang theo dõi @${profile} (bấm để bỏ)` : `⭐ Theo dõi kênh @${profile}`;
@@ -60,6 +60,7 @@ $('#original').onclick = () => {
   const isVideo = /tiktok\.com\/.*\/(video|photo)\/\d+/.test(tab?.url || '');
   chrome.tabs.create({ url: chrome.runtime.getURL('original.html' + (isVideo ? '?link=' + encodeURIComponent(tab.url) : '')) });
 };
+$('#play').onclick = () => { chrome.tabs.sendMessage(tab.id, { type: 'play' }); window.close(); };
 $('#cmts').onclick = () => { chrome.tabs.sendMessage(tab.id, { type: 'comments', max: 500 }); window.close(); };
 $('#watchCh').onclick = async () => {
   const { watchChannels = [] } = await chrome.storage.local.get('watchChannels');
