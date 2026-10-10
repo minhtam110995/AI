@@ -1,4 +1,4 @@
 {
-  "firestore": { "rules": "firestore.rules" },
-  "hosting": { "public": ".", "ignore": ["firebase.json", "firestore.rules", "README.md", "**/.*"] }
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "hosting": { "public": ".", "ignore": ["firebase.json", "firestore.rules", "firestore.indexes.json", "README.md", "**/.*"] }
 }

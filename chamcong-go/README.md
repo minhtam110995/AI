@@ -56,12 +56,17 @@ npx http-server -p 8080        # mở http://localhost:8080 và http://localhost
 
 ## Dùng thật cho cả công ty (Firebase, miễn phí)
 
-Gói miễn phí (Spark) của Firebase đủ cho công ty khoảng vài chục người. Ảnh đính kèm được nén và lưu trong Firestore, nên **không cần** gói trả phí.
+Gói miễn phí (Spark) của Firebase đủ cho công ty khoảng 50 người (10 người dùng chưa tới 1/5 hạn mức đọc mỗi ngày); không cần thẻ thanh toán nên không bao giờ bị trừ tiền. Ảnh đính kèm được nén và lưu trong Firestore, nên **không cần** gói trả phí.
 
 1. Vào <https://console.firebase.google.com> › **Add project** (tạo dự án), tắt Google Analytics cũng được.
 2. **Build › Authentication › Get started › Sign-in method** › bật **Email/Password**.
 3. **Build › Firestore Database › Create database** › chọn vùng `asia-southeast1` (Singapore) › **Start in production mode**.
 4. Trong Firestore › tab **Rules**: xoá hết, dán toàn bộ nội dung file [`firestore.rules`](firestore.rules) › **Publish**.
+4b. *(Nên làm, 1 phút)* Firestore › tab **Indexes** › **Create index**, tạo 2 chỉ mục (Collection ID / trường / thứ tự):
+   - `logs`: `uid` Ascending, `day` Ascending
+   - `notis`: `uid` Ascending, `ts` Ascending
+
+   Chỉ mục giúp app chỉ tải dữ liệu 3 tháng gần nhất, nhanh và tiết kiệm lượt đọc. Chưa tạo thì app vẫn chạy (tải hết rồi lọc).
 5. **Project settings** (bánh răng) › **Your apps** › biểu tượng **Web `</>`** › đặt tên › **Register app**. Chép đoạn `firebaseConfig` hiện ra.
 6. Mở `config.js`, thay `firebase: null` bằng cấu hình vừa chép, ví dụ:
    ```js

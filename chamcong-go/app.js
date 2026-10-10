@@ -19,12 +19,18 @@
   const startKey = () => S.user && S.user.createdAt ? dayKey(S.user.createdAt) : null;
   const userName = uid => (S.users.find(u => u.uid === uid) || {}).name || '';
 
+  // Chỉ tải dữ liệu gần đây (tháng này và 2 tháng trước) cho nhẹ và tiết kiệm lượt đọc;
+  // tháng cũ hơn được tải khi mở lịch sử tháng đó.
   async function loadAll() {
-    const [company, users, locations, shifts, logs, reqs, notis] = await Promise.all([
-      API.getCompany(), API.listUsers(), API.listLocations(), API.listShifts(), API.myLogs(), API.myRequests(), API.myNotis()
+    const now = new Date();
+    const logsFrom = dayKey(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+    const [company, me, admins, locations, shifts, logs, reqs, notis] = await Promise.all([
+      API.getCompany(), API.getMe(), API.listAdmins(), API.listLocations(), API.listShifts(),
+      API.myLogs(logsFrom), API.myRequests(), API.myNotis(Date.now() - 60 * 86400e3)
     ]);
-    Object.assign(S, { company, users, locations, shifts, logs, reqs, notis, loadedAt: Date.now() });
-    S.user = users.find(u => u.uid === S.session.uid) || S.user;
+    const users = [me, ...admins.filter(a => a.uid !== me.uid)];
+    Object.assign(S, { company, users, locations, shifts, logs, reqs, notis, logsFrom, loadedMonths: new Set(), loadedAt: Date.now() });
+    S.user = me;
     if (S.user && S.user.active === false) { await signOut(); toast('Tài khoản đã bị khoá. Liên hệ quản trị.'); }
   }
   const unreadCount = () => S.notis.filter(n => !n.read).length;
@@ -790,6 +796,16 @@
     const months = [];
     for (let i = 0; i < 12; i++) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push([d.getFullYear(), d.getMonth()]); }
     const last = new Date(y, m + 1, 0).getDate(), today = dayKey(now);
+    const mStart = `${y}-${pad(m + 1)}-01`, mEnd = `${y}-${pad(m + 1)}-${pad(last)}`;
+    if (mStart < S.logsFrom && !S.loadedMonths.has(mStart)) {
+      $app.innerHTML = `<div class="screen white">${topbar('Lịch sử chấm công', { back: 'home' })}<div class="empty" style="padding-top:80px"><i class="icon-loader-circle spin"></i>Đang tải tháng ${m + 1}/${y}...</div></div>`;
+      API.myLogs(mStart, mEnd).then(more => {
+        const have = new Set(S.logs.map(l => l.id));
+        S.logs.push(...more.filter(l => !have.has(l.id)));
+        S.loadedMonths.add(mStart);
+      }).catch(e => { toast(errMsg(e)); S.loadedMonths.add(mStart); }).then(() => { if (route().parts[0] === 'history') renderHistory(); });
+      return;
+    }
     const stOf = key => C.dayStatus({ logs: S.logs, reqs: S.reqs, key, shift: sh, startKey: startKey(), today });
     let body;
     if (ui.histTab === 'cong') {

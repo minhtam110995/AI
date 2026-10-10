@@ -156,6 +156,8 @@
       async getCompany() { return companyPub(co()); },
       async updateCompany(patch) { needAdmin(); const c = co(); if (patch.name) c.name = patch.name; if (patch.settings) c.settings = { ...c.settings, ...patch.settings }; persist(); return companyPub(c); },
       async listUsers() { return Object.values(co().users).map(u => pub(clone(u))).sort((a, b) => a.name.localeCompare(b.name, 'vi')); },
+      async getMe() { return pub(clone(me())); },
+      async listAdmins() { return Object.values(co().users).filter(u => u.role === 'admin').map(u => pub(clone(u))); },
       async createUser(d) {
         needAdmin(); const c = co(); const account = normAccount(d.account);
         if (!account) fail('Nhập tài khoản đăng nhập');
@@ -186,7 +188,7 @@
         log.day = C.dayKey(log.ts);
         c.logs[log.id] = log; persist(); return clone(log);
       },
-      async myLogs() { const uid = me().uid; return Object.values(co().logs).filter(l => l.uid === uid).map(clone); },
+      async myLogs(from, to) { const uid = me().uid; return Object.values(co().logs).filter(l => l.uid === uid && (!from || l.day >= from) && (!to || l.day <= to)).map(clone); },
       async logsRange(from, to) { needAdmin(); return Object.values(co().logs).filter(l => l.day >= from && l.day <= to).map(clone); },
       async updateLog(id, patch) { needAdmin(); Object.assign(co().logs[id], patch); persist(); },
       async myRequests() { const uid = me().uid; return Object.values(co().requests).filter(r => r.uid === uid).map(clone); },
@@ -213,7 +215,7 @@
         delete c.requests[id]; delete c.attachments[id]; persist();
       },
       async getAttachment(id) { const a = co().attachments[id]; return a ? a.data : null; },
-      async myNotis() { const uid = me().uid; return Object.values(co().notis).filter(n => n.uid === uid).map(clone); },
+      async myNotis(sinceTs) { const uid = me().uid; return Object.values(co().notis).filter(n => n.uid === uid && (!sinceTs || n.ts >= sinceTs)).map(clone); },
       async notify(uid, text) { notify(co(), uid, text); persist(); },
       async markRead(id) { const n = co().notis[id]; if (n) { n.read = true; persist(); } },
       async markAllRead() { const uid = me().uid; Object.values(co().notis).forEach(n => { if (n.uid === uid) n.read = true; }); persist(); },
@@ -347,6 +349,8 @@
         await cref().update(upd);
       }),
       listUsers: wrap(async () => (await all(col('users'))).map(u => ({ ...u, uid: u.id })).sort((a, b) => a.name.localeCompare(b.name, 'vi'))),
+      getMe: wrap(async () => { const d = norm(await col('users').doc(myUid()).get()); d.uid = d.id; meCache = d; return d; }),
+      listAdmins: wrap(async () => (await all(col('users').where('role', '==', 'admin'))).map(u => ({ ...u, uid: u.id }))),
       createUser: wrap(async d => {
         const account = normAccount(d.account);
         if (!account) fail('Nhập tài khoản đăng nhập');
@@ -378,7 +382,20 @@
         const ref = await col('logs').add(doc);
         return { ...doc, id: ref.id, ts };
       }),
-      myLogs: wrap(() => all(col('logs').where('uid', '==', myUid()))),
+      // Chỉ tải khoảng ngày cần xem. Cần chỉ mục (uid, day) trong firestore.indexes.json;
+      // khi chưa tạo chỉ mục thì tải hết rồi lọc tại máy để app vẫn chạy.
+      myLogs: wrap(async (from, to) => {
+        const base = col('logs').where('uid', '==', myUid());
+        let q = base;
+        if (from) q = q.where('day', '>=', from);
+        if (to) q = q.where('day', '<=', to);
+        try { return await all(q); }
+        catch (e) {
+          if (e.code !== 'failed-precondition') throw e;
+          console.warn('Thiếu chỉ mục Firestore cho logs (uid, day). Tạo theo link:', e.message);
+          return (await all(base)).filter(l => (!from || l.day >= from) && (!to || l.day <= to));
+        }
+      }),
       logsRange: wrap((from, to) => all(col('logs').where('day', '>=', from).where('day', '<=', to))),
       updateLog: wrap((id, patch) => col('logs').doc(id).update(strip(patch))),
       myRequests: wrap(() => all(col('requests').where('uid', '==', myUid()))),
@@ -406,7 +423,16 @@
         await col('requests').doc(id).delete();
       }),
       getAttachment: wrap(async id => { const s = await col('attachments').doc(id).get(); return s.exists ? s.data().data : null; }),
-      myNotis: wrap(() => all(col('notis').where('uid', '==', myUid()))),
+      myNotis: wrap(async sinceTs => {
+        const base = col('notis').where('uid', '==', myUid());
+        if (!sinceTs) return all(base);
+        try { return await all(base.where('ts', '>=', firebase.firestore.Timestamp.fromMillis(sinceTs))); }
+        catch (e) {
+          if (e.code !== 'failed-precondition') throw e;
+          console.warn('Thiếu chỉ mục Firestore cho notis (uid, ts). Tạo theo link:', e.message);
+          return (await all(base)).filter(n => n.ts >= sinceTs);
+        }
+      }),
       notify: wrap((uid, text) => notifyDoc(uid, text)),
       markRead: wrap(id => col('notis').doc(id).update({ read: true })),
       markAllRead: wrap(async () => {
