@@ -163,7 +163,7 @@
         if (!account) fail('Nhập tài khoản đăng nhập');
         if (Object.values(c.users).some(u => u.account === account)) fail('Tài khoản ' + account + ' đã tồn tại');
         if (String(d.password || '').length < 6) fail('Mật khẩu cần ít nhất 6 ký tự');
-        const u = { uid: C.uid(), account, password: d.password, name: d.name, title: d.title || '', dept: d.dept || '', role: d.role || 'employee', code: d.code || '', active: true, shiftId: d.shiftId || '', locationIds: d.locationIds || [], leaveTotal: Number(d.leaveTotal ?? c.settings.leavePerYear), mustChangePassword: true, createdAt: Date.now() };
+        const u = { uid: C.uid(), account, password: d.password, name: d.name, title: d.title || '', dept: d.dept || '', role: d.role || 'employee', code: d.code || '', active: true, shiftId: d.shiftId || '', locationIds: d.locationIds || [], leaveTotal: Number(d.leaveTotal ?? c.settings.leavePerYear), noAttendance: !!d.noAttendance, mustChangePassword: true, createdAt: Date.now() };
         c.users[u.uid] = u; persist(); return pub(clone(u));
       },
       async updateUser(uid, patch) {
@@ -358,7 +358,7 @@
         const cred = await a2.createUserWithEmailAndPassword(toEmail(cid, account), d.password);
         const uid = cred.user.uid;
         await a2.signOut();
-        const doc = strip({ account, name: d.name, title: d.title || '', dept: d.dept || '', role: d.role || 'employee', code: d.code || '', active: true, shiftId: d.shiftId || '', locationIds: d.locationIds || [], leaveTotal: Number(d.leaveTotal ?? DEFAULT_SETTINGS.leavePerYear), mustChangePassword: true, createdAt: FV.serverTimestamp() });
+        const doc = strip({ account, name: d.name, title: d.title || '', dept: d.dept || '', role: d.role || 'employee', code: d.code || '', active: true, shiftId: d.shiftId || '', locationIds: d.locationIds || [], leaveTotal: Number(d.leaveTotal ?? DEFAULT_SETTINGS.leavePerYear), noAttendance: !!d.noAttendance, mustChangePassword: true, createdAt: FV.serverTimestamp() });
         await col('users').doc(uid).set(doc);
         return { ...doc, uid, createdAt: Date.now() };
       }),

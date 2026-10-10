@@ -26,7 +26,10 @@
   const userBy = uid => A.users.find(u => u.uid === uid) || { name: '(đã xoá)', uid };
   const shiftOf = u => C.shiftFor(u, A.shifts);
   const startKeyOf = u => u.createdAt ? dayKey(u.createdAt) : null;
-  const activeUsers = () => A.users.filter(u => u.active !== false);
+  // Người không chấm công (VD tài khoản quản trị dùng để quản lý): không tính vào chuyên cần, bảng công, báo cáo.
+  // Chủ công ty mặc định không chấm công cho đến khi bỏ chọn trong mục Nhân viên.
+  const exempt = u => u.noAttendance ?? (u.uid === A.company.ownerUid);
+  const activeUsers = () => A.users.filter(u => u.active !== false && !exempt(u));
   const logsOf = uid => A.logs.filter(l => l.uid === uid);
   const reqsOf = uid => A.reqs.filter(r => r.uid === uid);
   const reqTitle = r => r.type === 'leave' ? 'Nghỉ phép · ' + (LEAVE_TYPES[r.leaveType] || 'Phép năm') : REQ_TYPES[r.type].name;
@@ -428,7 +431,7 @@
         <td>${esc(u.account || '')}</td><td>${esc(u.dept || '—')}</td><td>${esc(u.title || '—')}</td>
         <td>${esc(sh.name)} <span class="muted">${esc(sh.start)}–${esc(sh.end)}</span></td><td>${esc(locs)}</td>
         <td><span class="chip ${u.role === 'admin' ? 'admin' : 'gray'}">${ROLES[u.role] || u.role}</span>${u.uid === A.company.ownerUid ? ' <span class="chip blue">Chủ</span>' : ''}</td>
-        <td>${u.active === false ? '<span class="chip bad">Đã khoá</span>' : u.mustChangePassword ? '<span class="chip pending" title="Chưa đăng nhập lần đầu / chưa đổi mật khẩu tạm">Chưa kích hoạt</span>' : '<span class="chip ok">Đang làm</span>'}</td>
+        <td>${exempt(u) ? '<span class="chip gray" title="Không tính vào chuyên cần, bảng công, báo cáo">Không chấm công</span> ' : ''}${u.active === false ? '<span class="chip bad">Đã khoá</span>' : u.mustChangePassword ? '<span class="chip pending" title="Chưa đăng nhập lần đầu / chưa đổi mật khẩu tạm">Chưa kích hoạt</span>' : '<span class="chip ok">Đang làm</span>'}</td>
         <td><div class="acts"><button class="icon-b" data-edit="${u.uid}" title="Sửa"><i class="icon-pencil"></i></button>
           ${u.uid !== A.company.ownerUid && u.uid !== A.me.uid ? `<button class="icon-b" data-lock="${u.uid}" title="${u.active === false ? 'Mở khoá' : 'Khoá tài khoản'}"><i class="icon-${u.active === false ? 'lock-open' : 'lock'}"></i></button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="9"><div class="empty">Không có nhân viên phù hợp</div></td></tr>'}
       </tbody></table></div></div>`;
@@ -458,6 +461,7 @@
       <div class="field"><label for="u_role">Quyền</label><select class="select" id="u_role" name="role" ${u.uid === A.company.ownerUid ? 'disabled' : ''}>${Object.entries(ROLES).map(([k, n]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
       <div class="field"><label for="u_leave">Số ngày phép năm</label><input class="input" id="u_leave" name="leaveTotal" type="number" min="0" max="60" step="0.5" value="${u.leaveTotal ?? 12}"></div>
       <div class="field"><label>Địa điểm được chấm</label><div class="days">${A.locations.map(l => `<label><input type="checkbox" name="loc" value="${l.id}"${(u.locationIds || []).includes(l.id) ? ' checked' : ''}>${esc(l.name)}</label>`).join('') || '<span class="hint">Chưa có địa điểm</span>'}</div><div class="hint">Không chọn = được chấm ở mọi địa điểm.</div></div>
+      <div class="field full"><label class="switch"><input type="checkbox" name="noAttendance" ${!isNew && exempt(u) ? 'checked' : ''}>Không chấm công (không tính vào chuyên cần, bảng công, báo cáo)</label><div class="hint">Dùng cho tài khoản chỉ để quản lý, VD tài khoản Admin bàn giao cho nhân sự.</div></div>
       ${isNew ? `<div class="full hint">Tài khoản tự gợi ý theo họ tên, mật khẩu tạm tạo sẵn (có thể sửa). Lần đầu đăng nhập, nhân viên phải đặt mật khẩu riêng.</div>` : ''}
     </form>`, `<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-p" id="saveU">${isNew ? 'Thêm nhân viên' : 'Lưu thay đổi'}</button>`);
     if (isNew) {
@@ -471,7 +475,7 @@
       if (!String(d.name || '').trim()) return toast('Nhập họ và tên');
       if (isNew && !String(d.account || '').trim()) return toast('Nhập tài khoản đăng nhập');
       if (isNew && String(d.password || '').length < 6) return toast('Mật khẩu cần ít nhất 6 ký tự');
-      const data = { name: d.name.trim(), code: d.code.trim(), dept: d.dept.trim(), title: d.title.trim(), shiftId: d.shiftId || '', leaveTotal: Number(d.leaveTotal) || 0, locationIds: fd.getAll('loc') };
+      const data = { name: d.name.trim(), code: d.code.trim(), dept: d.dept.trim(), title: d.title.trim(), shiftId: d.shiftId || '', leaveTotal: Number(d.leaveTotal) || 0, locationIds: fd.getAll('loc'), noAttendance: !!d.noAttendance };
       if (d.role) data.role = d.role;
       busy(e.currentTarget, async () => {
         if (isNew) {
@@ -737,15 +741,19 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       ${A.shifts.map(s => { const h = (C.mins(s.end) - C.mins(s.start) + 1440) % 1440 / 60; return `<tr><td><b>${esc(s.name)}</b></td><td class="num">${s.start}</td><td class="num">${s.end}</td><td class="num">${num(h)} giờ</td>
         <td>${[1, 2, 3, 4, 5, 6, 0].map(i => `<span class="chip ${(s.workdays || []).includes(i) ? 'admin' : 'gray'}" style="margin-right:3px;padding:2px 7px">${DOW_SHORT[i]}</span>`).join('')}</td>
         <td>${s.grace ? s.grace + ' phút' : 'Không'}</td><td class="n">${using(s.id)}</td>
-        <td><div class="acts"><button class="icon-b" data-es="${s.id}" title="Sửa"><i class="icon-pencil"></i></button><button class="icon-b" data-ds="${s.id}" title="${A.shifts.length > 1 ? 'Xoá ca' : 'Cần ít nhất 1 ca: hãy sửa ca này hoặc thêm ca mới trước khi xoá'}" ${A.shifts.length > 1 ? '' : 'disabled style="opacity:.35;cursor:not-allowed"'}><i class="icon-trash-2"></i></button></div></td></tr>`; }).join('') || '<tr><td colspan="8"><div class="empty">Chưa có ca nào</div></td></tr>'}
+        <td><div class="acts"><button class="icon-b" data-es="${s.id}" title="Sửa"><i class="icon-pencil"></i></button><button class="icon-b" data-ds="${s.id}" title="Xoá ca"><i class="icon-trash-2"></i></button></div></td></tr>`; }).join('') || '<tr><td colspan="8"><div class="empty">Chưa có ca nào</div></td></tr>'}
       </tbody></table></div></div>`;
     page.querySelector('#addS').onclick = () => shiftModal(null, page);
     page.querySelectorAll('[data-es]').forEach(b => { b.onclick = () => shiftModal(A.shifts.find(s => s.id === b.dataset.es), page); });
     page.querySelectorAll('[data-ds]').forEach(b => {
       const s = A.shifts.find(x => x.id === b.dataset.ds);
       b.onclick = () => {
-        if (A.shifts.length < 2) return toast('Cần ít nhất 1 ca. Hãy sửa ca này, hoặc thêm ca mới trước khi xoá.');
         const affected = A.users.filter(u => shiftOf(u).id === s.id);
+        if (A.shifts.length < 2) {
+          return confirmModal('Xoá ca cuối cùng', `Đây là ca duy nhất. Sau khi xoá, app tạm tính giờ theo ca mặc định 08:00–17:30 (T2–T7) cho đến khi bạn bấm "Thêm ca" để tạo ca mới; nhân viên sẽ tự dùng ca mới đó.`, 'Xoá ca', async () => {
+            await API.deleteShift(s.id); A.shifts = []; toast(`Đã xoá ca "${s.name}". Hãy bấm "Thêm ca" để tạo ca mới.`); pShifts(page);
+          });
+        }
         if (!affected.length) {
           return confirmModal('Xoá ca', `Xoá ca "${s.name}"?`, 'Xoá', async () => { await API.deleteShift(s.id); A.shifts = A.shifts.filter(x => x.id !== s.id); toast('Đã xoá ca'); pShifts(page); });
         }
@@ -766,7 +774,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
     });
   }
   function shiftModal(s, page) {
-    const isNew = !s; s = s || { name: '', start: '08:00', end: '17:00', workdays: [1, 2, 3, 4, 5], grace: 0 };
+    const isNew = !s; s = s || { name: '', start: '08:00', end: '17:30', workdays: [1, 2, 3, 4, 5, 6], grace: 0 };
     const m = modal(isNew ? 'Thêm ca làm việc' : 'Sửa ca làm việc', `<form class="modal-b" id="sf">
       <div class="field full"><label for="s_name">Tên ca <em>*</em></label><input class="input" id="s_name" name="name" required value="${esc(s.name)}" placeholder="VD: Ca sáng"></div>
       <div class="field"><label for="s_start">Giờ vào ca</label><input class="input" id="s_start" type="time" name="start" required value="${s.start}"></div>
@@ -796,7 +804,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
     const last = new Date(y, m + 1, 0).getDate(), today = dayKey(new Date());
     await loadLogs(`${mk}-01`, `${mk}-${pad(last)}`);
     if (!page.isConnected) return; // người dùng đã chuyển trang trong lúc tải
-    const users = A.users.filter(u => u.active !== false || logsOf(u.uid).some(l => l.day.startsWith(mk)));
+    const users = A.users.filter(u => !exempt(u) && (u.active !== false || logsOf(u.uid).some(l => l.day.startsWith(mk))));
     const days = Array.from({ length: last }, (_, i) => new Date(y, m, i + 1));
     const rows = users.map(u => {
       const sh = shiftOf(u), logs = logsOf(u.uid), reqs = reqsOf(u.uid), sk = startKeyOf(u);
@@ -857,7 +865,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
     const mk = monthKey(), y = +mk.slice(0, 4), m = +mk.slice(5) - 1, last = new Date(y, m + 1, 0).getDate();
     await loadLogs(`${mk}-01`, `${mk}-${pad(last)}`);
     if (!page.isConnected) return; // người dùng đã chuyển trang trong lúc tải
-    const rows = A.users.filter(u => u.active !== false).map(u => ({ u, s: C.monthSummary({ logs: logsOf(u.uid), reqs: reqsOf(u.uid), y, m, shift: shiftOf(u), startKey: startKeyOf(u) }) }));
+    const rows = activeUsers().map(u => ({ u, s: C.monthSummary({ logs: logsOf(u.uid), reqs: reqsOf(u.uid), y, m, shift: shiftOf(u), startKey: startKeyOf(u) }) }));
     const tot = rows.reduce((a, r) => { Object.keys(r.s).forEach(k => { a[k] = (a[k] || 0) + r.s[k]; }); return a; }, {});
     const depts = {};
     rows.forEach(r => { const k = r.u.dept || 'Chưa phân phòng'; (depts[k] = depts[k] || { work: 0, need: 0, n: 0 }); depts[k].work += r.s.work; depts[k].need += Math.max(0, elapsedWorkdays(r.u, y, m) - r.s.leave); depts[k].n++; });
