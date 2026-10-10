@@ -292,9 +292,9 @@ PANES.keyword = () => {
   el.innerHTML = `
     <section class="card"><h2>🔎 Tìm video nhiều view theo từ khoá</h2>
       <div class="toolbar"><input id="kwInput" type="search" placeholder="vd: bất động sản, review son, mẹo nấu ăn" style="flex:1;min-width:260px" value="${esc(KW.input || '')}">
-        <select id="kwDepth"><option value="8">Nhanh (~60 video)</option><option value="15" selected>Vừa (~120 video)</option><option value="30">Sâu (~250 video)</option></select>
+        <select id="kwDepth"><option value="10">Nhanh (~100 video)</option><option value="25" selected>Vừa (~250 video)</option><option value="50">Sâu (~500 video)</option><option value="100">Rất sâu (~1000 video)</option></select>
         <button id="kwGo" class="primary">Tìm & thu thập</button></div>
-      <p class="muted small" id="kwJob">${job ? esc(job.msg) + (job.step === 'run' ? ' (đừng đóng Chrome)' : '') : 'Tiện ích mở trang tìm kiếm video của TikTok trong tab nền, tự cuộn để lấy kết quả rồi đóng tab. Mất khoảng 1–2 phút. Cần đang đăng nhập tiktok.com.'}</p>
+      <p class="muted small" id="kwJob">${job ? esc(job.msg) + (job.step === 'run' ? ' (đừng đóng Chrome)' : '') : 'Tiện ích mở trang tìm kiếm video của TikTok trong một cửa sổ nhỏ, tự cuộn lấy kết quả rồi tự đóng. Để cửa sổ đó mở (đừng thu nhỏ) tới khi xong. Cần đang đăng nhập tiktok.com. Quét nhiều lần sẽ cộng dồn thêm video.'}</p>
       <p class="muted small">Cách thủ công: tự tìm từ khoá trên tiktok.com (tab Video) rồi bấm “Tự cuộn để thu thập” — kết quả cũng tự vào đây. Quét lại vài ngày một lần để có video mới.</p>
       ${kws.length ? `<div class="toolbar">${kws.map((k) => `<button class="kwChip${k === KW.kw ? ' primary' : ''}" data-kw="${esc(k)}">${esc(k)} · ${counts[k] || 0}</button>`).join('')}</div>` : ''}
     </section>

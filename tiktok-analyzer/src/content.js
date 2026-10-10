@@ -19,6 +19,7 @@
 
   function queue({ videos, users, comments = [], products = [] }) {
     const kw = searchKw();
+    received += videos.length;
     videos.forEach((v) => {
       if (kw && !v.isAd) v = { ...v, kw: [kw] };
       pending.videos.set(v.id, { ...pending.videos.get(v.id), ...v });
@@ -364,19 +365,38 @@
 
   // Tự cuộn trang để TikTok tải thêm video (dữ liệu được thu thập trong lúc cuộn).
   let scrolling = false;
+  let received = 0; // số video trang đã gửi về (để biết cuộn còn ra thêm không)
+  // Khung cuộn lớn nhất của trang (TikTok có trang cuộn cả cửa sổ, có trang cuộn trong 1 khung riêng)
+  function scrollers() {
+    const out = [document.scrollingElement || document.documentElement];
+    for (const el of document.querySelectorAll('main, div')) {
+      if (el.scrollHeight > el.clientHeight + 200 && el.clientHeight > 300 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) out.push(el);
+      if (out.length > 4) break;
+    }
+    return out;
+  }
   async function autoScroll(times) {
-    if (scrolling) return;
+    if (scrolling) return received;
     scrolling = true;
     let stale = 0;
     for (let i = 0; i < times && scrolling; i++) {
-      const h = document.documentElement.scrollHeight;
+      const before = received, h = document.documentElement.scrollHeight;
+      // đưa video cuối cùng vào khung nhìn (trang cuộn trong khung riêng), rồi cuộn hết xuống đáy
+      const links = document.querySelectorAll('a[href*="/video/"], a[href*="/photo/"]');
+      links[links.length - 1]?.scrollIntoView({ block: 'start' });
+      for (const el of scrollers()) el.scrollTop = el.scrollHeight;
       window.scrollTo(0, h);
       // trang tìm kiếm có nút "Tải thêm"
       [...document.querySelectorAll('button')].find((b) => /^(tải thêm|xem thêm|load more)$/i.test(b.textContent.trim()))?.click();
-      await sleep(1500 + Math.random() * 1000);
-      if (document.documentElement.scrollHeight === h) { if (++stale >= 3) break; } else stale = 0;
+      await sleep(1800 + Math.random() * 1200);
+      if (received === before && document.documentElement.scrollHeight === h) {
+        if (++stale >= 5) break;
+        window.scrollBy(0, -600); await sleep(400); // nhích lên rồi xuống lại để kích hoạt tải thêm
+      } else stale = 0;
     }
     scrolling = false;
+    flush();
+    return received;
   }
 
   // ---------- lấy bình luận: mở khung bình luận rồi cuộn để TikTok tải thêm ----------
@@ -426,7 +446,10 @@
 
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     if (msg.type === 'context') reply({ profile: currentProfile(), video: currentVideo(), sessionCount, url: location.href });
-    if (msg.type === 'autoscroll') { autoScroll(msg.times || 20); reply({ ok: true }); }
+    if (msg.type === 'autoscroll') {
+      if (msg.wait) { autoScroll(msg.times || 20).then((n) => reply({ ok: true, n })); return true; }
+      autoScroll(msg.times || 20); reply({ ok: true });
+    }
     if (msg.type === 'stopScroll') { scrolling = false; reply({ ok: true }); }
     if (msg.type === 'comments') { collectComments(msg.max || 500); reply({ ok: true }); }
     if (msg.type === 'play') { const id = msg.id || currentVideo(); if (id) openPlayer(id); reply({ ok: !!id }); }

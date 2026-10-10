@@ -123,27 +123,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ---------- Tìm theo từ khoá → video nhiều view ----------
 // Mở trang tìm kiếm video của TikTok trong tab nền, tự cuộn để TikTok tải kết quả, rồi đóng tab.
 let searching = false;
+// Cửa sổ nhỏ hiển thị thật (tab nền bị Chrome tạm dừng vẽ nên TikTok không tải thêm kết quả khi cuộn)
+async function openWorkWindow(url) {
+  const w = await chrome.windows.create({ url, type: 'popup', focused: true, width: 520, height: 900, left: 40, top: 40 });
+  return { winId: w.id, tabId: w.tabs[0].id };
+}
 async function searchKeyword(input, scrolls) {
   const keyword = String(input || '').trim();
   if (!keyword || searching) return;
   searching = true;
   const setKw = (job) => chrome.storage.local.set({ kwJob: { keyword, ...job, t: Date.now() } });
+  const key = TTA.kwKey(keyword);
+  const count = async () => Object.values((await chrome.storage.local.get('videos')).videos || {}).filter((v) => v.kw?.includes(key)).length;
+  let win = null;
   try {
-    await setKw({ step: 'run', msg: `Đang tìm "${keyword}" trên TikTok và cuộn lấy kết quả…` });
-    const tab = await chrome.tabs.create({ url: `https://www.tiktok.com/search/video?q=${encodeURIComponent(keyword)}`, active: false });
-    await sleep(9000);
-    try { await chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: scrolls }); } catch (_) {}
-    await sleep(scrolls * 2600 + 3000);
-    try { await chrome.tabs.sendMessage(tab.id, { type: 'flushNow' }); } catch (_) {}
-    try { await chrome.tabs.remove(tab.id); } catch (_) {}
+    const before = await count();
+    await setKw({ step: 'run', msg: `Đang tìm "${keyword}" trên TikTok trong cửa sổ nhỏ (để cửa sổ đó mở, đừng thu nhỏ)…` });
+    win = await openWorkWindow(`https://www.tiktok.com/search/video?q=${encodeURIComponent(keyword)}`);
+    await sleep(8000);
+    const tick = setInterval(async () => setKw({ step: 'run', msg: `Đang cuộn lấy kết quả "${keyword}": ${await count()} video… (để cửa sổ TikTok nhỏ mở)` }), 5000);
+    try { await chrome.tabs.sendMessage(win.tabId, { type: 'autoscroll', times: scrolls, wait: true }); } catch (_) { await sleep(scrolls * 3000); }
+    clearInterval(tick);
+    try { await chrome.tabs.sendMessage(win.tabId, { type: 'flushNow' }); } catch (_) {}
     await sleep(1000);
-    const { videos = {} } = await chrome.storage.local.get('videos');
-    const key = TTA.kwKey(keyword);
-    const n = Object.values(videos).filter((v) => v.kw?.includes(key)).length;
-    await setKw({ step: 'done', msg: n ? `✓ Xong: có ${n} video cho từ khoá "${keyword}".` : `Không lấy được video nào. Hãy mở tiktok.com, đăng nhập (hoặc giải captcha) rồi thử lại, hoặc tự tìm "${keyword}" trên TikTok và bấm "Tự cuộn để thu thập".`, n });
+    const n = await count();
+    await setKw({ step: 'done', msg: n ? `✓ Xong: có ${n} video cho từ khoá "${keyword}" (+${Math.max(0, n - before)} video mới lần này).` : `Không lấy được video nào. Hãy mở tiktok.com, đăng nhập (hoặc giải captcha) rồi thử lại.`, n });
   } catch (e) {
     await setKw({ step: 'error', msg: 'Lỗi: ' + (e.message || e) });
   }
+  if (win) try { await chrome.windows.remove(win.winId); } catch (_) {}
   searching = false;
 }
 
