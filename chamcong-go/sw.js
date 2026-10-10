@@ -1,5 +1,5 @@
 // Service worker: lưu sẵn giao diện app để mở được khi mạng yếu.
-const CACHE = 'chamcong-go-v3';
+const CACHE = 'chamcong-go-v4';
 const SHELL = ['./', './index.html', './styles.css', './config.js', './core.js', './data.js', './app.js', './admin.html', './admin.css', './admin.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png'];
 const CDN = ['https://unpkg.com/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/', 'https://www.gstatic.com/firebasejs/'];
 
@@ -16,8 +16,9 @@ self.addEventListener('fetch', e => {
   const sameOrigin = url.startsWith(self.location.origin);
   if (!sameOrigin && !CDN.some(p => url.startsWith(p))) return; // ô bản đồ: luôn lấy từ mạng
   // Mạng trước, lỗi mạng thì dùng bản đã lưu.
-  e.respondWith(fetch(req).then(res => {
+  // File của app: luôn hỏi lại máy chủ (no-cache) để nhận bản mới ngay sau mỗi lần cập nhật.
+  e.respondWith(fetch(req, sameOrigin ? { cache: 'no-cache' } : undefined).then(res => {
     if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;
-  }).catch(() => caches.match(req).then(r => r || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error()))));
+  }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error()))));
 });
