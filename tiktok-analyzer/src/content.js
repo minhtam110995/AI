@@ -14,8 +14,13 @@
     scheduleDecorate();
   });
 
+  // Đang ở trang tìm kiếm → gắn từ khoá cho các video kết quả
+  const searchKw = () => (/^\/search/.test(location.pathname) ? TTA.kwKey(new URLSearchParams(location.search).get('q')) : '');
+
   function queue({ videos, users, comments = [], products = [] }) {
+    const kw = searchKw();
     videos.forEach((v) => {
+      if (kw && !v.isAd) v = { ...v, kw: [kw] };
       pending.videos.set(v.id, { ...pending.videos.get(v.id), ...v });
       mem.set(v.id, { ...mem.get(v.id), ...v });
       if (v.isAd) pending.adSeen.set(v.id, (pending.adSeen.get(v.id) || 0) + 1);
@@ -53,7 +58,7 @@
     const byVid = {};
     newComments.forEach((c) => (byVid[c.vid] ||= []).push(c));
     const cKeys = Object.keys(byVid).map((v) => 'c:' + v);
-    chrome.storage.local.get({ videos: {}, users: {}, products: {}, ...Object.fromEntries(cKeys.map((k) => [k, []])) }, (store) => {
+    chrome.storage.local.get({ videos: {}, users: {}, products: {}, ttKeywords: {}, ...Object.fromEntries(cKeys.map((k) => [k, []])) }, (store) => {
       const now = Date.now();
       // Sản phẩm: lưu lịch sử "đã bán" để tính tốc độ bán (tối đa 1 mốc/giờ, hoặc khi số thay đổi)
       for (const p of newProducts) {
@@ -85,6 +90,7 @@
         if (prev?.adSeen && !v.isAd) { merged.adSeen = prev.adSeen; merged.adFirst = prev.adFirst; merged.adLast = prev.adLast; }
         if (prev?.products?.length && !v.products?.length) merged.products = prev.products;
         if (prev?.hasSpeech && !v.hasSpeech) merged.hasSpeech = true;
+        if (prev?.kw || v.kw) merged.kw = [...new Set([...(prev?.kw || []), ...(v.kw || [])])];
         if (prev?.authorFollowers && v.authorFollowers == null) merged.authorFollowers = prev.authorFollowers;
         const { playUrls, ...toStore } = merged; // địa chỉ phát có hạn dùng, chỉ giữ trong phiên
         store.videos[v.id] = toStore;
@@ -102,6 +108,11 @@
         store.users[u.uniqueId] = { ...prev, ...u, history, updatedAt: now };
       }
       const out = { videos: store.videos, users: store.users, products: store.products };
+      const kw = searchKw();
+      if (kw && newVideos.length) {
+        out.ttKeywords = store.ttKeywords || {};
+        out.ttKeywords[kw] = { ...out.ttKeywords[kw], last: now, first: out.ttKeywords[kw]?.first || now };
+      }
       for (const vid in byVid) {
         const prev = store['c:' + vid] || [];
         const ids = new Set(prev.map((c) => c.cid));
@@ -360,6 +371,8 @@
     for (let i = 0; i < times && scrolling; i++) {
       const h = document.documentElement.scrollHeight;
       window.scrollTo(0, h);
+      // trang tìm kiếm có nút "Tải thêm"
+      [...document.querySelectorAll('button')].find((b) => /^(tải thêm|xem thêm|load more)$/i.test(b.textContent.trim()))?.click();
       await sleep(1500 + Math.random() * 1000);
       if (document.documentElement.scrollHeight === h) { if (++stale >= 3) break; } else stale = 0;
     }

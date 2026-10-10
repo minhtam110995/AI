@@ -50,6 +50,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
 
   if (msg.type === 'refreshChannels') { refreshChannels().then((n) => reply({ ok: true, n })); return true; }
   if (msg.type === 'analyzeChannel') { analyzeChannel(msg.username, msg.scrolls || 15, msg.maxProducts || 15); reply({ ok: true }); }
+  if (msg.type === 'searchKeyword') { searchKeyword(msg.keyword, msg.scrolls || 15); reply({ ok: true }); }
   if (msg.type === 'flushed') scheduleBreakoutCheck();
 });
 
@@ -157,6 +158,33 @@ async function analyzeChannel(input, scrolls, maxProducts) {
     await setJob({ username, step: 'error', msg: 'Lỗi: ' + (e.message || e) });
   }
   analyzing = false;
+}
+
+// ---------- Tìm theo từ khoá → video nhiều view ----------
+// Mở trang tìm kiếm video của TikTok trong tab nền, tự cuộn để TikTok tải kết quả, rồi đóng tab.
+let searching = false;
+async function searchKeyword(input, scrolls) {
+  const keyword = String(input || '').trim();
+  if (!keyword || searching) return;
+  searching = true;
+  const setKw = (job) => chrome.storage.local.set({ kwJob: { keyword, ...job, t: Date.now() } });
+  try {
+    await setKw({ step: 'run', msg: `Đang tìm "${keyword}" trên TikTok và cuộn lấy kết quả…` });
+    const tab = await chrome.tabs.create({ url: `https://www.tiktok.com/search/video?q=${encodeURIComponent(keyword)}`, active: false });
+    await sleep(9000);
+    try { await chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: scrolls }); } catch (_) {}
+    await sleep(scrolls * 2600 + 3000);
+    try { await chrome.tabs.sendMessage(tab.id, { type: 'flushNow' }); } catch (_) {}
+    try { await chrome.tabs.remove(tab.id); } catch (_) {}
+    await sleep(1000);
+    const { videos = {} } = await chrome.storage.local.get('videos');
+    const key = TTA.kwKey(keyword);
+    const n = Object.values(videos).filter((v) => v.kw?.includes(key)).length;
+    await setKw({ step: 'done', msg: n ? `✓ Xong: có ${n} video cho từ khoá "${keyword}".` : `Không lấy được video nào. Hãy mở tiktok.com, đăng nhập (hoặc giải captcha) rồi thử lại, hoặc tự tìm "${keyword}" trên TikTok và bấm "Tự cuộn để thu thập".`, n });
+  } catch (e) {
+    await setKw({ step: 'error', msg: 'Lỗi: ' + (e.message || e) });
+  }
+  searching = false;
 }
 
 // ---------- địa chỉ phát cho video gắn giỏ bị chặn trên web ----------

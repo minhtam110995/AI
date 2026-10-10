@@ -56,6 +56,7 @@ async function init() {
 }
 
 $('#open').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html' + (profile ? '?author=' + encodeURIComponent(profile) : '')) });
+$('#kwOpen').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html#keyword') });
 $('#original').onclick = () => {
   const isVideo = /tiktok\.com\/.*\/(video|photo)\/\d+/.test(tab?.url || '');
   chrome.tabs.create({ url: chrome.runtime.getURL('original.html' + (isVideo ? '?link=' + encodeURIComponent(tab.url) : '')) });

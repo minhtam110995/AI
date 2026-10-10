@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TikTok Analyzer",
-  "version": "1.5.2",
-  "description": "Phân tích kênh & video TikTok: doanh thu affiliate ước tính, sản phẩm ra đơn, quảng cáo, hook, công thức viral, bình luận, theo dõi đối thủ, lời thoại gốc.",
+  "version": "1.6.0",
+  "description": "Phân tích TikTok: video nhiều view theo từ khoá, doanh thu affiliate, sản phẩm ra đơn, ads, hook, đối thủ, lời thoại gốc.",
   "permissions": [
     "storage",
     "unlimitedStorage",

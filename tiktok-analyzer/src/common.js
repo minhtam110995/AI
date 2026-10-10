@@ -13,6 +13,7 @@ const TTA = (() => {
     const tags = new Set();
     (it.textExtra || []).forEach((t) => t.hashtagName && tags.add(t.hashtagName.toLowerCase()));
     (it.challenges || []).forEach((c) => c.title && tags.add(c.title.toLowerCase()));
+    if (!tags.size) for (const m of String(it.desc || '').matchAll(/#([\p{L}\p{N}_]+)/gu)) tags.add(m[1].toLowerCase());
     return {
       id: String(it.id),
       author: a.uniqueId || it.authorUniqueId || '',
@@ -308,6 +309,9 @@ const TTA = (() => {
     const m = s.length >> 1;
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   };
+  // Chuẩn hoá từ khoá tìm kiếm (để gom video theo từ khoá)
+  const kwKey = (q) => String(q || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80);
+
   const fmtDate = (sec) => (sec ? new Date(sec * 1000).toLocaleDateString('vi-VN') : '–');
 
   const load = () => new Promise((r) => chrome.storage.local.get({ videos: {}, users: {} }, r));
@@ -337,6 +341,6 @@ const TTA = (() => {
   return {
     extract, normalizeVideo, normalizeUser, engagement, er, fmt, pct, median, fmtDate, load, toCSV, download,
     hookType, formatType, isIntent, isQuestion, phrases, hookText, viewVelocity, HOOKS, FORMATS,
-    parseMoney, parseCount, productKey, normalizeProduct, playUrlsOf, isVideoUrl, deepProducts,
+    parseMoney, parseCount, productKey, kwKey, normalizeProduct, playUrlsOf, isVideoUrl, deepProducts,
   };
 })();
