@@ -568,13 +568,13 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
   function importModal() {
     const m = modal('Nhập danh sách nhân viên', `<div class="modal-b">
       <div class="full hint" style="font-size:13px">Chép bảng từ Excel / Google Sheets rồi dán vào ô dưới. Thứ tự cột:
-        <b>Họ tên</b> · Mã NV · Phòng ban · Chức danh · Quyền (ghi "Quản trị" nếu là quản trị) · Tài khoản · Mật khẩu.
+        <b>Họ tên</b> · Mã NV · Phòng ban · Chức danh · Quyền (ghi "Quản trị" nếu là quản trị) · Tài khoản · Mật khẩu · Số ngày phép.
         Chỉ <b>Họ tên</b> là bắt buộc; tài khoản và mật khẩu tạm để trống sẽ được tạo tự động.
         <a href="#" id="tpl">Tải file mẫu</a></div>
       <div class="field full"><textarea class="input mono" id="imText" style="min-height:140px" placeholder="Nguyễn Văn An&#9;NV-0248&#9;Phòng Kinh doanh&#9;Nhân viên kinh doanh&#10;Lê Minh Châu&#9;NV-0251&#9;Phòng Kế toán&#9;Kế toán"></textarea></div>
       <div class="field"><label for="imFile">Hoặc chọn file CSV</label><input class="input" id="imFile" type="file" accept=".csv,text/csv" style="padding-top:8px"></div>
       <div class="field"><label for="imShift">Ca làm việc cho tất cả</label><select class="select" id="imShift">${A.shifts.map(s => `<option value="${s.id}">${esc(s.name)} ${s.start}–${s.end}</option>`).join('')}</select></div>
-      <div class="field"><label for="imLeave">Số ngày phép năm</label><input class="input" id="imLeave" type="number" min="0" max="60" step="0.5" value="${A.company.settings.leavePerYear}"></div>
+      <div class="field"><label for="imLeave">Số ngày phép (khi không có cột riêng)</label><input class="input" id="imLeave" type="number" min="0" max="60" step="0.5" value="${A.company.settings.leavePerYear}"></div>
       <div class="field"><label>Địa điểm được chấm</label><div class="days">${A.locations.map(l => `<label><input type="checkbox" name="imLoc" value="${l.id}">${esc(l.name)}</label>`).join('') || '<span class="hint">Chưa có địa điểm</span>'}</div><div class="hint">Không chọn = mọi địa điểm.</div></div>
       <div class="full" id="imPreview"></div>
     </div>`, `<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-p" id="imGo" disabled>Tạo tài khoản</button>`);
@@ -583,19 +583,21 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
     const preview = () => {
       const taken = takenAccounts(), seen = new Set();
       rows = parseTable(m.querySelector('#imText').value).map(r => {
-        const [name, code = '', dept = '', title = '', role = '', account = '', password = ''] = r;
+        const [name, code = '', dept = '', title = '', role = '', account = '', password = '', leave = ''] = r;
+        const leaveDays = leave === '' ? null : Number(String(leave).replace(',', '.'));
         const acc = (account || suggestAccount(name, new Set([...taken, ...seen]))).toLowerCase();
         let err = '';
         if (!/^[a-z0-9._@-]+$/.test(acc)) err = 'Tài khoản chỉ gồm chữ không dấu, số, dấu chấm';
         else if (taken.has(acc) || seen.has(acc)) err = 'Tài khoản đã tồn tại';
         else if (password && password.length < 6) err = 'Mật khẩu cần ít nhất 6 ký tự';
+        else if (leaveDays != null && !(leaveDays >= 0 && leaveDays <= 60)) err = 'Số ngày phép không hợp lệ';
         seen.add(acc);
-        return { name, code, dept, title, role: /qu[aả]n tr[iị]|admin/i.test(role) ? 'admin' : 'employee', account: acc, password: password || genPassword(), err };
+        return { name, code, dept, title, role: /qu[aả]n tr[iị]|admin/i.test(role) ? 'admin' : 'employee', account: acc, password: password || genPassword(), leave: leaveDays, err };
       });
       const ok = rows.filter(r => !r.err).length;
-      m.querySelector('#imPreview').innerHTML = rows.length ? `<div class="tbl-wrap" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:12px"><table class="tbl"><thead><tr><th>#</th><th>Kiểm tra</th><th>Họ tên</th><th>Tài khoản</th><th>Mật khẩu tạm</th><th>Quyền</th><th>Mã NV</th><th>Phòng ban</th><th>Chức danh</th></tr></thead><tbody>
+      m.querySelector('#imPreview').innerHTML = rows.length ? `<div class="tbl-wrap" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:12px"><table class="tbl"><thead><tr><th>#</th><th>Kiểm tra</th><th>Họ tên</th><th>Tài khoản</th><th>Mật khẩu tạm</th><th>Quyền</th><th>Phép</th><th>Mã NV</th><th>Phòng ban</th><th>Chức danh</th></tr></thead><tbody>
         ${rows.map((r, i) => `<tr><td class="muted">${i + 1}</td><td>${r.err ? `<span class="chip bad">${esc(r.err)}</span>` : '<span class="chip ok">Hợp lệ</span>'}</td>
-          <td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.account)}</td><td class="mono">${esc(r.password)}</td><td>${ROLES[r.role]}</td><td>${esc(r.code)}</td><td>${esc(r.dept)}</td><td>${esc(r.title)}</td></tr>`).join('')}
+          <td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.account)}</td><td class="mono">${esc(r.password)}</td><td>${ROLES[r.role]}</td><td class="num">${r.leave != null ? num(r.leave) : '<span class="muted">chung</span>'}</td><td>${esc(r.code)}</td><td>${esc(r.dept)}</td><td>${esc(r.title)}</td></tr>`).join('')}
       </tbody></table></div><div class="hint" style="margin-top:8px">${ok}/${rows.length} dòng hợp lệ${rows.length > ok ? ' · dòng lỗi sẽ được bỏ qua' : ''}${API.mode !== 'demo' && ok > 90 ? ' · Firebase giới hạn khoảng 100 tài khoản mới mỗi giờ, hãy chia làm nhiều lần' : ''}.</div>` : '';
       const go = m.querySelector('#imGo');
       go.disabled = !ok; go.textContent = ok ? `Tạo ${ok} tài khoản` : 'Tạo tài khoản';
@@ -607,8 +609,8 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
     };
     m.querySelector('#tpl').onclick = e => {
       e.preventDefault();
-      C.csvDownload('mau-danh-sach-nhan-vien.csv', [['Họ tên', 'Mã NV', 'Phòng ban', 'Chức danh', 'Quyền', 'Tài khoản', 'Mật khẩu'],
-        ['Nguyễn Văn An', 'NV-0001', 'Phòng Kinh doanh', 'Nhân viên kinh doanh', '', '', ''], ['Trần Thị Hương', 'NV-0002', 'Phòng Nhân sự', 'Trưởng phòng', 'Quản trị', '', '']]);
+      C.csvDownload('mau-danh-sach-nhan-vien.csv', [['Họ tên', 'Mã NV', 'Phòng ban', 'Chức danh', 'Quyền', 'Tài khoản', 'Mật khẩu', 'Số ngày phép'],
+        ['Nguyễn Văn An', 'NV-0001', 'Phòng Kinh doanh', 'Nhân viên kinh doanh', '', '', '', '12'], ['Trần Thị Hương', 'NV-0002', 'Phòng Nhân sự', 'Trưởng phòng', 'Quản trị', '', '', '']]);
     };
     m.querySelector('#imGo').onclick = async e => {
       const btn = e.currentTarget, todo = rows.filter(r => !r.err);
@@ -621,7 +623,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
         const r = todo[i];
         btn.innerHTML = `<i class="icon-loader-circle spin"></i>Đang tạo ${i + 1}/${todo.length}`;
         try {
-          const nu = await API.createUser({ ...common, name: r.name, code: r.code, dept: r.dept, title: r.title, role: r.role, account: r.account, password: r.password });
+          const nu = await API.createUser({ ...common, ...(r.leave != null ? { leaveTotal: r.leave } : {}), name: r.name, code: r.code, dept: r.dept, title: r.title, role: r.role, account: r.account, password: r.password });
           A.users.push(nu); done.push({ name: r.name, account: r.account, password: r.password });
         } catch (err) { failed.push(`${r.name}: ${errMsg(err)}`); }
       }
@@ -735,13 +737,32 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       ${A.shifts.map(s => { const h = (C.mins(s.end) - C.mins(s.start) + 1440) % 1440 / 60; return `<tr><td><b>${esc(s.name)}</b></td><td class="num">${s.start}</td><td class="num">${s.end}</td><td class="num">${num(h)} giờ</td>
         <td>${[1, 2, 3, 4, 5, 6, 0].map(i => `<span class="chip ${(s.workdays || []).includes(i) ? 'admin' : 'gray'}" style="margin-right:3px;padding:2px 7px">${DOW_SHORT[i]}</span>`).join('')}</td>
         <td>${s.grace ? s.grace + ' phút' : 'Không'}</td><td class="n">${using(s.id)}</td>
-        <td><div class="acts"><button class="icon-b" data-es="${s.id}" title="Sửa"><i class="icon-pencil"></i></button>${!using(s.id) && A.shifts.length > 1 ? `<button class="icon-b" data-ds="${s.id}" title="Xoá"><i class="icon-trash-2"></i></button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="8"><div class="empty">Chưa có ca nào</div></td></tr>'}
+        <td><div class="acts"><button class="icon-b" data-es="${s.id}" title="Sửa"><i class="icon-pencil"></i></button><button class="icon-b" data-ds="${s.id}" title="${A.shifts.length > 1 ? 'Xoá ca' : 'Cần ít nhất 1 ca: hãy sửa ca này hoặc thêm ca mới trước khi xoá'}" ${A.shifts.length > 1 ? '' : 'disabled style="opacity:.35;cursor:not-allowed"'}><i class="icon-trash-2"></i></button></div></td></tr>`; }).join('') || '<tr><td colspan="8"><div class="empty">Chưa có ca nào</div></td></tr>'}
       </tbody></table></div></div>`;
     page.querySelector('#addS').onclick = () => shiftModal(null, page);
     page.querySelectorAll('[data-es]').forEach(b => { b.onclick = () => shiftModal(A.shifts.find(s => s.id === b.dataset.es), page); });
     page.querySelectorAll('[data-ds]').forEach(b => {
       const s = A.shifts.find(x => x.id === b.dataset.ds);
-      b.onclick = () => confirmModal('Xoá ca', `Xoá ca "${s.name}"?`, 'Xoá', async () => { await API.deleteShift(s.id); A.shifts = A.shifts.filter(x => x.id !== s.id); toast('Đã xoá ca'); pShifts(page); });
+      b.onclick = () => {
+        if (A.shifts.length < 2) return toast('Cần ít nhất 1 ca. Hãy sửa ca này, hoặc thêm ca mới trước khi xoá.');
+        const affected = A.users.filter(u => shiftOf(u).id === s.id);
+        if (!affected.length) {
+          return confirmModal('Xoá ca', `Xoá ca "${s.name}"?`, 'Xoá', async () => { await API.deleteShift(s.id); A.shifts = A.shifts.filter(x => x.id !== s.id); toast('Đã xoá ca'); pShifts(page); });
+        }
+        // Ca đang có người dùng: chuyển họ sang ca khác rồi mới xoá.
+        const others = A.shifts.filter(x => x.id !== s.id);
+        const m = modal('Xoá ca', `<div class="modal-b">
+          <div class="full">Ca <b>${esc(s.name)}</b> đang được dùng bởi ${affected.length} nhân viên: ${affected.slice(0, 5).map(u => esc(u.name)).join(', ')}${affected.length > 5 ? '…' : ''}.</div>
+          <div class="field full"><label for="moveTo">Chuyển những người này sang ca</label><select class="select" id="moveTo">${others.map(x => `<option value="${x.id}">${esc(x.name)} ${x.start}–${x.end}</option>`).join('')}</select></div>
+        </div>`, '<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-bad" id="doDel"><i class="icon-trash-2"></i>Chuyển và xoá ca</button>', { size: 'sm' });
+        m.querySelector('#doDel').onclick = e => busy(e.currentTarget, async () => {
+          const to = m.querySelector('#moveTo').value;
+          for (const u of affected) { await API.updateUser(u.uid, { shiftId: to }); u.shiftId = to; }
+          await API.deleteShift(s.id);
+          A.shifts = A.shifts.filter(x => x.id !== s.id);
+          m.remove(); toast(`Đã chuyển ${affected.length} nhân viên và xoá ca "${s.name}"`); pShifts(page);
+        });
+      };
     });
   }
   function shiftModal(s, page) {
