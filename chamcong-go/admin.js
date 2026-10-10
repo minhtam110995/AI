@@ -419,6 +419,7 @@
         <select class="select" id="ud"><option value="">Tất cả phòng ban</option>${depts.map(d => `<option${d === ui.userDept ? ' selected' : ''}>${esc(d)}</option>`).join('')}</select>
         <div class="grow"></div>
         <span class="muted">${A.users.filter(u => u.active !== false).length} đang làm · ${A.users.filter(u => u.active === false).length} đã khoá</span>
+        <button class="btn btn-o" id="importU"><i class="icon-file-spreadsheet"></i>Nhập danh sách</button>
         <button class="btn btn-p" id="addU"><i class="icon-user-plus"></i>Thêm nhân viên</button>
       </div>
       <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nhân viên</th><th>Tài khoản</th><th>Phòng ban</th><th>Chức danh</th><th>Ca làm việc</th><th>Địa điểm</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead><tbody>
@@ -427,7 +428,7 @@
         <td>${esc(u.account || '')}</td><td>${esc(u.dept || '—')}</td><td>${esc(u.title || '—')}</td>
         <td>${esc(sh.name)} <span class="muted">${esc(sh.start)}–${esc(sh.end)}</span></td><td>${esc(locs)}</td>
         <td><span class="chip ${u.role === 'admin' ? 'admin' : 'gray'}">${ROLES[u.role] || u.role}</span>${u.uid === A.company.ownerUid ? ' <span class="chip blue">Chủ</span>' : ''}</td>
-        <td>${u.active === false ? '<span class="chip bad">Đã khoá</span>' : '<span class="chip ok">Đang làm</span>'}</td>
+        <td>${u.active === false ? '<span class="chip bad">Đã khoá</span>' : u.mustChangePassword ? '<span class="chip pending" title="Chưa đăng nhập lần đầu / chưa đổi mật khẩu tạm">Chưa kích hoạt</span>' : '<span class="chip ok">Đang làm</span>'}</td>
         <td><div class="acts"><button class="icon-b" data-edit="${u.uid}" title="Sửa"><i class="icon-pencil"></i></button>
           ${u.uid !== A.company.ownerUid && u.uid !== A.me.uid ? `<button class="icon-b" data-lock="${u.uid}" title="${u.active === false ? 'Mở khoá' : 'Khoá tài khoản'}"><i class="icon-${u.active === false ? 'lock-open' : 'lock'}"></i></button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="9"><div class="empty">Không có nhân viên phù hợp</div></td></tr>'}
       </tbody></table></div></div>`;
@@ -435,6 +436,7 @@
     uq.oninput = () => { ui.userQ = uq.value; clearTimeout(uq._t); uq._t = setTimeout(() => { pUsers(page).then(() => { const n = page.querySelector('#uq'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); }, 250); };
     page.querySelector('#ud').onchange = e => { ui.userDept = e.target.value; pUsers(page); };
     page.querySelector('#addU').onclick = () => userModal(null);
+    page.querySelector('#importU').onclick = () => importModal();
     page.querySelectorAll('[data-edit]').forEach(b => { b.onclick = () => userModal(A.users.find(u => u.uid === b.dataset.edit)); });
     page.querySelectorAll('[data-lock]').forEach(b => {
       const u = A.users.find(x => x.uid === b.dataset.lock);
@@ -449,15 +451,21 @@
       <div class="field"><label for="u_name">Họ và tên <em>*</em></label><input class="input" id="u_name" name="name" required value="${esc(u.name || '')}"></div>
       <div class="field"><label for="u_code">Mã nhân viên</label><input class="input" id="u_code" name="code" value="${esc(u.code || '')}" placeholder="NV-0001"></div>
       <div class="field"><label for="u_acc">Tài khoản đăng nhập <em>*</em></label><input class="input" id="u_acc" name="account" ${isNew ? 'required' : 'disabled'} value="${esc(u.account || '')}" placeholder="vd: an.nguyen hoặc email" autocomplete="off"></div>
-      <div class="field"><label for="u_pw">${isNew ? 'Mật khẩu <em>*</em>' : 'Đặt lại mật khẩu'}</label><input class="input" id="u_pw" name="password" type="text" ${isNew ? 'required minlength="6"' : ''} placeholder="${isNew ? 'Ít nhất 6 ký tự' : (API.mode === 'demo' ? 'Để trống nếu không đổi' : 'Chỉ đổi được qua email (Firebase)')}" ${!isNew && API.mode !== 'demo' ? 'disabled' : ''} autocomplete="new-password"></div>
+      <div class="field"><label for="u_pw">${isNew ? 'Mật khẩu <em>*</em>' : 'Đặt lại mật khẩu'}</label><input class="input" id="u_pw" name="password" type="text" ${isNew ? `required minlength="6" value="${genPassword()}"` : ''} placeholder="${isNew ? 'Ít nhất 6 ký tự' : (API.mode === 'demo' ? 'Để trống nếu không đổi' : 'Chỉ đổi được qua email (Firebase)')}" ${!isNew && API.mode !== 'demo' ? 'disabled' : ''} autocomplete="new-password"></div>
       <div class="field"><label for="u_dept">Phòng ban</label><input class="input" id="u_dept" name="dept" value="${esc(u.dept || '')}" list="deptList"><datalist id="deptList">${[...new Set(A.users.map(x => x.dept).filter(Boolean))].map(d => `<option value="${esc(d)}">`).join('')}</datalist></div>
       <div class="field"><label for="u_title">Chức danh</label><input class="input" id="u_title" name="title" value="${esc(u.title || '')}"></div>
       <div class="field"><label for="u_shift">Ca làm việc</label><select class="select" id="u_shift" name="shiftId">${A.shifts.map(s => `<option value="${s.id}"${s.id === u.shiftId ? ' selected' : ''}>${esc(s.name)} ${s.start}–${s.end}</option>`).join('')}</select></div>
       <div class="field"><label for="u_role">Quyền</label><select class="select" id="u_role" name="role" ${u.uid === A.company.ownerUid ? 'disabled' : ''}>${Object.entries(ROLES).map(([k, n]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
       <div class="field"><label for="u_leave">Số ngày phép năm</label><input class="input" id="u_leave" name="leaveTotal" type="number" min="0" max="60" step="0.5" value="${u.leaveTotal ?? 12}"></div>
       <div class="field"><label>Địa điểm được chấm</label><div class="days">${A.locations.map(l => `<label><input type="checkbox" name="loc" value="${l.id}"${(u.locationIds || []).includes(l.id) ? ' checked' : ''}>${esc(l.name)}</label>`).join('') || '<span class="hint">Chưa có địa điểm</span>'}</div><div class="hint">Không chọn = được chấm ở mọi địa điểm.</div></div>
-      ${isNew ? `<div class="full hint">Gửi cho nhân viên: mã công ty <b>${esc(A.company.code)}</b>, tài khoản và mật khẩu trên. Nhân viên mở app chấm công để đăng nhập.</div>` : ''}
+      ${isNew ? `<div class="full hint">Tài khoản tự gợi ý theo họ tên, mật khẩu tạm tạo sẵn (có thể sửa). Lần đầu đăng nhập, nhân viên phải đặt mật khẩu riêng.</div>` : ''}
     </form>`, `<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-p" id="saveU">${isNew ? 'Thêm nhân viên' : 'Lưu thay đổi'}</button>`);
+    if (isNew) {
+      const nameIn = m.querySelector('#u_name'), accIn = m.querySelector('#u_acc');
+      let touched = false;
+      accIn.addEventListener('input', () => { touched = true; });
+      nameIn.addEventListener('input', () => { if (!touched) accIn.value = suggestAccount(nameIn.value, takenAccounts()); });
+    }
     m.querySelector('#saveU').onclick = e => {
       const f = m.querySelector('#uf'), fd = new FormData(f), d = Object.fromEntries(fd);
       if (!String(d.name || '').trim()) return toast('Nhập họ và tên');
@@ -466,15 +474,160 @@
       const data = { name: d.name.trim(), code: d.code.trim(), dept: d.dept.trim(), title: d.title.trim(), shiftId: d.shiftId || '', leaveTotal: Number(d.leaveTotal) || 0, locationIds: fd.getAll('loc') };
       if (d.role) data.role = d.role;
       busy(e.currentTarget, async () => {
-        if (isNew) { const nu = await API.createUser({ ...data, account: d.account, password: d.password }); A.users.push(nu); toast(`Đã thêm ${nu.name}`); }
-        else {
-          if (d.password) data.password = d.password;
-          await API.updateUser(u.uid, data);
-          delete data.password; Object.assign(u, data);
-          toast('Đã lưu thông tin');
+        if (isNew) {
+          const nu = await API.createUser({ ...data, account: d.account, password: d.password });
+          A.users.push(nu); m.remove(); render();
+          credentialsModal([{ name: nu.name, account: nu.account, password: d.password }]);
+          return;
         }
+        if (d.password) data.password = d.password;
+        await API.updateUser(u.uid, data);
+        delete data.password; Object.assign(u, data);
+        if (d.password) u.mustChangePassword = true;
         m.remove(); render();
+        if (d.password) credentialsModal([{ name: u.name, account: u.account, password: d.password }], 'Mật khẩu mới');
+        else toast('Đã lưu thông tin');
       });
+    };
+  }
+
+  // ---------------------------------------------------------------- cấp tài khoản hàng loạt
+  const takenAccounts = () => new Set(A.users.map(u => String(u.account || '').toLowerCase()));
+  const unaccent = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+  /** "Nguyễn Văn An" -> "an.nguyen" (thêm số nếu trùng). */
+  function suggestAccount(name, taken) {
+    const w = unaccent(name).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim().split(/\s+/).filter(Boolean);
+    if (!w.length) return '';
+    const base = w.length > 1 ? `${w[w.length - 1]}.${w[0]}` : w[0];
+    let acc = base, i = 2;
+    while (taken.has(acc)) acc = base + i++;
+    return acc;
+  }
+  /** Mật khẩu tạm dễ đọc, dễ gõ trên điện thoại (bỏ các ký tự dễ nhầm như 0/o, 1/l). */
+  function genPassword() {
+    const L = 'abcdefghjkmnpqrstuvwxyz', D = '23456789';
+    const r = n => crypto.getRandomValues(new Uint32Array(1))[0] % n;
+    let p = '';
+    for (let i = 0; i < 4; i++) p += L[r(L.length)];
+    for (let i = 0; i < 4; i++) p += D[r(D.length)];
+    return p;
+  }
+  const appUrl = () => new URL('index.html', location.href).href;
+  const coName = () => /^(c[oô]ng ty|cty)\b/i.test(A.company.name) ? A.company.name : 'công ty ' + A.company.name;
+  const credMessage = c => `Chào ${c.name}, ${coName()} đã tạo tài khoản chấm công cho bạn.
+• Mở app: ${appUrl()}
+• Mã công ty: ${A.company.code}
+• Tài khoản: ${c.account}
+• Mật khẩu tạm: ${c.password}
+Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới. Trên điện thoại: mở link › Chia sẻ › Thêm vào Màn hình chính để dùng như app.`;
+  async function copyText(text, okMsg) {
+    try { await navigator.clipboard.writeText(text); toast(okMsg); }
+    catch (e) {
+      const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); toast(okMsg); } catch (err) { toast('Không sao chép được, hãy bôi đen để chép tay'); }
+      ta.remove();
+    }
+  }
+  /** Hiện thông tin đăng nhập để gửi cho nhân viên (mật khẩu tạm chỉ hiện một lần). */
+  function credentialsModal(list, pwLabel = 'Mật khẩu tạm') {
+    const m = modal(list.length > 1 ? `Đã tạo ${list.length} tài khoản` : `Tài khoản của ${list[0].name}`, `<div class="modal-b">
+      <div class="full cred-note"><i class="icon-triangle-alert"></i><span><b>Mật khẩu tạm chỉ hiện lần này.</b> Hãy gửi cho nhân viên ngay (Zalo, tin nhắn) hoặc tải danh sách về trước khi đóng.</span></div>
+      <div class="full"><div class="kv" style="grid-template-columns:150px 1fr"><span>Link app</span><b>${esc(appUrl())}</b><span>Mã công ty</span><b>${esc(A.company.code)}</b></div></div>
+      <div class="full tbl-wrap" style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:12px"><table class="tbl"><thead><tr><th>Họ tên</th><th>Tài khoản</th><th>${pwLabel}</th><th></th></tr></thead><tbody>
+        ${list.map((c, i) => `<tr><td><b>${esc(c.name)}</b></td><td class="mono">${esc(c.account)}</td><td class="mono">${esc(c.password)}</td>
+          <td><div class="acts"><button class="btn btn-sm btn-o" data-copy="${i}"><i class="icon-copy"></i>Chép tin nhắn</button></div></td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="full hint">"Chép tin nhắn" sao chép sẵn lời nhắn kèm link, mã công ty, tài khoản và mật khẩu để dán vào Zalo.</div>
+    </div>`, `<button class="btn btn-o" id="credCsv"><i class="icon-download"></i>Tải danh sách (Excel)</button>${list.length > 1 ? '<button class="btn btn-o" id="credAll"><i class="icon-copy"></i>Chép tất cả</button>' : ''}<button class="btn btn-p" data-close>Xong</button>`);
+    m.querySelectorAll('[data-copy]').forEach(b => { b.onclick = () => copyText(credMessage(list[+b.dataset.copy]), `Đã chép tin nhắn cho ${list[+b.dataset.copy].name}`); });
+    const all = m.querySelector('#credAll');
+    if (all) all.onclick = () => copyText(list.map(credMessage).join('\n\n———\n\n'), `Đã chép ${list.length} tin nhắn`);
+    m.querySelector('#credCsv').onclick = () => C.csvDownload(`tai-khoan-${A.company.code}-${dayKey(new Date())}.csv`,
+      [['Họ tên', 'Mã công ty', 'Tài khoản', pwLabel, 'Link app'], ...list.map(c => [c.name, A.company.code, c.account, c.password, appUrl()])]);
+  }
+
+  /** Đọc bảng dán từ Excel (cột cách nhau bằng Tab) hoặc file CSV. */
+  function parseTable(text) {
+    const lines = String(text || '').replace(/\r/g, '').split('\n').filter(l => l.trim());
+    if (!lines.length) return [];
+    const sep = lines[0].includes('\t') ? '\t' : lines[0].includes(';') ? ';' : ',';
+    const split = line => {
+      if (sep === '\t') return line.split('\t');
+      const out = []; let cur = '', q = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+        else if (ch === '"') q = true; else if (ch === sep) { out.push(cur); cur = ''; } else cur += ch;
+      }
+      out.push(cur); return out;
+    };
+    let rows = lines.map(l => split(l).map(c => c.trim()));
+    if (/h[ọo].*t[êe]n|name/i.test(unaccent(rows[0][0])) || /ho ?ten|ten/i.test(unaccent(rows[0][0]).toLowerCase())) rows = rows.slice(1);
+    return rows.filter(r => r[0]);
+  }
+  function importModal() {
+    const m = modal('Nhập danh sách nhân viên', `<div class="modal-b">
+      <div class="full hint" style="font-size:13px">Chép bảng từ Excel / Google Sheets rồi dán vào ô dưới. Thứ tự cột:
+        <b>Họ tên</b> · Mã NV · Phòng ban · Chức danh · Quyền (ghi "Quản trị" nếu là quản trị) · Tài khoản · Mật khẩu.
+        Chỉ <b>Họ tên</b> là bắt buộc; tài khoản và mật khẩu tạm để trống sẽ được tạo tự động.
+        <a href="#" id="tpl">Tải file mẫu</a></div>
+      <div class="field full"><textarea class="input mono" id="imText" style="min-height:140px" placeholder="Nguyễn Văn An&#9;NV-0248&#9;Phòng Kinh doanh&#9;Nhân viên kinh doanh&#10;Lê Minh Châu&#9;NV-0251&#9;Phòng Kế toán&#9;Kế toán"></textarea></div>
+      <div class="field"><label for="imFile">Hoặc chọn file CSV</label><input class="input" id="imFile" type="file" accept=".csv,text/csv" style="padding-top:8px"></div>
+      <div class="field"><label for="imShift">Ca làm việc cho tất cả</label><select class="select" id="imShift">${A.shifts.map(s => `<option value="${s.id}">${esc(s.name)} ${s.start}–${s.end}</option>`).join('')}</select></div>
+      <div class="field"><label for="imLeave">Số ngày phép năm</label><input class="input" id="imLeave" type="number" min="0" max="60" step="0.5" value="${A.company.settings.leavePerYear}"></div>
+      <div class="field"><label>Địa điểm được chấm</label><div class="days">${A.locations.map(l => `<label><input type="checkbox" name="imLoc" value="${l.id}">${esc(l.name)}</label>`).join('') || '<span class="hint">Chưa có địa điểm</span>'}</div><div class="hint">Không chọn = mọi địa điểm.</div></div>
+      <div class="full" id="imPreview"></div>
+    </div>`, `<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-p" id="imGo" disabled>Tạo tài khoản</button>`);
+    m.querySelector('.modal').style.maxWidth = '860px';
+    let rows = [];
+    const preview = () => {
+      const taken = takenAccounts(), seen = new Set();
+      rows = parseTable(m.querySelector('#imText').value).map(r => {
+        const [name, code = '', dept = '', title = '', role = '', account = '', password = ''] = r;
+        const acc = (account || suggestAccount(name, new Set([...taken, ...seen]))).toLowerCase();
+        let err = '';
+        if (!/^[a-z0-9._@-]+$/.test(acc)) err = 'Tài khoản chỉ gồm chữ không dấu, số, dấu chấm';
+        else if (taken.has(acc) || seen.has(acc)) err = 'Tài khoản đã tồn tại';
+        else if (password && password.length < 6) err = 'Mật khẩu cần ít nhất 6 ký tự';
+        seen.add(acc);
+        return { name, code, dept, title, role: /qu[aả]n tr[iị]|admin/i.test(role) ? 'admin' : 'employee', account: acc, password: password || genPassword(), err };
+      });
+      const ok = rows.filter(r => !r.err).length;
+      m.querySelector('#imPreview').innerHTML = rows.length ? `<div class="tbl-wrap" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:12px"><table class="tbl"><thead><tr><th>#</th><th>Kiểm tra</th><th>Họ tên</th><th>Tài khoản</th><th>Mật khẩu tạm</th><th>Quyền</th><th>Mã NV</th><th>Phòng ban</th><th>Chức danh</th></tr></thead><tbody>
+        ${rows.map((r, i) => `<tr><td class="muted">${i + 1}</td><td>${r.err ? `<span class="chip bad">${esc(r.err)}</span>` : '<span class="chip ok">Hợp lệ</span>'}</td>
+          <td><b>${esc(r.name)}</b></td><td class="mono">${esc(r.account)}</td><td class="mono">${esc(r.password)}</td><td>${ROLES[r.role]}</td><td>${esc(r.code)}</td><td>${esc(r.dept)}</td><td>${esc(r.title)}</td></tr>`).join('')}
+      </tbody></table></div><div class="hint" style="margin-top:8px">${ok}/${rows.length} dòng hợp lệ${rows.length > ok ? ' · dòng lỗi sẽ được bỏ qua' : ''}${API.mode !== 'demo' && ok > 90 ? ' · Firebase giới hạn khoảng 100 tài khoản mới mỗi giờ, hãy chia làm nhiều lần' : ''}.</div>` : '';
+      const go = m.querySelector('#imGo');
+      go.disabled = !ok; go.textContent = ok ? `Tạo ${ok} tài khoản` : 'Tạo tài khoản';
+    };
+    m.querySelector('#imText').addEventListener('input', preview);
+    m.querySelector('#imFile').onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      m.querySelector('#imText').value = (await f.text()).replace(/^﻿/, ''); preview();
+    };
+    m.querySelector('#tpl').onclick = e => {
+      e.preventDefault();
+      C.csvDownload('mau-danh-sach-nhan-vien.csv', [['Họ tên', 'Mã NV', 'Phòng ban', 'Chức danh', 'Quyền', 'Tài khoản', 'Mật khẩu'],
+        ['Nguyễn Văn An', 'NV-0001', 'Phòng Kinh doanh', 'Nhân viên kinh doanh', '', '', ''], ['Trần Thị Hương', 'NV-0002', 'Phòng Nhân sự', 'Trưởng phòng', 'Quản trị', '', '']]);
+    };
+    m.querySelector('#imGo').onclick = async e => {
+      const btn = e.currentTarget, todo = rows.filter(r => !r.err);
+      const common = { shiftId: m.querySelector('#imShift').value, leaveTotal: Number(m.querySelector('#imLeave').value) || 0,
+        locationIds: [...m.querySelectorAll('input[name=imLoc]:checked')].map(i => i.value) };
+      btn.disabled = true;
+      m.querySelectorAll('textarea, input, select').forEach(i => { i.disabled = true; });
+      const done = [], failed = [];
+      for (let i = 0; i < todo.length; i++) {
+        const r = todo[i];
+        btn.innerHTML = `<i class="icon-loader-circle spin"></i>Đang tạo ${i + 1}/${todo.length}`;
+        try {
+          const nu = await API.createUser({ ...common, name: r.name, code: r.code, dept: r.dept, title: r.title, role: r.role, account: r.account, password: r.password });
+          A.users.push(nu); done.push({ name: r.name, account: r.account, password: r.password });
+        } catch (err) { failed.push(`${r.name}: ${errMsg(err)}`); }
+      }
+      m.remove(); render();
+      if (done.length) credentialsModal(done);
+      if (failed.length) toast(`${failed.length} người chưa tạo được: ${failed.slice(0, 2).join('; ')}${failed.length > 2 ? '…' : ''}`);
     };
   }
 

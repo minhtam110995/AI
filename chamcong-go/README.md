@@ -33,7 +33,8 @@ Khi dùng Firebase, quyền được **máy chủ** kiểm tra (file `firestore.
 
 **Trang quản trị (máy tính)**
 - **Tổng quan**: Có mặt hôm nay, Đi muộn, Vắng mặt, Đơn chờ duyệt; biểu đồ chuyên cần 14 ngày; danh sách chấm công hôm nay và người chưa chấm.
-- **Nhân viên**: thêm (tạo luôn tài khoản), sửa, khoá/mở, gán ca, gán địa điểm, cấp quyền.
+- **Nhân viên**: thêm từng người hoặc **nhập cả danh sách** (dán từ Excel / Google Sheets, hoặc file CSV). Tài khoản tự gợi ý theo họ tên (VD *Nguyễn Văn An* → `an.nguyen`), mật khẩu tạm tạo sẵn. Sau khi tạo có **phiếu đăng nhập**: chép tin nhắn gửi Zalo cho từng người hoặc tải danh sách Excel. Sửa, khoá/mở, gán ca, gán địa điểm, cấp quyền.
+- Nhân viên đăng nhập lần đầu bằng mật khẩu tạm **phải đặt mật khẩu riêng** mới dùng được app; trước đó danh sách hiện trạng thái *Chưa kích hoạt*.
 - **Địa điểm chấm công**: bấm lên bản đồ hoặc kéo ghim để đặt văn phòng, kéo thanh trượt bán kính 50–500m, tên Wifi; nhiều địa điểm.
 - **Ca làm việc**: giờ vào/ra, ngày làm việc trong tuần, số phút cho phép đến muộn.
 - **Duyệt đơn**: duyệt / từ chối kèm ý kiến, xem ảnh đính kèm; duyệt giải trình thì tự thêm lượt chấm bù; duyệt lượt chấm Wifi chưa xác minh.
@@ -78,7 +79,7 @@ Gói miễn phí (Spark) của Firebase đủ cho công ty khoảng vài chục 
    - hoặc **Firebase Hosting**: `npx firebase-tools deploy --project ten-du-an` trong thư mục `chamcong-go` (đã có sẵn `firebase.json`).
 8. Firebase › Authentication › **Settings › Authorized domains** › thêm tên miền hosting (VD `ten.github.io`).
 9. Mở app › **Tạo công ty mới**: nhập tên công ty, **mã công ty** (VD `ABC`), tài khoản và mật khẩu quản trị. Người tạo là **chủ công ty** (quyền quản trị, không bị khoá hay hạ quyền).
-10. Vào trang quản trị (`admin.html`): thêm địa điểm chấm công, ca làm việc, rồi thêm nhân viên. Gửi cho nhân viên link app, mã công ty, tài khoản và mật khẩu.
+10. Vào trang quản trị (`admin.html`): thêm địa điểm chấm công, ca làm việc, rồi **Nhân viên › Nhập danh sách** (dán bảng Excel: Họ tên · Mã NV · Phòng ban · Chức danh). Bấm **Chép tin nhắn** gửi Zalo cho từng người, hoặc **Tải danh sách**. Lưu ý: Firebase giới hạn khoảng 100 tài khoản mới mỗi giờ.
 
 ### Lưu ý về tài khoản và mật khẩu
 - Tài khoản có thể là tên đăng nhập (VD `an.nguyen`) hoặc email thật. Với **email thật**, nhân viên tự đặt lại được mật khẩu qua nút *Quên mật khẩu*.

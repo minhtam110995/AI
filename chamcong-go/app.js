@@ -129,6 +129,7 @@
     cleanup.forEach(fn => fn()); cleanup = [];
     document.querySelectorAll('.overlay').forEach(o => o.remove());
     if (!S.session || S.locked) return renderLogin();
+    if (S.user && S.user.mustChangePassword) return renderPassword(true);
     const { parts, params } = route();
     const screens = {
       home: renderHome, gps: () => renderGps(params.kind), wifi: () => renderWifi(params.kind),
@@ -262,6 +263,7 @@
       const wantFace = document.getElementById('faceOpt')?.checked;
       busy(f.querySelector('[type=submit]'), async () => {
         S.session = await API.signIn(d.code, d.account, d.password);
+        S.tmpPw = d.password; // để màn đổi mật khẩu lần đầu không phải hỏi lại
         lsSet('ccg.lastCode', API.normCode(d.code)); lsSet('ccg.lastAccount', d.account.trim().toLowerCase());
         S.user = S.session.user; S.locked = false;
         await loadAll();
@@ -272,7 +274,7 @@
   }
   async function signOut() {
     try { await API.signOut(); } catch (e) { /* ignore */ }
-    Object.assign(S, { session: null, user: null, logs: [], reqs: [], notis: [], locked: false });
+    Object.assign(S, { session: null, user: null, logs: [], reqs: [], notis: [], locked: false, tmpPw: null });
     location.hash = ''; render();
   }
 
@@ -896,23 +898,34 @@
       </div>
     </div>`;
   }
-  function renderPassword() {
+  function renderPassword(force = false) {
+    const knowOld = force && S.tmpPw;
     $app.innerHTML = `<div class="screen">
-      ${topbar('Đổi mật khẩu', { back: 'profile' })}
+      ${force ? `<header class="topbar"><div class="topbar-row">Đặt mật khẩu mới</div><div class="topbar-pad"></div></header>` : topbar('Đổi mật khẩu', { back: 'profile' })}
       <form class="form" id="pwForm">
-        <div class="field"><label for="pw0">Mật khẩu hiện tại</label><input id="pw0" name="old" type="password" required autocomplete="current-password"></div>
+        ${force ? `<div class="banner warn"><i class="icon-shield-check"></i><span>Xin chào ${esc(S.user.name)}! Bạn đang dùng mật khẩu tạm do công ty cấp. Hãy đặt mật khẩu riêng để tiếp tục.</span></div>` : ''}
+        <div class="field" ${knowOld ? 'hidden' : ''}><label for="pw0">${force ? 'Mật khẩu tạm' : 'Mật khẩu hiện tại'}</label><input id="pw0" name="old" type="password" required autocomplete="current-password" value="${knowOld ? esc(S.tmpPw) : ''}"></div>
         <div class="field"><label for="pw1">Mật khẩu mới</label><input id="pw1" name="new1" type="password" required minlength="6" autocomplete="new-password" placeholder="Ít nhất 6 ký tự"></div>
         <div class="field"><label for="pw2">Nhập lại mật khẩu mới</label><input id="pw2" name="new2" type="password" required autocomplete="new-password"></div>
-        <button class="btn-primary" type="submit">Đổi mật khẩu</button>
+        <button class="btn-primary" type="submit">${force ? 'Lưu và vào app' : 'Đổi mật khẩu'}</button>
+        ${force ? '<button class="link-btn" type="button" id="pwLogout">Đăng xuất</button>' : ''}
       </form>
     </div>`;
     const f = document.getElementById('pwForm');
+    const lo = document.getElementById('pwLogout');
+    if (lo) lo.onclick = () => signOut();
     f.addEventListener('submit', e => {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(f));
       if (d.new1.length < 6) return toast('Mật khẩu cần ít nhất 6 ký tự');
       if (d.new1 !== d.new2) return toast('Hai mật khẩu mới không khớp');
-      busy(f.querySelector('[type=submit]'), async () => { await API.changePassword(d.old, d.new1); toast('Đã đổi mật khẩu'); go('profile'); });
+      busy(f.querySelector('[type=submit]'), async () => {
+        await API.changePassword(d.old, d.new1);
+        S.tmpPw = null;
+        S.user.mustChangePassword = false;
+        toast(force ? 'Đã đặt mật khẩu mới. Chào mừng bạn!' : 'Đã đổi mật khẩu');
+        if (force) { go('home'); render(); } else go('profile');
+      });
     });
   }
   function deviceName() {

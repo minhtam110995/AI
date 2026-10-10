@@ -25,8 +25,12 @@ service cloud.firestore {
         // Chủ công ty tự tạo hồ sơ quản trị đầu tiên; sau đó chỉ quản trị thêm người.
         allow create: if isAdmin()
                       || (signedIn() && request.auth.uid == uid && owner() == uid && request.resource.data.role == 'admin');
-        allow update: if isAdmin()
-                      && (uid != owner() || (request.resource.data.role == 'admin' && request.resource.data.active == true));
+        allow update: if (isAdmin()
+                      && (uid != owner() || (request.resource.data.role == 'admin' && request.resource.data.active == true)))
+                      // Nhân viên chỉ được gỡ dấu "phải đổi mật khẩu" của chính mình sau khi đã đổi.
+                      || (isMember() && request.auth.uid == uid
+                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword'])
+                          && request.resource.data.mustChangePassword == false);
         allow delete: if isAdmin() && uid != owner();
       }
 

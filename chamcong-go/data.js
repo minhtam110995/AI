@@ -150,7 +150,8 @@
         const u = co().users[load().session.uid];
         if (u.password !== oldPw) fail('Mật khẩu hiện tại không đúng');
         if (newPw.length < 6) fail('Mật khẩu cần ít nhất 6 ký tự');
-        u.password = newPw; persist();
+        if (newPw === oldPw) fail('Mật khẩu mới phải khác mật khẩu cũ');
+        u.password = newPw; u.mustChangePassword = false; persist();
       },
       async getCompany() { return companyPub(co()); },
       async updateCompany(patch) { needAdmin(); const c = co(); if (patch.name) c.name = patch.name; if (patch.settings) c.settings = { ...c.settings, ...patch.settings }; persist(); return companyPub(c); },
@@ -160,7 +161,7 @@
         if (!account) fail('Nhập tài khoản đăng nhập');
         if (Object.values(c.users).some(u => u.account === account)) fail('Tài khoản ' + account + ' đã tồn tại');
         if (String(d.password || '').length < 6) fail('Mật khẩu cần ít nhất 6 ký tự');
-        const u = { uid: C.uid(), account, password: d.password, name: d.name, title: d.title || '', dept: d.dept || '', role: d.role || 'employee', code: d.code || '', active: true, shiftId: d.shiftId || '', locationIds: d.locationIds || [], leaveTotal: Number(d.leaveTotal ?? c.settings.leavePerYear), createdAt: Date.now() };
+        const u = { uid: C.uid(), account, password: d.password, name: d.name, title: d.title || '', dept: d.dept || '', role: d.role || 'employee', code: d.code || '', active: true, shiftId: d.shiftId || '', locationIds: d.locationIds || [], leaveTotal: Number(d.leaveTotal ?? c.settings.leavePerYear), mustChangePassword: true, createdAt: Date.now() };
         c.users[u.uid] = u; persist(); return pub(clone(u));
       },
       async updateUser(uid, patch) {
@@ -168,7 +169,7 @@
         if (uid === c.ownerUid && (patch.role === 'employee' || patch.active === false)) fail('Không thể hạ quyền hoặc khoá tài khoản chủ công ty');
         const { password, account, uid: _u, ...rest } = patch;
         Object.assign(u, rest);
-        if (password) { if (password.length < 6) fail('Mật khẩu cần ít nhất 6 ký tự'); u.password = password; }
+        if (password) { if (password.length < 6) fail('Mật khẩu cần ít nhất 6 ký tự'); u.password = password; u.mustChangePassword = true; }
         persist(); return pub(clone(u));
       },
       async listLocations() { return Object.values(co().locations).map(clone); },
@@ -331,7 +332,12 @@
           if (/credential|password/.test(e.code || '')) fail('Mật khẩu hiện tại không đúng');
           throw e;
         });
+        if (newPw === oldPw) fail('Mật khẩu mới phải khác mật khẩu cũ');
         await u.updatePassword(newPw);
+        if (meCache && meCache.mustChangePassword) {
+          await col('users').doc(u.uid).update({ mustChangePassword: false });
+          meCache.mustChangePassword = false;
+        }
       }),
       getCompany: wrap(async () => { const c = norm(await cref().get()); return { ...c, settings: { ...DEFAULT_SETTINGS, ...(c.settings || {}) } }; }),
       updateCompany: wrap(async patch => {
@@ -348,7 +354,7 @@
         const cred = await a2.createUserWithEmailAndPassword(toEmail(cid, account), d.password);
         const uid = cred.user.uid;
         await a2.signOut();
-        const doc = strip({ account, name: d.name, title: d.title || '', dept: d.dept || '', role: d.role || 'employee', code: d.code || '', active: true, shiftId: d.shiftId || '', locationIds: d.locationIds || [], leaveTotal: Number(d.leaveTotal ?? DEFAULT_SETTINGS.leavePerYear), createdAt: FV.serverTimestamp() });
+        const doc = strip({ account, name: d.name, title: d.title || '', dept: d.dept || '', role: d.role || 'employee', code: d.code || '', active: true, shiftId: d.shiftId || '', locationIds: d.locationIds || [], leaveTotal: Number(d.leaveTotal ?? DEFAULT_SETTINGS.leavePerYear), mustChangePassword: true, createdAt: FV.serverTimestamp() });
         await col('users').doc(uid).set(doc);
         return { ...doc, uid, createdAt: Date.now() };
       }),
