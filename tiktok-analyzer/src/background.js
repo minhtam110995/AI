@@ -49,7 +49,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   }
 
   if (msg.type === 'refreshChannels') { refreshChannels().then((n) => reply({ ok: true, n })); return true; }
-  if (msg.type === 'analyzeChannel') { analyzeChannel(msg.username, msg.scrolls || 15, msg.maxProducts || 15); reply({ ok: true }); }
   if (msg.type === 'searchKeyword') { searchKeyword(msg.keyword, msg.scrolls || 15); reply({ ok: true }); }
   if (msg.type === 'flushed') scheduleBreakoutCheck();
 });
@@ -119,46 +118,7 @@ chrome.notifications.onClicked.addListener((id) => {
   });
 });
 
-// ---------- Dán kênh → phân tích affiliate ----------
-// 1) mở kênh trong tab nền và tự cuộn để lấy video, 2) mở trang các sản phẩm gắn giỏ để lấy giá & "đã bán".
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const setJob = (job) => chrome.storage.local.set({ ttJob: { ...job, t: Date.now() } });
-let analyzing = false;
-async function analyzeChannel(input, scrolls, maxProducts) {
-  const username = String(input || '').trim().replace(/^.*tiktok\.com\/@/, '').replace(/^@/, '').split(/[/?#\s]/)[0];
-  if (!username || analyzing) return;
-  analyzing = true;
-  try {
-    await setJob({ username, step: 'channel', msg: `Đang mở kênh @${username} và cuộn lấy video…` });
-    const tab = await chrome.tabs.create({ url: `https://www.tiktok.com/@${encodeURIComponent(username)}`, active: false });
-    await sleep(9000);
-    try { await chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: scrolls }); } catch (_) {}
-    await sleep(scrolls * 2600 + 3000);
-    try { await chrome.tabs.sendMessage(tab.id, { type: 'flushNow' }); } catch (_) {}
-    try { await chrome.tabs.remove(tab.id); } catch (_) {}
-    await sleep(1500);
-
-    const { videos = {}, products = {} } = await chrome.storage.local.get(['videos', 'products']);
-    const mine = Object.values(videos).filter((v) => v.author?.toLowerCase() === username.toLowerCase());
-    const views = {};
-    mine.forEach((v) => (v.products || []).forEach((p) => p.productId && (views[p.productId] = (views[p.productId] || 0) + v.views)));
-    // ưu tiên sản phẩm có nhiều view nhất, bỏ qua sản phẩm vừa cập nhật trong 6 giờ
-    const todo = Object.entries(views).sort((a, b) => b[1] - a[1]).map(([id]) => id)
-      .filter((id) => !(products[id]?.updatedAt > Date.now() - 6 * 3600e3 && products[id]?.sold != null)).slice(0, maxProducts);
-    for (let i = 0; i < todo.length; i++) {
-      await setJob({ username, step: 'products', msg: `Đang lấy số "đã bán" sản phẩm ${i + 1}/${todo.length}…` });
-      const t = await chrome.tabs.create({ url: `https://shop.tiktok.com/view/product/${todo[i]}?region=VN&locale=vi-VN`, active: false });
-      await sleep(8000);
-      try { await chrome.tabs.sendMessage(t.id, { type: 'flushNow' }); } catch (_) {}
-      try { await chrome.tabs.remove(t.id); } catch (_) {}
-      await sleep(2500 + Math.random() * 2500);
-    }
-    await setJob({ username, step: 'done', msg: `✓ Xong: ${mine.length} video của @${username}, ${todo.length} sản phẩm đã cập nhật.`, videos: mine.length });
-  } catch (e) {
-    await setJob({ username, step: 'error', msg: 'Lỗi: ' + (e.message || e) });
-  }
-  analyzing = false;
-}
 
 // ---------- Tìm theo từ khoá → video nhiều view ----------
 // Mở trang tìm kiếm video của TikTok trong tab nền, tự cuộn để TikTok tải kết quả, rồi đóng tab.

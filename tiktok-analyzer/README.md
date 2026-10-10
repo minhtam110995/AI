@@ -35,29 +35,10 @@ Video phát trong khung riêng, kèm tên sản phẩm gắn giỏ. Tiện ích 
 
 Tiện ích chỉ hỗ trợ **xem**, không tải video xuống.
 
-## 🤝 Nhà sáng tạo – số liệu thật từ Trung tâm liên kết TikTok Shop (bản 1.4)
-Chỉ cần **tài khoản người bán TikTok Shop của bạn**, không cần đăng nhập tài khoản của từng creator.
-1. Đăng nhập [affiliate.tiktok.com](https://affiliate.tiktok.com), vào **Khám phá các nhà sáng tạo → Tìm nhà sáng tạo** (hoặc Bảng xếp hạng), rồi chọn bộ lọc ngành.
-2. Bấm biểu tượng tiện ích, chọn **⬇ Tự cuộn lấy danh sách nhà sáng tạo**.
-3. Mở Dashboard, vào tab **🤝 Nhà sáng tạo**. Tại đây bạn xem được:
-   - GMV, món bán, **giá TB/món**, follower, **GMV / 1K follower** (tìm creator nhỏ nhưng bán tốt), lượt xem TB, tương tác, giới tính và độ tuổi người xem, Ngôi sao sáng tạo, **GMV thay đổi** so với lần ghi nhận trước;
-   - lọc theo GMV, ngành hàng, Ngôi sao; đánh dấu ★ danh sách mời; xuất CSV; copy @handle;
-   - nút **Phân tích kênh**: lấy video, sản phẩm và hook của creator đó (tab 💰 Affiliate & Ads).
-
-Tiện ích chỉ đọc số liệu mà trang đã hiển thị cho tài khoản của bạn. Tiện ích không lưu mật khẩu và không gửi dữ liệu đi đâu.
-
-## 💰 Affiliate & Ads (bản 1.3)
-- **Dán kênh để phân tích:** dán `@kenh` hoặc link kênh vào tab **💰 Affiliate & Ads**. Tiện ích mở kênh trong tab nền và tự cuộn để lấy video, rồi mở trang các sản phẩm gắn giỏ để lấy **giá, số "đã bán", tên shop**.
-- **Sản phẩm nào ra đơn:** gồm giá, đã bán, **bán/ngày** (khi phân tích lại sau 1–3 ngày), doanh thu sản phẩm, số video và lượt xem của kênh cho sản phẩm, **phần doanh thu quy cho kênh**, số creator khác cũng đang bán.
-- **Video bán hàng:** doanh thu ước tính từng video, kèm đánh dấu 📣 nếu video đã từng xuất hiện dưới dạng quảng cáo.
-- **Hoa hồng ước tính:** tự nhập % hoa hồng.
-- **Quảng cáo bắt gặp khi lướt:** nhà quảng cáo, số mẫu, số lần bắt gặp, mẫu nổi nhất, có gắn giỏ hay không.
-
-> ⚠️ Doanh thu là **ước tính**, vì TikTok không công khai doanh thu từng video hay từng kênh. Cách tính:
-> - **Doanh thu sản phẩm** = giá × đã bán. Nếu đã có ít nhất 2 lần ghi nhận thì dùng giá × tốc độ bán × 30 ngày.
-> - **Phần của kênh** = doanh thu sản phẩm × (lượt xem video của kênh gắn sản phẩm ÷ lượt xem mọi video đã biết gắn sản phẩm đó).
->
-> Số "đã bán" là của **cả sản phẩm** (mọi kênh và cả shop), nên nếu bạn chưa thu thập video của các creator khác, phần quy cho kênh sẽ bị **cao hơn thực tế**.
+## 🔎 Tìm video nhiều view theo từ khoá (bản 1.6)
+1. Mở Dashboard, vào tab **🔎 Từ khoá** (hoặc popup → **🔎 Tìm video nhiều view theo từ khoá**).
+2. Gõ từ khoá (vd: *bất động sản*), chọn độ sâu, bấm **Tìm & thu thập**. Tiện ích mở trang tìm kiếm video của TikTok trong tab nền, tự cuộn lấy kết quả rồi đóng tab (cần đang đăng nhập tiktok.com).
+3. Lọc theo **thời gian đăng** (24 giờ, 7/30 ngày, 3/6/12 tháng, hoặc tự chọn ngày), view tối thiểu, gắn giỏ; sắp xếp theo view, view/ngày, bứt phá, ER. Có biểu đồ kênh nổi bật và hashtag đi kèm, xuất CSV.
 
 ## Tính năng mới (bản 1.2) – chạy hoàn toàn trong tiện ích, không cần API key
 - **Nhãn trên lưới video TikTok:** ER · share · lưu · 🔥 *gấp X lần view trung vị của kênh* (viền đỏ khi ≥ 3×) · 🛒 nếu video gắn giỏ.
@@ -77,10 +58,9 @@ Tiện ích chỉ đọc số liệu mà trang đã hiển thị cho tài khoả
   - Theo dõi kênh đối thủ (popup → ⭐ khi đang ở trang kênh), tự cập nhật mỗi ngày, **thông báo khi có video bứt phá**.
   - **Video tăng view nhanh** (view/giờ) và **video "vượt tầm"** (view so với follower).
   - **Âm thanh và hashtag đang được dùng nhiều** trong 14 ngày.
-- **🛒 TikTok Shop:** video gắn giỏ so với video thường, sản phẩm được gắn nhiều view nhất, creator đang bán hàng (gợi ý hợp tác affiliate).
 - **Phụ đề .SRT:** nút **Tải .srt** ở trang *Lấy nội dung gốc video*.
 
-> Các phân tích về trend, âm thanh, TikTok Shop dựa trên dữ liệu **bạn đã thu thập**. Lướt For You, tìm kiếm và mở kênh càng nhiều thì kết quả càng chính xác.
+> Các phân tích về trend, âm thanh dựa trên dữ liệu **bạn đã thu thập**. Lướt For You, tìm kiếm và mở kênh càng nhiều thì kết quả càng chính xác.
 
 ## 📝 Lấy nội dung gốc video (lời thoại, caption)
 - **Đang xem một video** trên TikTok: bấm biểu tượng tiện ích, chọn **📝 Lấy nội dung gốc video**.

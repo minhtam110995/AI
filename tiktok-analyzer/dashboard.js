@@ -16,10 +16,8 @@ async function loadData() {
   state.allVideos = Object.values(videos);
   state.videos = state.allVideos.filter((v) => !v.isAd);
   state.products = all.products || {};
-  state.job = all.ttJob || null;
   state.kwJob = all.kwJob || null;
   state.keywords = all.ttKeywords || {};
-  state.creators = all.affCreators || {};
   state.users = users;
   state.comments = Object.fromEntries(Object.keys(all).filter((k) => k.startsWith('c:')).map((k) => [k.slice(2), all[k]]));
   state.watchChannels = all.watchChannels || [];
@@ -372,7 +370,7 @@ function render() {
   const tab = typeof PANES !== 'undefined' && PANES[currentTab()] ? currentTab() : 'overview';
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
   document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== tab));
-  document.querySelector('body > section.filters').style.display = tab === 'creators' || tab === 'keyword' ? 'none' : '';
+  document.querySelector('body > section.filters').style.display = tab === 'keyword' ? 'none' : '';
   if (tab !== 'overview') { PANES[tab](list, author); return; }
   renderProfile(author);
   renderKpis(list, author);
