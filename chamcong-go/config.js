@@ -1,16 +1,16 @@
 /*
- * Cấu hình ChấmCông Go.
- *
- * Để trống `firebase` (null) thì app chạy CHẾ ĐỘ DÙNG THỬ: dữ liệu mẫu lưu trong trình duyệt,
- * mỗi máy một bản riêng. Dùng thật cho cả công ty: tạo dự án Firebase rồi dán cấu hình
- * (Project settings › Your apps › Web app › Config) vào đây. Xem README.md.
+ * Cấu hình ChấmCông Go — đã nối Firebase dự án "chamcong-congty".
+ * Các giá trị dưới đây là cấu hình công khai của ứng dụng web (không phải mật khẩu);
+ * dữ liệu được bảo vệ bằng luật trong firestore.rules.
+ * Đặt firebase: null để quay lại chế độ dùng thử.
  */
 window.CCG_CONFIG = {
-  firebase: null
-  // firebase: {
-  //   apiKey: "...",
-  //   authDomain: "ten-du-an.firebaseapp.com",
-  //   projectId: "ten-du-an",
-  //   appId: "..."
-  // }
+  firebase: {
+    apiKey: "AIzaSyCrsLcoHeL5qpQBcdv3w1RJG8MOvWHh8Tw",
+    authDomain: "chamcong-congty.firebaseapp.com",
+    projectId: "chamcong-congty",
+    storageBucket: "chamcong-congty.firebasestorage.app",
+    messagingSenderId: "865974745723",
+    appId: "1:865974745723:web:97aff2afc30855226700de"
+  }
 };
