@@ -38,6 +38,8 @@ Khi dùng Firebase, quyền được **máy chủ** kiểm tra (file `firestore.
 - **Địa điểm chấm công**: bấm lên bản đồ hoặc kéo ghim để đặt văn phòng, kéo thanh trượt bán kính 50–500m, tên Wifi và **IP Wifi văn phòng** (nút *Lấy IP mạng đang dùng*); nhiều địa điểm.
 - **Ca làm việc**: giờ vào/ra, ngày làm việc trong tuần, số phút cho phép đến muộn.
 - **Duyệt đơn**: duyệt / từ chối kèm ý kiến, xem ảnh đính kèm; duyệt giải trình thì tự thêm lượt chấm bù.
+- **Phép năm**: mỗi người được 12 ngày/năm chia đều, **mỗi tháng tự cộng 1 ngày** (đổi số ngày/năm ở Cài đặt). Bảng phép từng người: tính từ tháng, phép đầu kỳ, cộng thêm, đã dùng, còn lại; nút **Cập nhật** để đặt số phép còn lại, cộng thêm hoặc trừ bớt; xuất Excel. Tuỳ chọn xoá phép tồn khi sang năm mới (mặc định cộng dồn).
+- **Nhắc chấm công ra**: Tổng quan có thẻ *Chưa chấm công ra* sau giờ ra ca, nút nhắc từng người hoặc tất cả. Trên app, quá giờ ra ca chưa chấm ra thì trang chủ hiện lời nhắc (và thông báo trên máy nếu bật ở Cá nhân); quên chấm ra hôm trước thì nhắc gửi giải trình.
 - **Bảng công**: bảng tháng (nhân viên × ngày) với ký hiệu ✓ / M / T / V / P / CT; bấm ô để xem chi tiết hoặc thêm lượt chấm thủ công; xuất Excel (CSV).
 - **Báo cáo**: công thực tế, phép, đi muộn (lần, phút), về sớm, vắng, thiếu chấm, giờ làm thêm theo từng người; tỉ lệ chuyên cần theo phòng ban; xuất Excel.
 - **Cài đặt**: tên công ty, số ngày phép mặc định, bật/tắt chấm Wifi, đổi mật khẩu, link mời nhân viên.

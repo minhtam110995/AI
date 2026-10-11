@@ -25,6 +25,7 @@
   const chip = s => { const [cls, txt] = STATUS[s] || STATUS.pending; return `<span class="chip ${cls}">${txt}</span>`; };
   const userBy = uid => A.users.find(u => u.uid === uid) || { name: '(đã xoá)', uid };
   const shiftOf = u => C.shiftFor(u, A.shifts);
+  const balOf = u => C.leaveBalance({ user: u, reqs: reqsOf(u.uid), settings: A.company.settings, shift: shiftOf(u) });
   const startKeyOf = u => u.createdAt ? dayKey(u.createdAt) : null;
   // Người không chấm công (VD tài khoản quản trị dùng để quản lý): không tính vào chuyên cần, bảng công, báo cáo.
   // Chủ công ty mặc định không chấm công cho đến khi bỏ chọn trong mục Nhân viên.
@@ -72,7 +73,7 @@
   // ---------------------------------------------------------------- router / shell
   const NAV = [
     ['overview', 'layout-dashboard', 'Tổng quan'], ['users', 'users', 'Nhân viên'], ['locations', 'map-pin', 'Địa điểm chấm công'],
-    ['shifts', 'calendar-clock', 'Ca làm việc'], ['approvals', 'file-check-2', 'Duyệt đơn'], ['timesheet', 'table-2', 'Bảng công'],
+    ['shifts', 'calendar-clock', 'Ca làm việc'], ['approvals', 'file-check-2', 'Duyệt đơn'], ['leave', 'calendar-heart', 'Phép năm'], ['timesheet', 'table-2', 'Bảng công'],
     ['reports', 'chart-column', 'Báo cáo'], ['settings', 'settings', 'Cài đặt']
   ];
   const route = () => (location.hash.replace(/^#\/?/, '') || 'overview').split('?')[0];
@@ -121,7 +122,7 @@
     if (!A.session) return renderLogin();
     const r = route();
     const page = shell(r);
-    const pages = { overview: pOverview, users: pUsers, locations: pLocations, shifts: pShifts, approvals: pApprovals, timesheet: pTimesheet, reports: pReports, settings: pSettings };
+    const pages = { overview: pOverview, users: pUsers, locations: pLocations, shifts: pShifts, approvals: pApprovals, leave: pLeave, timesheet: pTimesheet, reports: pReports, settings: pSettings };
     try { await (pages[r] || pOverview)(page); }
     catch (e) { console.error(e); page.innerHTML = `<div class="card empty"><i class="icon-circle-alert"></i>${esc(errMsg(e))}</div>`; }
   }
@@ -483,7 +484,8 @@
     });
   }
   function userModal(u) {
-    const isNew = !u; u = u || { role: 'employee', locationIds: [], shiftId: (A.shifts[0] || {}).id, leaveTotal: A.company.settings.leavePerYear };
+    const isNew = !u; u = u || { role: 'employee', locationIds: [], shiftId: (A.shifts[0] || {}).id };
+    const leftNow = isNew ? C.leaveRate(A.company.settings) : balOf(u).left;
     const m = modal(isNew ? 'Thêm nhân viên' : 'Sửa thông tin nhân viên', `<form class="modal-b" id="uf">
       <div class="field"><label for="u_name">Họ và tên <em>*</em></label><input class="input" id="u_name" name="name" required value="${esc(u.name || '')}"></div>
       <div class="field"><label for="u_code">Mã nhân viên</label><input class="input" id="u_code" name="code" value="${esc(u.code || '')}" placeholder="NV-0001"></div>
@@ -493,7 +495,7 @@
       <div class="field"><label for="u_title">Chức danh</label><input class="input" id="u_title" name="title" value="${esc(u.title || '')}"></div>
       <div class="field"><label for="u_shift">Ca làm việc</label><select class="select" id="u_shift" name="shiftId">${A.shifts.map(s => `<option value="${s.id}"${s.id === u.shiftId ? ' selected' : ''}>${esc(s.name)} ${s.start}–${s.end}</option>`).join('')}</select></div>
       <div class="field"><label for="u_role">Quyền</label><select class="select" id="u_role" name="role" ${u.uid === A.company.ownerUid ? 'disabled' : ''}>${Object.entries(ROLES).map(([k, n]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
-      <div class="field"><label for="u_leave">Số ngày phép năm</label><input class="input" id="u_leave" name="leaveTotal" type="number" min="0" max="60" step="0.5" value="${u.leaveTotal ?? 12}"></div>
+      <div class="field"><label for="u_leave">Phép năm còn lại (tháng này)</label><input class="input" id="u_leave" name="leaveLeft" type="number" min="-60" max="200" step="0.5" value="${leftNow}"><div class="hint">Mỗi tháng tự cộng ${num(C.leaveRate(A.company.settings))} ngày.</div></div>
       <div class="field"><label>Địa điểm được chấm</label><div class="days">${A.locations.map(l => `<label><input type="checkbox" name="loc" value="${l.id}"${(u.locationIds || []).includes(l.id) ? ' checked' : ''}>${esc(l.name)}</label>`).join('') || '<span class="hint">Chưa có địa điểm</span>'}</div><div class="hint">Không chọn = được chấm ở mọi địa điểm.</div></div>
       <div class="field full"><label class="switch"><input type="checkbox" name="noAttendance" ${!isNew && exempt(u) ? 'checked' : ''}>Không chấm công (không tính vào chuyên cần, bảng công, báo cáo)</label><div class="hint">Dùng cho tài khoản chỉ để quản lý, VD tài khoản Admin bàn giao cho nhân sự.</div></div>
       ${isNew ? `<div class="full hint">Tài khoản tự gợi ý theo họ tên, mật khẩu tạm tạo sẵn (có thể sửa). Lần đầu đăng nhập, nhân viên phải đặt mật khẩu riêng.</div>` : ''}
@@ -509,7 +511,9 @@
       if (!String(d.name || '').trim()) return toast('Nhập họ và tên');
       if (isNew && !String(d.account || '').trim()) return toast('Nhập tài khoản đăng nhập');
       if (isNew && String(d.password || '').length < 6) return toast('Mật khẩu cần ít nhất 6 ký tự');
-      const data = { name: d.name.trim(), code: d.code.trim(), dept: d.dept.trim(), title: d.title.trim(), shiftId: d.shiftId || '', leaveTotal: Number(d.leaveTotal) || 0, locationIds: fd.getAll('loc'), noAttendance: !!d.noAttendance };
+      const data = { name: d.name.trim(), code: d.code.trim(), dept: d.dept.trim(), title: d.title.trim(), shiftId: d.shiftId || '', locationIds: fd.getAll('loc'), noAttendance: !!d.noAttendance };
+      const newLeft = Number(d.leaveLeft);
+      if (Number.isFinite(newLeft) && (isNew || newLeft !== leftNow)) Object.assign(data, C.leaveSetRemaining({ reqs: isNew ? [] : reqsOf(u.uid), shift: shiftOf({ ...u, shiftId: data.shiftId }), remaining: newLeft }));
       if (d.role) data.role = d.role;
       busy(e.currentTarget, async () => {
         if (isNew) {
@@ -606,13 +610,13 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
   function importModal() {
     const m = modal('Nhập danh sách nhân viên', `<div class="modal-b">
       <div class="full hint" style="font-size:13px">Chép bảng từ Excel / Google Sheets rồi dán vào ô dưới. Thứ tự cột:
-        <b>Họ tên</b> · Mã NV · Phòng ban · Chức danh · Quyền (ghi "Quản trị" nếu là quản trị) · Tài khoản · Mật khẩu · Số ngày phép.
+        <b>Họ tên</b> · Mã NV · Phòng ban · Chức danh · Quyền (ghi "Quản trị" nếu là quản trị) · Tài khoản · Mật khẩu · Số ngày phép (phép còn lại tính đến tháng này).
         Chỉ <b>Họ tên</b> là bắt buộc; tài khoản và mật khẩu tạm để trống sẽ được tạo tự động.
         <a href="#" id="tpl">Tải file mẫu</a></div>
       <div class="field full"><textarea class="input mono" id="imText" style="min-height:140px" placeholder="Nguyễn Văn An&#9;NV-0248&#9;Phòng Kinh doanh&#9;Nhân viên kinh doanh&#10;Lê Minh Châu&#9;NV-0251&#9;Phòng Kế toán&#9;Kế toán"></textarea></div>
       <div class="field"><label for="imFile">Hoặc chọn file CSV</label><input class="input" id="imFile" type="file" accept=".csv,text/csv" style="padding-top:8px"></div>
       <div class="field"><label for="imShift">Ca làm việc cho tất cả</label><select class="select" id="imShift">${A.shifts.map(s => `<option value="${s.id}">${esc(s.name)} ${s.start}–${s.end}</option>`).join('')}</select></div>
-      <div class="field"><label for="imLeave">Số ngày phép (khi không có cột riêng)</label><input class="input" id="imLeave" type="number" min="0" max="60" step="0.5" value="${A.company.settings.leavePerYear}"></div>
+      <div class="field"><label for="imLeave">Phép còn lại tháng này (khi không có cột riêng)</label><input class="input" id="imLeave" type="number" min="0" max="60" step="0.5" value="${C.leaveRate(A.company.settings)}"></div>
       <div class="field"><label>Địa điểm được chấm</label><div class="days">${A.locations.map(l => `<label><input type="checkbox" name="imLoc" value="${l.id}">${esc(l.name)}</label>`).join('') || '<span class="hint">Chưa có địa điểm</span>'}</div><div class="hint">Không chọn = mọi địa điểm.</div></div>
       <div class="full" id="imPreview"></div>
     </div>`, `<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-p" id="imGo" disabled>Tạo tài khoản</button>`);
@@ -652,7 +656,8 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
     };
     m.querySelector('#imGo').onclick = async e => {
       const btn = e.currentTarget, todo = rows.filter(r => !r.err);
-      const common = { shiftId: m.querySelector('#imShift').value, leaveTotal: Number(m.querySelector('#imLeave').value) || 0,
+      const leaveOf = v => C.leaveSetRemaining({ reqs: [], shift: C.DEFAULT_SHIFT, remaining: v });
+      const common = { shiftId: m.querySelector('#imShift').value, ...leaveOf(Number(m.querySelector('#imLeave').value) || 0),
         locationIds: [...m.querySelectorAll('input[name=imLoc]:checked')].map(i => i.value) };
       btn.disabled = true;
       m.querySelectorAll('textarea, input, select').forEach(i => { i.disabled = true; });
@@ -661,7 +666,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
         const r = todo[i];
         btn.innerHTML = `<i class="icon-loader-circle spin"></i>Đang tạo ${i + 1}/${todo.length}`;
         try {
-          const nu = await API.createUser({ ...common, ...(r.leave != null ? { leaveTotal: r.leave } : {}), name: r.name, code: r.code, dept: r.dept, title: r.title, role: r.role, account: r.account, password: r.password });
+          const nu = await API.createUser({ ...common, ...(r.leave != null ? leaveOf(r.leave) : {}), name: r.name, code: r.code, dept: r.dept, title: r.title, role: r.role, account: r.account, password: r.password });
           A.users.push(nu); done.push({ name: r.name, account: r.account, password: r.password });
         } catch (err) { failed.push(`${r.name}: ${errMsg(err)}`); }
       }
@@ -905,6 +910,48 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
   }
 
   // ---------------------------------------------------------------- reports
+  // ---------------------------------------------------------------- leave (phép năm)
+  function pLeave(page) {
+    const rate = C.leaveRate(A.company.settings), now = new Date();
+    const rows = activeUsers().map(u => ({ u, b: balOf(u) })).sort((a, b) => a.u.name.localeCompare(b.u.name, 'vi'));
+    const mLabel = k => `${+k.slice(5)}/${k.slice(0, 4)}`;
+    page.innerHTML = `<div class="row"><div class="hint grow" style="font-size:13px">Mỗi người được <b>${num(rate * 12)} ngày phép/năm</b>, chia đều: mỗi tháng tự cộng <b>${num(rate)} ngày</b> (đầu tháng). Phép năm trừ theo đơn nghỉ phép năm đã gửi (trừ đơn bị từ chối).
+        ${A.company.settings.leaveReset ? 'Phép chưa dùng bị xoá khi sang năm mới.' : 'Phép chưa dùng được cộng dồn sang năm sau.'} <a href="#/settings">Đổi ở Cài đặt</a></div>
+        <button class="btn btn-o" id="csv"><i class="icon-download"></i>Xuất Excel (CSV)</button></div>
+      <div class="card"><div class="card-h"><h2 class="grow">Phép năm từng người</h2><span class="sub">Tháng ${now.getMonth() + 1}/${now.getFullYear()}</span></div>
+        <div class="card-b" style="padding:12px 0 0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nhân viên</th><th>Tính từ tháng</th><th class="n">Phép đầu kỳ</th><th class="n">Cộng thêm</th><th class="n">Đã dùng / đăng ký</th><th class="n">Còn lại</th><th></th></tr></thead><tbody>
+        ${rows.map(({ u, b }) => `<tr><td><div class="who"><div class="av sm">${esc(initials(u.name))}</div><div><b>${esc(u.name)}</b><small>${esc([u.code, u.dept].filter(Boolean).join(' · '))}</small></div></div></td>
+          <td>${mLabel(b.month)}</td><td class="n">${num(b.base)}</td><td class="n">${b.months ? `+${num(b.rate * b.months)} <span class="muted">(${b.months} tháng)</span>` : '—'}</td><td class="n">${num(b.used)}</td>
+          <td class="n"><b style="color:${b.left < 0 ? 'var(--absent)' : 'var(--ok)'}">${num(b.left)}</b></td>
+          <td class="n"><button class="btn btn-o btn-sm" data-adj="${u.uid}"><i class="icon-pencil"></i>Cập nhật</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">Chưa có nhân viên</td></tr>'}
+        </tbody></table></div></div></div>`;
+    page.querySelector('#csv').onclick = () => C.csvDownload(`phep-nam-${C.monthKeyOf(now)}.csv`, [['Họ tên', 'Mã NV', 'Phòng ban', 'Tính từ tháng', 'Phép đầu kỳ', 'Cộng thêm', 'Đã dùng / đăng ký', 'Còn lại'],
+      ...rows.map(({ u, b }) => [u.name, u.code || '', u.dept || '', mLabel(b.month), b.base, b.rate * b.months, b.used, b.left])]);
+    page.querySelectorAll('[data-adj]').forEach(btn => { btn.onclick = () => leaveModal(A.users.find(x => x.uid === btn.dataset.adj), () => pLeave(page)); });
+  }
+  function leaveModal(u, done) {
+    const b = balOf(u);
+    const m = modal('Cập nhật phép năm', `<form class="modal-b" id="lvf">
+      <div class="full"><b>${esc(u.name)}</b><div class="hint">Đang có ${num(b.left)} ngày (đầu kỳ ${num(b.base)} từ tháng ${+b.month.slice(5)}/${b.month.slice(0, 4)}, cộng ${num(b.rate * b.months)}, đã dùng ${num(b.used)}).</div></div>
+      <div class="field"><label for="lv_mode">Cách cập nhật</label><select class="select" id="lv_mode"><option value="set">Đặt số phép còn lại</option><option value="add">Cộng thêm (thưởng, bù)</option><option value="sub">Trừ bớt</option></select></div>
+      <div class="field"><label for="lv_val" id="lv_lbl">Số phép còn lại</label><input class="input" id="lv_val" type="number" step="0.5" min="0" max="200" value="${b.left}" required></div>
+      <div class="full hint" id="lv_res"></div>
+    </form>`, `<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-p" id="lvSave">Lưu</button>`);
+    const mode = m.querySelector('#lv_mode'), val = m.querySelector('#lv_val'), res = m.querySelector('#lv_res');
+    const target = () => { const v = Number(val.value) || 0; return mode.value === 'set' ? v : mode.value === 'add' ? b.left + v : b.left - v; };
+    const upd = () => { res.innerHTML = `Sau khi lưu: còn <b>${num(target())}</b> ngày, từ tháng sau mỗi tháng cộng tiếp ${num(b.rate)} ngày.`; };
+    mode.onchange = () => { m.querySelector('#lv_lbl').textContent = mode.value === 'set' ? 'Số phép còn lại' : 'Số ngày'; val.value = mode.value === 'set' ? b.left : 1; upd(); };
+    val.oninput = upd; upd();
+    m.querySelector('#lvSave').onclick = e => {
+      if (!Number.isFinite(Number(val.value)) || val.value === '') return toast('Nhập số ngày');
+      const patch = C.leaveSetRemaining({ reqs: reqsOf(u.uid), shift: shiftOf(u), remaining: target() });
+      busy(e.currentTarget, async () => {
+        await API.updateUser(u.uid, patch); Object.assign(u, patch);
+        m.remove(); toast(`Đã cập nhật phép của ${u.name}: còn ${num(balOf(u).left)} ngày`); done && done();
+      });
+    };
+  }
+
   async function pReports(page) {
     const mk = monthKey(), y = +mk.slice(0, 4), m = +mk.slice(5) - 1, last = new Date(y, m + 1, 0).getDate();
     await loadLogs(`${mk}-01`, `${mk}-${pad(last)}`);
@@ -957,7 +1004,8 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
           <div class="card-b" style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px">
             <div class="field"><label for="c_name">Tên công ty</label><input class="input" id="c_name" name="name" value="${esc(A.company.name)}" required></div>
             <div class="field"><label for="c_code">Mã công ty</label><input class="input" id="c_code" value="${esc(A.company.code)}" disabled><div class="hint">Nhân viên nhập mã này khi đăng nhập. Không đổi được.</div></div>
-            <div class="field"><label for="c_leave">Số ngày phép năm mặc định</label><input class="input" id="c_leave" name="leavePerYear" type="number" min="0" max="60" step="0.5" value="${s.leavePerYear}"><div class="hint">Áp dụng cho nhân viên thêm mới; sửa riêng từng người ở mục Nhân viên.</div></div>
+            <div class="field"><label for="c_leave">Số ngày phép mỗi năm</label><input class="input" id="c_leave" name="leavePerYear" type="number" min="0" max="60" step="0.5" value="${s.leavePerYear ?? 12}"><div class="hint">Chia đều 12 tháng: 12 ngày/năm = mỗi tháng tự cộng 1 ngày. Xem, sửa phép từng người ở mục Phép năm.</div></div>
+            <div class="field"><label>Phép tồn cuối năm</label><label class="switch"><input type="checkbox" name="leaveReset"${s.leaveReset ? ' checked' : ''}>Xoá phép chưa dùng khi sang năm mới</label><div class="hint">Tắt: phép chưa dùng được cộng dồn sang năm sau.</div></div>
             <div class="field"><label>Chấm công bằng Wifi</label><label class="switch"><input type="checkbox" name="allowWifi"${s.allowWifi !== false ? ' checked' : ''}>Cho phép nhân viên chọn Wifi</label><div class="hint">Chỉ chấm được khi điện thoại đang dùng mạng Wifi văn phòng (IP khai báo ở mục Địa điểm chấm công). Sai mạng thì không chấm được.</div></div>
             <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><b>Quy định nghỉ</b><div class="hint">Áp dụng cho form xin nghỉ, cảnh báo khi duyệt đơn và cột KPI trong Báo cáo.</div></div>
             <div class="field"><label for="p_max">Số ngày nghỉ tối đa/tháng</label><input class="input" id="p_max" name="maxLeavePerMonth" type="number" min="0" max="31" step="0.5" value="${pol.maxLeavePerMonth}"><div class="hint">Gồm phép năm và nghỉ không lương; không tính nghỉ đột xuất hợp lệ.</div></div>
@@ -989,7 +1037,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       busy(f.querySelector('[type=submit]'), async () => {
         const steps = String(d.kpiSteps || '').split(/[,;\s]+/).map(x => Number(x.replace(',', '.'))).filter(x => Number.isFinite(x) && x >= 0);
         const policy = { maxLeavePerMonth: Number(d.maxLeavePerMonth) || 0, noticeDays: Number(d.noticeDays) || 0, longLeaveDays: Math.max(1, Number(d.longLeaveDays) || 1), kpiSteps: steps.length ? steps : C.DEFAULT_POLICY.kpiSteps };
-        const settings = { leavePerYear: Number(d.leavePerYear) || 0, allowWifi: !!d.allowWifi, policy };
+        const settings = { leavePerYear: Number(d.leavePerYear) || 0, leaveReset: !!d.leaveReset, allowWifi: !!d.allowWifi, policy };
         await API.updateCompany({ name: d.name.trim(), settings });
         A.company.name = d.name.trim(); A.company.settings = { ...A.company.settings, ...settings };
         toast('Đã lưu cài đặt'); render();

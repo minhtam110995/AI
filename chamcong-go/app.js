@@ -628,7 +628,8 @@
   }
 
   // ---------------------------------------------------------------- requests
-  const leaveLeft = () => Math.max(0, Number(S.user.leaveTotal ?? S.company.settings.leavePerYear ?? 12) - C.leaveUsed(S.reqs, new Date().getFullYear(), shift()));
+  const leaveBal = () => C.leaveBalance({ user: S.user, reqs: S.reqs, settings: S.company.settings, shift: shift() });
+  const leaveLeft = () => Math.max(0, leaveBal().left);
   const admins = () => S.users.filter(u => u.role === 'admin' && u.active !== false && u.uid !== S.user.uid);
 
   function reqCard(r) {
@@ -1010,7 +1011,7 @@
     const rows = [['Họ và tên', u.name], ['Mã nhân viên', u.code || '—'], ['Tài khoản', u.account || '—'], ['Phòng ban', u.dept || '—'], ['Chức danh', u.title || '—'],
       ['Quyền', C.ROLES[u.role] || u.role], ['Công ty', `${S.company.name} (${S.company.code})`], ['Ca làm việc', `${sh.name} ${sh.start} – ${sh.end}`],
       ['Ngày làm việc', (sh.workdays || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => DOW_SHORT[i]).join(', ')], ['Địa điểm chấm công', locs],
-      ['Phép năm', `${u.leaveTotal ?? S.company.settings.leavePerYear} ngày`]];
+      ['Phép năm còn lại', `${num(leaveLeft())} ngày (mỗi tháng cộng ${num(leaveBal().rate)} ngày)`]];
     $app.innerHTML = `<div class="screen">
       ${topbar('Thông tin cá nhân', { back: 'profile' })}
       <div class="content" style="padding-top:20px;padding-bottom:24px">

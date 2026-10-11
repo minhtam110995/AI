@@ -142,6 +142,36 @@
       .reduce((s, r) => s + leaveDays(r, shift), 0);
   }
 
+  /**
+   * Phép năm cộng dồn theo tháng: mỗi tháng được cộng (số phép/năm ÷ 12) ngày, mặc định 12/năm = 1 ngày/tháng.
+   * Mốc tính: quản trị nhập "phép còn lại" của một người ở tháng nào thì tháng đó là mốc
+   * (leaveBase = số phép có ở tháng mốc, đã gồm phép của tháng mốc; leaveBaseMonth = 'YYYY-MM').
+   * Còn lại = phép ở mốc + phép cộng thêm các tháng sau mốc − phép năm đã nghỉ/đăng ký từ mốc (trừ đơn bị từ chối).
+   * Nếu cài "xoá phép tồn khi sang năm mới": sang năm mới thì tính lại từ tháng 1 của năm đó.
+   */
+  const monthKeyOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const monthDiff = (a, b) => (+b.slice(0, 4) * 12 + +b.slice(5, 7)) - (+a.slice(0, 4) * 12 + +a.slice(5, 7));
+  const leaveRate = settings => Math.round(((settings && settings.leavePerYear != null ? Number(settings.leavePerYear) : 12) / 12) * 100) / 100;
+  function annualLeaveSince(reqs, fromMonth, shift) {
+    return reqs.filter(r => r.type === 'leave' && (r.leaveType || 'annual') === 'annual' && r.status !== 'rejected' && String(r.from) >= fromMonth + '-01')
+      .reduce((s, r) => s + leaveDays(r, shift), 0);
+  }
+  function leaveBalance({ user, reqs, settings, shift, now = new Date() }) {
+    const rate = leaveRate(settings), cur = monthKeyOf(now);
+    let month = user.leaveBaseMonth || (user.createdAt ? monthKeyOf(new Date(user.createdAt)) : `${now.getFullYear()}-01`);
+    let base = user.leaveBase != null ? Number(user.leaveBase) : user.leaveTotal != null ? Number(user.leaveTotal) : rate;
+    if (settings && settings.leaveReset && +cur.slice(0, 4) > +month.slice(0, 4)) { month = `${cur.slice(0, 4)}-01`; base = rate; }
+    const months = Math.max(0, monthDiff(month, cur));
+    const accrued = Math.round((base + rate * months) * 100) / 100;
+    const used = annualLeaveSince(reqs, month, shift);
+    return { rate, month, base, months, accrued, used, left: Math.round((accrued - used) * 100) / 100 };
+  }
+  /** Đặt "phép còn lại" của một người ở tháng hiện tại: trả về các trường cần lưu. */
+  function leaveSetRemaining({ reqs, shift, remaining, now = new Date() }) {
+    const month = monthKeyOf(now);
+    return { leaveBase: Math.round((Number(remaining) + annualLeaveSince(reqs, month, shift)) * 100) / 100, leaveBaseMonth: month };
+  }
+
   /** Tóm tắt một ngày của một người: giờ vào đầu tiên, giờ ra cuối cùng, muộn/sớm. */
   function daySummary(logs, key, shift) {
     const list = logs.filter(l => l.day === key && l.status !== 'rejected').sort((a, b) => a.ts - b.ts);
@@ -256,6 +286,6 @@
     initials, relTime, haversine, eachDay, KIND, REQ_TYPES, LEAVE_TYPES, LEAVE_FORM_TYPES, SUDDEN_GROUPS, DEFAULT_POLICY, policyOf,
     leaveDaysInMonth, monthLeave, kpiDeduction, STATUS, ROLES, reqBg, reqFg,
     DEFAULT_SHIFT, shiftFor, locationsFor, isWorkday, leaveDays, reqSummary, leaveUsed, daySummary, dayStatus,
-    monthSummary, compressImage, csvDownload, publicIp, ipList
+    monthSummary, compressImage, csvDownload, publicIp, ipList, leaveBalance, leaveSetRemaining, leaveRate, monthKeyOf
   };
 })();
