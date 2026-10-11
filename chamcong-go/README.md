@@ -117,3 +117,10 @@ chamcong-go/
 ├── sw.js, manifest.webmanifest, icons/   # cài như app, mở được khi mạng yếu
 ├── vendor/           # bộ biểu tượng Lucide rút gọn
 ```
+
+## Đưa lên Vercel
+Đã có sẵn `vercel.json` (sw.js và trang HTML luôn kiểm tra bản mới; biểu tượng lưu lâu trên máy).
+1. <https://vercel.com> › đăng nhập bằng GitHub › **Add New… › Project** › chọn repo › **Import**.
+2. **Root Directory**: bấm *Edit* › chọn `chamcong-go`. **Framework Preset**: *Other*. Không cần Build Command. Bấm **Deploy**.
+3. Vercel › Project › **Settings › Environments › Production › Branch Tracking**: chọn nhánh chứa app, rồi deploy lại.
+4. Firebase Console › Authentication › **Settings › Authorized domains** › thêm tên miền Vercel (VD `ten-du-an.vercel.app`).
