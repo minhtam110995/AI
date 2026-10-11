@@ -324,10 +324,29 @@
     scope.querySelectorAll('[data-decide]').forEach(b => { b.onclick = () => decideModal(b.dataset.id, b.dataset.decide); });
     scope.querySelectorAll('[data-view]').forEach(b => { b.onclick = () => viewRequest(b.dataset.view); });
   }
+  /** Đánh giá đơn nghỉ theo quy định: đột xuất, báo trước, ảnh xác nhận, số ngày trong tháng và % KPI sẽ bị trừ. */
+  function leaveFlags(r) {
+    if (r.type !== 'leave' || !r.from) return [];
+    const u = userBy(r.uid), sh = shiftOf(u), pol = C.policyOf(A.company.settings);
+    const days = C.leaveDays(r, sh), out = [];
+    if (r.sudden) out.push(['blue', `Đột xuất · ${(C.SUDDEN_GROUPS[r.suddenGroup] || {}).name || 'khác'}`]);
+    else {
+      const notice = Math.round((C.fromKey(r.from) - new Date(new Date(r.created).toDateString())) / 86400e3);
+      out.push(notice >= pol.noticeDays ? ['ok', `Báo trước ${notice} ngày`] : ['bad', `Chỉ báo trước ${Math.max(0, notice)} ngày`]);
+    }
+    if (days >= pol.longLeaveDays && !(r.sudden && r.suddenGroup === 'force')) out.push(r.hasAttachment ? ['ok', 'Có ảnh đã xin BGĐ'] : ['bad', 'Thiếu ảnh xác nhận']);
+    const fd = C.fromKey(r.from);
+    const others = reqsOf(r.uid).filter(x => x.id !== r.id);
+    const ml = C.monthLeave({ reqs: others, y: fd.getFullYear(), m: fd.getMonth(), shift: sh, settings: A.company.settings, extra: { ...r, status: 'approved' } });
+    out.push(ml.counted > pol.maxLeavePerMonth ? ['bad', `Tháng ${fd.getMonth() + 1}: ${num(ml.counted)}/${pol.maxLeavePerMonth} ngày · trừ ${num(ml.kpi)}% KPI`] : ['gray', `Tháng ${fd.getMonth() + 1}: ${num(ml.counted)}/${pol.maxLeavePerMonth} ngày`]);
+    return out;
+  }
+  const flagChips = r => leaveFlags(r).map(([c, t]) => `<span class="chip ${c}">${esc(t)}</span>`).join(' ');
   function decideModal(id, status) {
     const r = A.reqs.find(x => x.id === id), u = userBy(r.uid);
     const ok = status === 'approved';
     const m = modal(ok ? 'Duyệt đơn' : 'Từ chối đơn', `<div class="modal-b">
+      ${r.type === 'leave' ? `<div class="full flags">${flagChips(r)}</div>` : ''}
       <div class="full kv"><span>Nhân viên</span><b>${esc(u.name)}</b><span>Loại đơn</span><b>${esc(reqTitle(r))}</b><span>Chi tiết</span><b>${esc(C.reqSummary(r, shiftOf(u)))}</b><span>Lý do</span><b>${esc(r.reason)}</b></div>
       <div class="field full"><label for="cmt">Ý kiến ${ok ? '(không bắt buộc)' : '<em>*</em>'}</label><textarea class="input" id="cmt" placeholder="${ok ? 'VD: Đồng ý' : 'Lý do từ chối để nhân viên biết'}"></textarea></div>
       ${ok && r.type === 'explain' && r.time ? `<div class="full hint"><i class="icon-info"></i> Khi duyệt, hệ thống tự thêm lượt chấm ${r.issue === 'Quên chấm công vào' ? 'vào ca' : r.issue === 'Quên chấm công ra' ? 'ra ca' : ''} lúc ${esc(r.time)} ngày ${keyToDmy(r.date)} cho nhân viên.</div>` : ''}
@@ -386,7 +405,7 @@
       body = list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nhân viên</th><th>Loại đơn</th><th>Chi tiết</th><th>Lý do</th><th>Gửi lúc</th><th>Trạng thái</th><th></th></tr></thead><tbody>
         ${list.map(r => { const u = userBy(r.uid); return `<tr><td><div class="who"><div class="av sm">${esc(initials(u.name))}</div><div><b>${esc(u.name)}</b><small>${esc(u.dept || '')}</small></div></div></td>
           <td>${esc(reqTitle(r))}${r.hasAttachment ? ' <i class="icon-paperclip muted" title="Có ảnh đính kèm"></i>' : ''}</td>
-          <td class="wrap">${esc(C.reqSummary(r, shiftOf(u)))}</td><td class="muted wrap" style="max-width:260px">${esc(r.reason)}</td>
+          <td class="wrap">${esc(C.reqSummary(r, shiftOf(u)))}${r.type === 'leave' ? `<div class="flags">${flagChips(r)}</div>` : ''}</td><td class="muted wrap" style="max-width:260px">${esc(r.reason)}</td>
           <td class="muted num">${relTime(r.created)}</td><td>${chip(r.status)}</td>
           <td><div class="acts"><button class="btn btn-sm btn-o" data-view="${r.id}">Xem</button>${r.status === 'pending' ? `<button class="btn btn-sm btn-bad" data-decide="rejected" data-id="${r.id}">Từ chối</button><button class="btn btn-sm btn-ok" data-decide="approved" data-id="${r.id}">Duyệt</button>` : ''}</div></td></tr>`; }).join('')}
         </tbody></table></div>` : '<div class="empty"><i class="icon-inbox"></i>Không có đơn nào</div>';
@@ -865,7 +884,8 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
     const mk = monthKey(), y = +mk.slice(0, 4), m = +mk.slice(5) - 1, last = new Date(y, m + 1, 0).getDate();
     await loadLogs(`${mk}-01`, `${mk}-${pad(last)}`);
     if (!page.isConnected) return; // người dùng đã chuyển trang trong lúc tải
-    const rows = activeUsers().map(u => ({ u, s: C.monthSummary({ logs: logsOf(u.uid), reqs: reqsOf(u.uid), y, m, shift: shiftOf(u), startKey: startKeyOf(u) }) }));
+    const rows = activeUsers().map(u => ({ u, s: C.monthSummary({ logs: logsOf(u.uid), reqs: reqsOf(u.uid), y, m, shift: shiftOf(u), startKey: startKeyOf(u) }),
+      lv: C.monthLeave({ reqs: reqsOf(u.uid), y, m, shift: shiftOf(u), settings: A.company.settings }) }));
     const tot = rows.reduce((a, r) => { Object.keys(r.s).forEach(k => { a[k] = (a[k] || 0) + r.s[k]; }); return a; }, {});
     const depts = {};
     rows.forEach(r => { const k = r.u.dept || 'Chưa phân phòng'; (depts[k] = depts[k] || { work: 0, need: 0, n: 0 }); depts[k].work += r.s.work; depts[k].need += Math.max(0, elapsedWorkdays(r.u, y, m) - r.s.leave); depts[k].n++; });
@@ -880,10 +900,10 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       </div>
       <div class="col">
         <div class="card"><div class="card-h"><h2 class="grow">Tổng hợp theo nhân viên</h2><span class="sub">Tháng ${m + 1}/${y}</span></div>
-          <div class="card-b" style="padding:12px 0 0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nhân viên</th><th class="n">Công chuẩn</th><th class="n">Công thực tế</th><th class="n">Phép</th><th class="n">Muộn</th><th class="n">Phút muộn</th><th class="n">Về sớm</th><th class="n">Vắng</th><th class="n">Thiếu chấm</th><th class="n">Làm thêm (giờ)</th></tr></thead><tbody>
+          <div class="card-b" style="padding:12px 0 0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nhân viên</th><th class="n">Công chuẩn</th><th class="n">Công thực tế</th><th class="n">Phép năm</th><th class="n">Không lương</th><th class="n">Đột xuất</th><th class="n">Nghỉ tính KPI</th><th class="n">Trừ KPI</th><th class="n">Muộn</th><th class="n">Phút muộn</th><th class="n">Về sớm</th><th class="n">Vắng</th><th class="n">Thiếu chấm</th><th class="n">Làm thêm (giờ)</th></tr></thead><tbody>
           ${rows.map(r => `<tr><td><div class="who"><div class="av sm">${esc(initials(r.u.name))}</div><div><b>${esc(r.u.name)}</b><small>${esc(r.u.dept || '')}</small></div></div></td>
-            <td class="n">${r.s.workdays}</td><td class="n"><b>${num(r.s.work)}</b></td><td class="n">${num(r.s.leave)}</td><td class="n">${r.s.late}</td><td class="n">${r.s.lateMin}</td><td class="n">${r.s.early}</td><td class="n">${r.s.absent}</td><td class="n">${r.s.missing}</td><td class="n">${num(r.s.ot)}</td></tr>`).join('')}
-          </tbody><tfoot><tr><td>Tổng</td><td class="n"></td><td class="n">${num(tot.work || 0)}</td><td class="n">${num(tot.leave || 0)}</td><td class="n">${tot.late || 0}</td><td class="n">${tot.lateMin || 0}</td><td class="n">${tot.early || 0}</td><td class="n">${tot.absent || 0}</td><td class="n">${tot.missing || 0}</td><td class="n">${num(tot.ot || 0)}</td></tr></tfoot></table></div></div></div>
+            <td class="n">${r.s.workdays}</td><td class="n"><b>${num(r.s.work)}</b></td><td class="n">${num(r.lv.annual)}</td><td class="n">${num(r.lv.unpaid)}</td><td class="n">${num(r.lv.sudden)}</td><td class="n">${num(r.lv.counted)}/${r.lv.max}</td><td class="n">${r.lv.kpi ? `<span class="chip bad">−${num(r.lv.kpi)}%</span>` : '—'}</td><td class="n">${r.s.late}</td><td class="n">${r.s.lateMin}</td><td class="n">${r.s.early}</td><td class="n">${r.s.absent}</td><td class="n">${r.s.missing}</td><td class="n">${num(r.s.ot)}</td></tr>`).join('')}
+          </tbody><tfoot><tr><td>Tổng</td><td class="n"></td><td class="n">${num(tot.work || 0)}</td><td class="n">${num(rows.reduce((a, r) => a + r.lv.annual, 0))}</td><td class="n">${num(rows.reduce((a, r) => a + r.lv.unpaid, 0))}</td><td class="n">${num(rows.reduce((a, r) => a + r.lv.sudden, 0))}</td><td class="n"></td><td class="n">${rows.filter(r => r.lv.kpi).length} người</td><td class="n">${tot.late || 0}</td><td class="n">${tot.lateMin || 0}</td><td class="n">${tot.early || 0}</td><td class="n">${tot.absent || 0}</td><td class="n">${tot.missing || 0}</td><td class="n">${num(tot.ot || 0)}</td></tr></tfoot></table></div></div></div>
         <div class="grid-2b">
           <div class="card"><div class="card-h"><div class="grow"><h2>Tỉ lệ chuyên cần theo phòng ban</h2><div class="sub">Công thực tế / công cần có (đã trừ nghỉ phép)</div></div></div>
             <div class="card-b" style="display:flex;flex-direction:column;gap:14px">${deptRows.map(d => `<div><div class="row" style="justify-content:space-between;margin-bottom:6px"><span style="font-weight:600">${esc(d.k)} <span class="muted" style="font-weight:400">· ${d.n} người</span></span><b class="num">${d.pct}%</b></div>
@@ -893,8 +913,8 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
         </div>
       </div>`;
     page.querySelector('#mon').onchange = e => { ui.month = e.target.value; pReports(page); };
-    page.querySelector('#csv').onclick = () => C.csvDownload(`bao-cao-cong-${mk}.csv`, [['Mã NV', 'Họ tên', 'Phòng ban', 'Công chuẩn', 'Công thực tế', 'Nghỉ phép', 'Đi muộn (lần)', 'Phút muộn', 'Về sớm (lần)', 'Vắng', 'Thiếu chấm', 'Làm thêm (giờ)'],
-      ...rows.map(r => [r.u.code, r.u.name, r.u.dept, r.s.workdays, num(r.s.work), num(r.s.leave), r.s.late, r.s.lateMin, r.s.early, r.s.absent, r.s.missing, num(r.s.ot)])]);
+    page.querySelector('#csv').onclick = () => C.csvDownload(`bao-cao-cong-${mk}.csv`, [['Mã NV', 'Họ tên', 'Phòng ban', 'Công chuẩn', 'Công thực tế', 'Phép năm', 'Không lương', 'Đột xuất', 'Nghỉ tính KPI', 'Trừ KPI (%)', 'Đi muộn (lần)', 'Phút muộn', 'Về sớm (lần)', 'Vắng', 'Thiếu chấm', 'Làm thêm (giờ)'],
+      ...rows.map(r => [r.u.code, r.u.name, r.u.dept, r.s.workdays, num(r.s.work), num(r.lv.annual), num(r.lv.unpaid), num(r.lv.sudden), num(r.lv.counted), num(r.lv.kpi), r.s.late, r.s.lateMin, r.s.early, r.s.absent, r.s.missing, num(r.s.ot)])]);
   }
   function elapsedWorkdays(u, y, m) {
     const sh = shiftOf(u), sk = startKeyOf(u), today = dayKey(new Date());
@@ -905,7 +925,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
 
   // ---------------------------------------------------------------- settings
   async function pSettings(page) {
-    const s = A.company.settings;
+    const s = A.company.settings, pol = C.policyOf(s);
     page.innerHTML = `<div class="grid-2">
       <div class="col">
         <form class="card" id="cf"><div class="card-h"><h2 class="grow">Thông tin công ty</h2></div>
@@ -914,6 +934,11 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
             <div class="field"><label for="c_code">Mã công ty</label><input class="input" id="c_code" value="${esc(A.company.code)}" disabled><div class="hint">Nhân viên nhập mã này khi đăng nhập. Không đổi được.</div></div>
             <div class="field"><label for="c_leave">Số ngày phép năm mặc định</label><input class="input" id="c_leave" name="leavePerYear" type="number" min="0" max="60" step="0.5" value="${s.leavePerYear}"><div class="hint">Áp dụng cho nhân viên thêm mới; sửa riêng từng người ở mục Nhân viên.</div></div>
             <div class="field"><label>Chấm công bằng Wifi</label><label class="switch"><input type="checkbox" name="allowWifi"${s.allowWifi !== false ? ' checked' : ''}>Cho phép nhân viên chọn Wifi</label><div class="hint">Lượt chấm Wifi không xác minh được sẽ vào mục Duyệt đơn › Chấm công chờ duyệt.</div></div>
+            <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><b>Quy định nghỉ</b><div class="hint">Áp dụng cho form xin nghỉ, cảnh báo khi duyệt đơn và cột KPI trong Báo cáo.</div></div>
+            <div class="field"><label for="p_max">Số ngày nghỉ tối đa/tháng</label><input class="input" id="p_max" name="maxLeavePerMonth" type="number" min="0" max="31" step="0.5" value="${pol.maxLeavePerMonth}"><div class="hint">Gồm phép năm và nghỉ không lương; không tính nghỉ đột xuất hợp lệ.</div></div>
+            <div class="field"><label for="p_notice">Báo trước tối thiểu (ngày)</label><input class="input" id="p_notice" name="noticeDays" type="number" min="0" max="30" value="${pol.noticeDays}"><div class="hint">Đơn thường gửi muộn hơn sẽ bị chặn; nhân viên phải chọn Nghỉ đột xuất.</div></div>
+            <div class="field"><label for="p_long">Nghỉ dài cần ảnh xác nhận từ (ngày liên tiếp)</label><input class="input" id="p_long" name="longLeaveDays" type="number" min="1" max="30" value="${pol.longLeaveDays}"><div class="hint">Bắt buộc ảnh đã xin Trưởng bộ phận và Ban Giám đốc (trừ bất khả kháng).</div></div>
+            <div class="field"><label for="p_kpi">% trừ KPI từng ngày vượt</label><input class="input" id="p_kpi" name="kpiSteps" value="${pol.kpiSteps.join(', ')}"><div class="hint">VD "2, 4, 6": ngày vượt thứ 1 trừ 2%, thứ 2 trừ 4%, từ thứ 3 trở đi mỗi ngày 6%.</div></div>
             <div style="grid-column:1/-1;display:flex;justify-content:flex-end"><button class="btn btn-p" type="submit">Lưu cài đặt</button></div>
           </div></form>
         <form class="card" id="pf"><div class="card-h"><h2 class="grow">Đổi mật khẩu của bạn</h2></div>
@@ -937,7 +962,9 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       e.preventDefault();
       const f = e.currentTarget, d = Object.fromEntries(new FormData(f));
       busy(f.querySelector('[type=submit]'), async () => {
-        const settings = { leavePerYear: Number(d.leavePerYear) || 0, allowWifi: !!d.allowWifi };
+        const steps = String(d.kpiSteps || '').split(/[,;\s]+/).map(x => Number(x.replace(',', '.'))).filter(x => Number.isFinite(x) && x >= 0);
+        const policy = { maxLeavePerMonth: Number(d.maxLeavePerMonth) || 0, noticeDays: Number(d.noticeDays) || 0, longLeaveDays: Math.max(1, Number(d.longLeaveDays) || 1), kpiSteps: steps.length ? steps : C.DEFAULT_POLICY.kpiSteps };
+        const settings = { leavePerYear: Number(d.leavePerYear) || 0, allowWifi: !!d.allowWifi, policy };
         await API.updateCompany({ name: d.name.trim(), settings });
         A.company.name = d.name.trim(); A.company.settings = { ...A.company.settings, ...settings };
         toast('Đã lưu cài đặt'); render();

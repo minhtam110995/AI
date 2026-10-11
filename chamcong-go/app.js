@@ -669,6 +669,8 @@
     const t = REQ_TYPES[type];
     if (!t) return go('proposals');
     const today = dayKey(new Date()), sh = shift();
+    const pol = C.policyOf(S.company.settings);
+    const noticeKey = (() => { const d = new Date(); d.setDate(d.getDate() + pol.noticeDays); return dayKey(d); })();
     const reason = (ph, val = '') => `<div class="field"><label for="fReason">Lý do <em>*</em></label><textarea id="fReason" name="reason" required placeholder="${ph}">${esc(val)}</textarea></div>`;
     const dateF = (name, label, val = today) => `<div class="field"><label for="f_${name}">${label} <em>*</em></label><input id="f_${name}" type="date" name="${name}" value="${val}" required></div>`;
     const timeF = (name, label, val) => `<div class="field"><label for="f_${name}">${label} <em>*</em></label><input id="f_${name}" type="time" name="${name}" value="${val}" required></div>`;
@@ -676,12 +678,24 @@
     const chips = (name, opts, val) => `<div class="chips" role="radiogroup">${opts.map(([v, l]) => `<label class="chip-opt"><input type="radio" name="${name}" value="${v}"${v === val ? ' checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
     const fields = {
       leave: `
-        <div class="field"><label>Loại nghỉ</label>${chips('leaveType', Object.entries(LEAVE_TYPES), 'annual')}</div>
-        <div class="row2">${dateF('from', 'Từ ngày')}${dateF('to', 'Đến ngày')}</div>
+        <div class="field"><label>Loại nghỉ</label>${chips('leaveType', C.LEAVE_FORM_TYPES.map(k => [k, LEAVE_TYPES[k]]), 'annual')}</div>
+        <label class="check-line sudden-line"><input type="checkbox" name="sudden" value="1" id="fSudden"><span><b>Nghỉ đột xuất</b> (không kịp báo trước ${pol.noticeDays} ngày)</span></label>
+        <div class="field" id="suddenBox" hidden><label>Lý do đột xuất <em>*</em></label>${chips('suddenGroup', Object.entries(C.SUDDEN_GROUPS).map(([k, g]) => [k, g.name]), '')}
+          <div class="hint" id="suddenHint">Chọn nhóm lý do. Chỉ các trường hợp trong quy định mới được xem xét duyệt.</div></div>
+        <div class="row2">${dateF('from', 'Từ ngày', noticeKey)}${dateF('to', 'Đến ngày', noticeKey)}</div>
+        <div class="policy-warn" id="noticeWarn" hidden></div>
         <div class="field"><label>Thời gian nghỉ</label>${chips('part', [['Cả ngày', 'Cả ngày'], ['Buổi sáng', 'Nửa ngày sáng'], ['Buổi chiều', 'Nửa ngày chiều']], 'Cả ngày')}
           <div class="hint" id="partHint" hidden>Nghỉ nửa ngày chỉ áp dụng khi từ ngày và đến ngày trùng nhau.</div></div>
-        <div class="leave-box"><div><span>Số ngày phép còn lại</span><b id="leaveLeft">${num(leaveLeft())}</b></div><div><span>Đơn này</span><b id="leaveThis">1 ngày</b></div></div>
-        ${reason('VD: Việc gia đình')}`,
+        <div class="leave-box three"><div><span>Phép năm còn lại</span><b id="leaveLeft">${num(leaveLeft())}</b></div><div><span>Đơn này</span><b id="leaveThis">1 ngày</b></div><div><span id="monthLbl">Tháng này</span><b id="monthUsed">0/${pol.maxLeavePerMonth}</b></div></div>
+        <div class="policy-warn" id="capWarn" hidden></div>
+        ${reason('VD: Việc gia đình')}
+        <details class="policy"><summary>Quy định nghỉ của công ty</summary><ul>
+          <li>Tối đa <b>${pol.maxLeavePerMonth} ngày/tháng</b>, gồm phép năm và nghỉ không lương.</li>
+          <li>Đơn thường gửi <b>trước ít nhất ${pol.noticeDays} ngày</b>, có lý do rõ ràng và kế hoạch nghỉ.</li>
+          <li>Nghỉ đột xuất chỉ chấp nhận vì: ${Object.values(C.SUDDEN_GROUPS).map(g => `<b>${g.name}</b> (${g.cases})`).join('; ')}.</li>
+          <li>Nghỉ từ <b>${pol.longLeaveDays} ngày liên tiếp</b> trở lên: đính kèm ảnh đã xin Trưởng bộ phận và Ban Giám đốc (trừ bất khả kháng).</li>
+          <li>Từ ngày nghỉ thứ ${pol.maxLeavePerMonth + 1} trong tháng (trừ đột xuất hợp lệ): trừ ${pol.kpiSteps.map((p, i) => `${p}% ngày thứ ${pol.maxLeavePerMonth + 1 + i}${i === pol.kpiSteps.length - 1 ? ' trở đi' : ''}`).join(', ')} KPI.</li>
+        </ul></details>`,
       lateearly: `${dateF('date', 'Ngày')}
         <div class="row2">${sel('mode', 'Loại', ['Đi muộn', 'Về sớm'], 'Đi muộn')}
         <div class="field"><label for="f_min">Số phút <em>*</em></label><input id="f_min" type="number" name="minutes" min="1" max="480" value="30" inputmode="numeric" required></div></div>
@@ -707,7 +721,7 @@
       ${topbar(type === 'leave' ? 'Tạo đơn nghỉ phép' : t.name, { back: 'proposals' })}
       <form class="form" id="pForm" novalidate>
         ${fields}
-        <div class="field"><label>Ảnh đính kèm</label>
+        <div class="field"><label id="attachLbl">Ảnh đính kèm</label>
           <label class="attach" id="attachBox"><input type="file" accept="image/*" id="fFile" hidden>
             <span class="attach-empty"><i class="icon-image-plus"></i>Thêm ảnh (giấy khám bệnh, chứng từ...)</span></label></div>
         <div class="field"><label for="f_appr">Người duyệt <em>*</em></label><select id="f_appr" name="approverUid" required>${approverOpts}</select></div>
@@ -731,18 +745,39 @@
         box.querySelector('.attach-x').onclick = ev => { ev.preventDefault(); attachment = null; renderAttachEmpty(); };
       } catch (e) { toast(errMsg(e)); }
     };
+    // Kiểm tra theo quy định nghỉ của công ty; trả về các thông tin để hiển thị và chặn khi gửi.
+    const leaveCheck = () => {
+      const d = Object.fromEntries(new FormData(form));
+      const multi = d.to && d.from && d.to !== d.from;
+      const part = multi ? 'Cả ngày' : (form.querySelector('input[name=part]:checked') || {}).value || 'Cả ngày';
+      const req = { type: 'leave', status: 'pending', from: d.from, to: d.to || d.from, part, leaveType: d.leaveType, sudden: !!d.sudden, suddenGroup: d.suddenGroup || '' };
+      const days = d.from ? C.leaveDays(req, sh) : 0;
+      const lateNotice = !req.sudden && d.from && d.from < noticeKey;
+      const needProof = days >= pol.longLeaveDays && !(req.sudden && req.suddenGroup === 'force');
+      const fd = d.from ? C.fromKey(d.from) : new Date();
+      const ml = C.monthLeave({ reqs: S.reqs, y: fd.getFullYear(), m: fd.getMonth(), shift: sh, settings: S.company.settings, statuses: ['approved', 'pending'], extra: req });
+      return { d, multi, req, days, lateNotice, needProof, ml, month: fd.getMonth() + 1 };
+    };
     if (type === 'leave') {
       const upd = () => {
-        const d = Object.fromEntries(new FormData(form));
-        const multi = d.to && d.from && d.to !== d.from;
-        form.querySelectorAll('input[name=part]').forEach(i => { if (i.value !== 'Cả ngày') i.disabled = multi; });
-        if (multi) form.querySelector('input[name=part][value="Cả ngày"]').checked = true;
-        document.getElementById('partHint').hidden = !multi;
-        const part = form.querySelector('input[name=part]:checked').value;
-        const days = C.leaveDays({ from: d.from, to: d.to, part }, sh);
-        document.getElementById('leaveThis').textContent = `${num(days)} ngày`;
-        const annual = form.querySelector('input[name=leaveType]:checked').value === 'annual';
-        document.getElementById('leaveLeft').textContent = annual ? num(leaveLeft()) : `${num(leaveLeft())} (không trừ)`;
+        const c = leaveCheck();
+        form.querySelectorAll('input[name=part]').forEach(i => { if (i.value !== 'Cả ngày') i.disabled = c.multi; });
+        if (c.multi) form.querySelector('input[name=part][value="Cả ngày"]').checked = true;
+        document.getElementById('partHint').hidden = !c.multi;
+        document.getElementById('leaveThis').textContent = `${num(c.days)} ngày`;
+        document.getElementById('leaveLeft').textContent = c.req.leaveType === 'annual' ? num(leaveLeft()) : `${num(leaveLeft())} (không trừ)`;
+        document.getElementById('suddenBox').hidden = !c.req.sudden;
+        const g = C.SUDDEN_GROUPS[c.req.suddenGroup];
+        document.getElementById('suddenHint').innerHTML = g ? `Gồm: ${esc(g.cases)}.` : 'Chọn nhóm lý do. Chỉ các trường hợp trong quy định mới được xem xét duyệt.';
+        const nw = document.getElementById('noticeWarn');
+        nw.hidden = !c.lateNotice;
+        nw.innerHTML = `<i class="icon-circle-alert"></i><span>Đơn thường phải gửi trước ít nhất ${pol.noticeDays} ngày (nghỉ từ ${C.keyToDmy(noticeKey)} trở đi). Nếu là nghỉ đột xuất, hãy bật <b>Nghỉ đột xuất</b> và chọn lý do.</span>`;
+        document.getElementById('monthLbl').textContent = `Tháng ${c.month} (tính KPI)`;
+        document.getElementById('monthUsed').textContent = `${num(c.ml.counted)}/${pol.maxLeavePerMonth}`;
+        const cw = document.getElementById('capWarn');
+        cw.hidden = !(c.ml.counted > pol.maxLeavePerMonth);
+        cw.innerHTML = `<i class="icon-triangle-alert"></i><span>Vượt ${pol.maxLeavePerMonth} ngày/tháng (tính cả đơn đang chờ). Theo quy định sẽ bị trừ khoảng <b>${num(c.ml.kpi)}% KPI</b>.</span>`;
+        document.getElementById('attachLbl').innerHTML = c.needProof ? `Ảnh đã xin phép Trưởng bộ phận và Ban Giám đốc <em>*</em>` : 'Ảnh đính kèm';
       };
       form.addEventListener('change', upd); upd();
     }
@@ -755,20 +790,33 @@
       if (d.from && d.to && d.to < d.from) return toast('Ngày kết thúc phải sau ngày bắt đầu');
       if (type === 'ot' && d.end <= d.start) return toast('Giờ kết thúc phải sau giờ bắt đầu');
       if (!d.approverUid) return toast('Công ty chưa có quản trị để duyệt đơn');
+      let warnCap = null;
       if (type === 'leave') {
+        const c = leaveCheck();
         if (d.to !== d.from) d.part = 'Cả ngày';
-        if (!C.leaveDays(d, sh)) return toast('Khoảng ngày đã chọn không có ngày làm việc nào');
-        if (d.leaveType === 'annual' && C.leaveDays(d, sh) > leaveLeft()) return toast('Số ngày nghỉ vượt quá số ngày phép còn lại');
+        d.sudden = c.req.sudden; d.suddenGroup = c.req.sudden ? c.req.suddenGroup : '';
+        if (!c.days) return toast('Khoảng ngày đã chọn không có ngày làm việc nào');
+        if (c.req.sudden && !c.req.suddenGroup) return toast('Chọn lý do nghỉ đột xuất: Sức khoẻ, Gia đình hoặc Bất khả kháng');
+        if (c.lateNotice) return toast(`Đơn thường phải gửi trước ít nhất ${pol.noticeDays} ngày. Nếu là nghỉ đột xuất, hãy bật "Nghỉ đột xuất".`);
+        if (c.needProof && !attachment) return toast(`Nghỉ từ ${pol.longLeaveDays} ngày liên tiếp: hãy đính kèm ảnh đã xin phép Trưởng bộ phận và Ban Giám đốc`);
+        if (d.leaveType === 'annual' && c.days > leaveLeft()) return toast('Số ngày nghỉ vượt quá số ngày phép năm còn lại. Hãy chọn Nghỉ không lương cho phần vượt.');
+        if (c.ml.counted > pol.maxLeavePerMonth) warnCap = c.ml;
       }
       if (type === 'explain' && params.kind) d.kind = params.kind;
       if (type === 'lateearly') d.minutes = Number(d.minutes);
-      busy(form.querySelector('[type=submit]'), async () => {
+      const submit = () => busy(form.querySelector('[type=submit]'), async () => {
         const saved = await API.createRequest({ type, ...d }, attachment);
         S.reqs.push(saved);
         toast('Đã gửi đề xuất');
         ui.reqTab = 'all';
         go('requests');
       });
+      if (warnCap) {
+        dialog('Vượt số ngày nghỉ trong tháng', `Tháng này bạn sẽ nghỉ <b>${num(warnCap.counted)} ngày</b> (tối đa ${warnCap.max}). Theo quy định công ty, phần vượt bị trừ khoảng <b>${num(warnCap.kpi)}% KPI</b>. Bạn vẫn muốn gửi đơn?`,
+          [{ text: 'Xem lại' }, { text: 'Vẫn gửi', cls: 'btn-danger', on: submit }]);
+        return;
+      }
+      submit();
     });
   }
 

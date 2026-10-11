@@ -26,6 +26,7 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   background: #E9EAEE;
@@ -683,3 +684,13 @@ a { color: var(--orange); text-decoration: none; }
 .attach-x { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; }
 .cal-cell .d.blue { background: var(--blue); }
 .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+/* ================= quy định nghỉ ================= */
+.sudden-line { padding: 10px 12px; border-radius: 12px; background: #fff; border: 1px solid var(--border); }
+.policy-warn { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: rgba(229, 72, 77, .08); color: var(--red); font-size: 13px; line-height: 1.45; }
+.policy-warn i { font-size: 16px; margin-top: 1px; }
+.leave-box.three { grid-template-columns: repeat(3, 1fr); }
+.leave-box.three b { font-size: 17px; }
+details.policy { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--text-2); }
+details.policy summary { cursor: pointer; font-weight: 600; color: var(--orange); }
+details.policy ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }

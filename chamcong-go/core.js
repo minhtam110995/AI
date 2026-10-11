@@ -53,7 +53,18 @@
     explain: { icon: 'file-text', name: 'Giải trình chấm công', hue: 20 },
     shift: { icon: 'repeat', name: 'Đổi ca', hue: 190 }
   };
-  const LEAVE_TYPES = { annual: 'Phép năm', sick: 'Nghỉ ốm', personal: 'Việc riêng' };
+  // Loại nghỉ chọn được trong form: phép năm, không lương. (sick/personal giữ để hiển thị đơn cũ.)
+  const LEAVE_TYPES = { annual: 'Phép năm', unpaid: 'Nghỉ không lương', sick: 'Nghỉ ốm', personal: 'Việc riêng' };
+  const LEAVE_FORM_TYPES = ['annual', 'unpaid'];
+  /** Lý do nghỉ đột xuất hợp lệ theo quy định công ty. */
+  const SUDDEN_GROUPS = {
+    health: { name: 'Sức khoẻ', cases: 'Ốm đau, tai nạn đột ngột; đi khám / điều trị theo lịch hẹn của cơ sở y tế' },
+    family: { name: 'Gia đình', cases: 'Người thân ốm nặng cần chăm sóc; tang lễ; việc quan trọng trong gia đình không thể báo trước' },
+    force: { name: 'Bất khả kháng', cases: 'Tai nạn giao thông trên đường đi làm; phương tiện gặp sự cố nghiêm trọng; thiên tai, sự kiện khách quan' }
+  };
+  /** Quy định nghỉ mặc định (sửa được ở Cài đặt của trang quản trị). */
+  const DEFAULT_POLICY = { maxLeavePerMonth: 2, noticeDays: 3, longLeaveDays: 2, kpiSteps: [2, 4, 6] };
+  const policyOf = settings => ({ ...DEFAULT_POLICY, ...((settings || {}).policy || {}) });
   const STATUS = { pending: ['pending', 'Chờ duyệt'], approved: ['ok', 'Đã duyệt'], rejected: ['bad', 'Từ chối'] };
   const ROLES = { employee: 'Nhân viên', admin: 'Quản trị' };
   const reqBg = h => `oklch(0.95 0.04 ${h})`, reqFg = h => `oklch(0.58 0.16 ${h})`;
@@ -79,7 +90,7 @@
   function reqSummary(r, shift) {
     const range = `${keyToDmy(r.from)}${r.to && r.to !== r.from ? ' – ' + keyToDmy(r.to) : ''}`;
     switch (r.type) {
-      case 'leave': return `${LEAVE_TYPES[r.leaveType] || 'Phép năm'} · ${range} · ${r.part || 'Cả ngày'} · ${num(leaveDays(r, shift))} ngày`;
+      case 'leave': return `${LEAVE_TYPES[r.leaveType] || 'Phép năm'}${r.sudden ? ` · Đột xuất (${(SUDDEN_GROUPS[r.suddenGroup] || {}).name || 'khác'})` : ''} · ${range} · ${r.part || 'Cả ngày'} · ${num(leaveDays(r, shift))} ngày`;
       case 'lateearly': return `${keyToDmy(r.date)} · ${r.mode} ${r.minutes} phút`;
       case 'ot': return `${keyToDmy(r.date)} · ${r.start} – ${r.end}`;
       case 'trip': return `${range} · ${r.place}`;
@@ -89,6 +100,43 @@
     return '';
   }
   /** Phép năm đã dùng trong năm (đơn đang chờ duyệt cũng bị trừ tạm). */
+  /** Số ngày (làm việc) của đơn nghỉ rơi vào tháng y-m. */
+  function leaveDaysInMonth(r, y, m, shift = DEFAULT_SHIFT) {
+    if (!r.from) return 0;
+    const prefix = `${y}-${pad(m + 1)}`, to = r.to || r.from;
+    if (r.part && r.part !== 'Cả ngày' && to === r.from) return r.from.startsWith(prefix) && isWorkday(fromKey(r.from), shift) ? 0.5 : 0;
+    let n = 0;
+    eachDay(r.from, to, (d, k) => { if (k.startsWith(prefix) && isWorkday(d, shift)) n++; });
+    return n;
+  }
+  /**
+   * Tổng hợp nghỉ trong tháng theo quy định: ngày tính hạn mức / KPI (phép năm + không lương, trừ đột xuất hợp lệ),
+   * ngày đột xuất, và % KPI bị trừ. statuses: các trạng thái đơn được tính (mặc định chỉ đơn đã duyệt).
+   */
+  function monthLeave({ reqs, y, m, shift, settings, statuses = ['approved'], extra = null }) {
+    const pol = policyOf(settings);
+    const out = { counted: 0, sudden: 0, annual: 0, unpaid: 0, kpi: 0, max: pol.maxLeavePerMonth };
+    const list = reqs.filter(r => r.type === 'leave' && statuses.includes(r.status));
+    if (extra) list.push(extra);
+    list.forEach(r => {
+      const d = leaveDaysInMonth(r, y, m, shift);
+      if (!d) return;
+      if ((r.leaveType || 'annual') === 'unpaid') out.unpaid += d; else out.annual += d;
+      if (r.sudden) out.sudden += d; else out.counted += d;
+    });
+    out.kpi = kpiDeduction(out.counted, pol);
+    return out;
+  }
+  /** % KPI bị trừ: mỗi ngày vượt hạn mức trừ theo bậc (VD ngày 3: 2%, ngày 4: 4%, từ ngày 5: 6%/ngày); nửa ngày tính một nửa. */
+  function kpiDeduction(days, pol = DEFAULT_POLICY) {
+    let total = 0, slot = pol.maxLeavePerMonth, i = 0;
+    while (days > slot && i < 60) {
+      const part = Math.min(1, days - slot);
+      total += part * pol.kpiSteps[Math.min(i, pol.kpiSteps.length - 1)];
+      slot += 1; i++;
+    }
+    return Math.round(total * 10) / 10;
+  }
   function leaveUsed(reqs, year, shift) {
     return reqs.filter(r => r.type === 'leave' && (r.leaveType || 'annual') === 'annual' && r.status !== 'rejected' && String(r.from).startsWith(String(year)))
       .reduce((s, r) => s + leaveDays(r, shift), 0);
@@ -182,7 +230,8 @@
 
   window.CCG_CORE = {
     pad, esc, DOW, DOW_SHORT, hm, dmy, longDate, dayKey, fromKey, keyToDmy, mins, minsOfTs, fmtDist, num, uid,
-    initials, relTime, haversine, eachDay, KIND, REQ_TYPES, LEAVE_TYPES, STATUS, ROLES, reqBg, reqFg,
+    initials, relTime, haversine, eachDay, KIND, REQ_TYPES, LEAVE_TYPES, LEAVE_FORM_TYPES, SUDDEN_GROUPS, DEFAULT_POLICY, policyOf,
+    leaveDaysInMonth, monthLeave, kpiDeduction, STATUS, ROLES, reqBg, reqFg,
     DEFAULT_SHIFT, shiftFor, locationsFor, isWorkday, leaveDays, reqSummary, leaveUsed, daySummary, dayStatus,
     monthSummary, compressImage, csvDownload
   };
