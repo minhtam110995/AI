@@ -298,6 +298,54 @@
   const todayLogs = () => S.logs.filter(l => l.day === dayKey(new Date())).sort((a, b) => a.ts - b.ts);
   const nextMainKind = () => todayLogs().some(l => l.kind === 'in') ? 'out' : 'in';
 
+  // ---------------------------------------------------------------- nhắc chấm công ra
+  // Tài khoản không chấm công (VD quản trị) thì không nhắc.
+  const exempt = () => !S.user || (S.user.noAttendance ?? (S.company && S.user.uid === S.company.ownerUid));
+  /** Hôm nay đã chấm vào, đã quá giờ ra ca mà chưa chấm ra. */
+  function needOut() {
+    if (exempt() || !isWorkday(new Date())) return false;
+    const sh = shift(), s = C.daySummary(S.logs, dayKey(new Date()), sh);
+    return !!(s.in && !s.out && minsOfTs(Date.now()) >= mins(sh.end));
+  }
+  /** Ngày làm việc gần nhất (trong 7 ngày trước) có chấm vào mà quên chấm ra, chưa gửi giải trình. */
+  function forgotOutDay() {
+    if (exempt()) return null;
+    const sh = shift(), sk = startKey();
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = dayKey(d);
+      if (sk && key < sk) return null;
+      if (!C.isWorkday(d, sh)) continue;
+      const s = C.daySummary(S.logs, key, sh);
+      if (s.in && !s.out && !S.reqs.some(r => r.type === 'explain' && r.date === key && r.status !== 'rejected')) return key;
+      return null; // chỉ xét ngày làm việc gần nhất
+    }
+    return null;
+  }
+  const REMIND_KEY = 'ccg.remindOut';
+  const remindOn = () => lsGet(REMIND_KEY) === '1' && 'Notification' in window && Notification.permission === 'granted';
+  async function systemNotify(title, body) {
+    if (!remindOn()) return;
+    const opt = { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: 'ccg-out', data: { url: './#/home' } };
+    try {
+      const reg = navigator.serviceWorker && await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 1500))]);
+      if (reg && reg.showNotification) return await reg.showNotification(title, opt);
+      new Notification(title, opt);
+    } catch (e) { /* máy không hỗ trợ */ }
+  }
+  // Kiểm tra mỗi phút khi app đang mở (kể cả chạy nền): quá giờ ra ca chưa chấm ra thì nhắc, mỗi ngày một lần.
+  function checkOutReminder() {
+    if (!S.session || S.locked || !needOut()) return;
+    const k = 'ccg.outReminded.' + S.user.uid, today = dayKey(new Date());
+    if (lsGet(k) === today) return;
+    lsSet(k, today);
+    const end = shift().end;
+    systemNotify('Bạn chưa chấm công ra', `Đã quá giờ ra ca ${end}. Mở ChấmCông Go để chấm công ra.`);
+    toast(`Đã quá giờ ra ca ${end}, bạn chưa chấm công ra`);
+    if (route().parts[0] === 'home') renderHome();
+  }
+  setInterval(checkOutReminder, 60e3);
+
   function renderHome() {
     const u = S.user, today = new Date(), sh = shift();
     const logs = todayLogs(), kind = nextMainKind();
@@ -315,6 +363,10 @@
         </div>
       </div>
       <div class="content lift">
+        ${needOut() ? `<button class="remind tap" data-act="popup" data-kind="out">
+          <i class="icon-alarm-clock"></i><div class="m"><b>Bạn chưa chấm công ra</b><small>Đã quá giờ ra ca ${esc(sh.end)}. Bấm để chấm công ra.</small></div><i class="icon-chevron-right"></i></button>` : ''}
+        ${(fk => fk ? `<button class="remind warn tap" data-go="proposal/explain?issue=${encodeURIComponent('Quên chấm công ra')}&date=${fk}">
+          <i class="icon-file-pen-line"></i><div class="m"><b>Ngày ${esc(C.keyToDmy(fk))} bạn quên chấm công ra</b><small>Bấm để gửi giải trình cho quản trị.</small></div><i class="icon-chevron-right"></i></button>` : '')(forgotOutDay())}
         <div class="card raised shift-card">
           <div class="row-head"><b>Ca làm việc hôm nay</b><span>${longDate(today)}</span></div>
           ${isWorkday(today) ? `<div class="shift-grid">
@@ -940,6 +992,7 @@
           <button class="list-row tap" data-go="info"><i class="icon-user-round-pen lead"></i><span class="name">Thông tin cá nhân</span><span class="val"></span><i class="icon-chevron-right"></i></button>
           <button class="list-row tap" data-go="info"><i class="icon-calendar-clock lead"></i><span class="name">Ca làm việc</span><span class="val">${esc(sh.start)} – ${esc(sh.end)}</span><i class="icon-chevron-right"></i></button>
           <button class="list-row tap" data-go="password"><i class="icon-lock-keyhole lead"></i><span class="name">Đổi mật khẩu</span><span class="val"></span><i class="icon-chevron-right"></i></button>
+          ${exempt() ? '' : `<button class="list-row tap" data-act="remind"><i class="icon-alarm-clock lead"></i><span class="name">Nhắc chấm công ra</span><span class="val">${remindOn() ? 'Đang bật' : 'Đang tắt'}</span><i class="icon-chevron-right"></i></button>`}
           <button class="list-row tap" data-act="faceid" id="faceRow" hidden><i class="icon-scan-face lead"></i><span class="name">Đăng nhập bằng Face ID</span><span class="val">${faceOn() ? 'Đang bật' : 'Đang tắt'}</span><i class="icon-chevron-right"></i></button>
           <button class="list-row tap" data-act="device"><i class="icon-smartphone lead"></i><span class="name">Thiết bị đăng ký</span><span class="val">${esc(deviceName())}</span><i class="icon-chevron-right"></i></button>
           <button class="list-row tap" data-act="lang"><i class="icon-languages lead"></i><span class="name">Ngôn ngữ</span><span class="val">Tiếng Việt</span><i class="icon-chevron-right"></i></button>
@@ -1037,6 +1090,14 @@
         if (faceOn()) confirmDialog('Face ID', 'Tắt đăng nhập bằng Face ID trên máy này?', 'Tắt', () => { lsSet(FACE_KEY, null); renderProfile(); });
         else faceRegister(S.user, S.user.account).then(() => { toast('Đã bật đăng nhập bằng Face ID'); renderProfile(); }).catch(() => toast('Chưa bật được Face ID trên máy này'));
         break;
+      case 'remind':
+        if (remindOn()) { lsSet(REMIND_KEY, null); toast('Đã tắt nhắc chấm công ra'); renderProfile(); break; }
+        if (!('Notification' in window)) { dialog('Nhắc chấm công ra', 'Trình duyệt này chưa hỗ trợ thông báo. Trên iPhone: mở app bằng Safari › nút Chia sẻ › <b>Thêm vào MH chính</b>, rồi mở app từ biểu tượng ngoài màn hình chính và bật lại (cần iOS 16.4 trở lên).<br><br>Khi mở app sau giờ ra ca, trang chủ vẫn luôn hiện lời nhắc nếu bạn chưa chấm ra.', [{ text: 'Đã hiểu', cls: 'btn-primary' }]); break; }
+        Notification.requestPermission().then(p => {
+          if (p !== 'granted') return toast('Bạn chưa cho phép thông báo. Vào Cài đặt của máy để bật cho ChấmCông Go.');
+          lsSet(REMIND_KEY, '1'); toast(`Đã bật: app sẽ nhắc khi quá ${shift().end} mà bạn chưa chấm ra`); renderProfile();
+        });
+        break;
       case 'logout': confirmDialog('Đăng xuất', 'Bạn có chắc muốn đăng xuất khỏi tài khoản này?', 'Đăng xuất', () => { lsSet(FACE_KEY, null); signOut(); }); break;
     }
   });
@@ -1045,7 +1106,7 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !S.session || S.locked || Date.now() - S.loadedAt < 30e3) return;
     const p = route().parts[0];
-    loadAll().then(() => { if (['home', 'notis', 'requests', 'proposals', 'history', 'profile'].includes(p)) render(); }).catch(() => {});
+    loadAll().then(() => { if (['home', 'notis', 'requests', 'proposals', 'history', 'profile'].includes(p)) render(); checkOutReminder(); }).catch(() => {});
   });
 
   // ---------------------------------------------------------------- boot
@@ -1060,6 +1121,7 @@
       }
     } catch (e) { S.session = null; toast(errMsg(e)); }
     render();
+    checkOutReminder();
   })();
   if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -1,5 +1,5 @@
 // Service worker: lưu sẵn giao diện app để mở được khi mạng yếu.
-const CACHE = 'chamcong-go-v4';
+const CACHE = 'chamcong-go-v5';
 const SHELL = ['./', './index.html', './styles.css', './config.js', './core.js', './data.js', './app.js', './admin.html', './admin.css', './admin.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png'];
 const CDN = ['https://unpkg.com/', 'https://fonts.googleapis.com/', 'https://fonts.gstatic.com/', 'https://www.gstatic.com/firebasejs/'];
 
@@ -21,4 +21,14 @@ self.addEventListener('fetch', e => {
     if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;
   }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error()))));
+});
+
+// Bấm vào thông báo nhắc chấm công: mở (hoặc chuyển sang) app.
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    const c = list.find(w => w.url.startsWith(self.registration.scope) && !w.url.includes('admin.html'));
+    return c ? c.focus().then(w => w && w.navigate ? w.navigate(url) : w) : self.clients.openWindow(url);
+  }));
 });

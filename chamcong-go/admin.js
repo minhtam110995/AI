@@ -211,6 +211,8 @@
     const series = days.map(k => ({ key: k, ...dayCounts(k) }));
     const todayLogs = A.logs.filter(l => l.day === today).sort((a, b) => b.ts - a.ts).slice(0, 8);
     const notIn = states.filter(x => x.state === 'absent');
+    // Đã quá giờ ra ca mà chưa chấm ra
+    const noOut = states.filter(x => x.st && x.st.s && x.st.s.in && !x.st.s.out && C.minsOfTs(Date.now()) >= C.mins(x.sh.end));
     page.innerHTML = `
       <div class="stats">
         <div class="card stat hero">
@@ -259,6 +261,12 @@
                 <button class="icon-b" title="Duyệt" data-decide="approved" data-id="${r.id}" style="color:var(--ok)"><i class="icon-check"></i></button>
                 <button class="icon-b" title="Từ chối" data-decide="rejected" data-id="${r.id}" style="color:var(--absent)"><i class="icon-x"></i></button></div>`; }).join('') : '<div class="empty"><i class="icon-inbox"></i>Không có đơn nào đang chờ</div>'}</div>
           </div>
+          ${noOut.length ? `<div class="card">
+            <div class="card-h"><h2 class="grow">Chưa chấm công ra</h2><button class="btn btn-o btn-sm" id="remindAll"><i class="icon-bell-ring"></i>Nhắc tất cả</button></div>
+            <div class="card-b" style="padding:8px 0 4px">${noOut.map(x => `
+              <div class="li"><div class="av sm">${esc(initials(x.u.name))}</div><div class="m"><div class="t1">${esc(x.u.name)}</div><div class="t2">Vào ${hm(x.st.s.in.ts)} · ra ca ${esc(x.sh.end)}</div></div>
+                <button class="icon-b" title="Nhắc chấm ra" data-remind="${x.u.uid}"><i class="icon-bell-ring"></i></button></div>`).join('')}</div>
+          </div>` : ''}
           <div class="card">
             <div class="card-h"><h2 class="grow">Chưa chấm công</h2><span class="chip bad">${notIn.length}</span></div>
             <div class="card-b" style="padding:8px 0 4px">${notIn.length ? notIn.map(x => `
@@ -268,6 +276,13 @@
       </div>`;
     drawChart(page.querySelector('#chart'), series);
     bindDecide(page);
+    const remind = async list => {
+      await Promise.all(list.map(x => API.notify(x.u.uid, `Đã quá giờ ra ca ${x.sh.end} hôm nay, bạn chưa chấm công ra. Hãy chấm công ra, hoặc gửi giải trình nếu quên.`)));
+      toast(list.length > 1 ? `Đã nhắc ${list.length} người chấm công ra` : `Đã nhắc ${list[0].u.name} chấm công ra`);
+    };
+    const ra = page.querySelector('#remindAll');
+    if (ra) ra.onclick = () => busy(ra, () => remind(noOut));
+    page.querySelectorAll('[data-remind]').forEach(b => { b.onclick = () => busy(b, () => remind(noOut.filter(x => x.u.uid === b.dataset.remind))); });
   }
 
   function drawChart(el, data) {

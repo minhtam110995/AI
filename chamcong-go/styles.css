@@ -694,3 +694,15 @@ a { color: var(--orange); text-decoration: none; }
 details.policy { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--text-2); }
 details.policy summary { cursor: pointer; font-weight: 600; color: var(--orange); }
 details.policy ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
+
+/* Nhắc chấm công ra / quên chấm ra */
+.remind {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin-bottom: 12px;
+  padding: 13px 14px; border: 0; border-radius: 16px; font: inherit; cursor: pointer;
+  background: var(--red); color: #fff; box-shadow: 0 8px 20px rgba(229, 72, 77, .28);
+}
+.remind > i:first-child { font-size: 22px; flex-shrink: 0; }
+.remind .m { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.remind b { font-size: 14px; }
+.remind small { font-size: 12px; opacity: .9; }
+.remind.warn { background: #FFF4E5; color: #A85A00; box-shadow: none; border: 1px solid rgba(217, 119, 6, .25); }
