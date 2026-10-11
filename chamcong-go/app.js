@@ -31,7 +31,26 @@
     const users = [me, ...admins.filter(a => a.uid !== me.uid)];
     Object.assign(S, { company, users, locations, shifts, logs, reqs, notis, logsFrom, loadedMonths: new Set(), loadedAt: Date.now() });
     S.user = me;
-    if (S.user && S.user.active === false) { await signOut(); toast('Tài khoản đã bị khoá. Liên hệ quản trị.'); }
+    if (S.user && S.user.active === false) { await signOut(); toast('Tài khoản đã bị khoá. Liên hệ quản trị.'); return; }
+    saveSnap();
+  }
+
+  // Lưu bản sao dữ liệu gần nhất trên máy: lần mở app sau hiện ngay, rồi cập nhật từ máy chủ.
+  const SNAP_KEY = 'ccg.snap.v1';
+  function saveSnap() {
+    if (!S.user) return;
+    const { company, user, users, locations, shifts, logs, reqs, notis, logsFrom } = S;
+    try { localStorage.setItem(SNAP_KEY, JSON.stringify({ v: 1, at: Date.now(), company, user, users, locations, shifts, logs, reqs, notis, logsFrom })); }
+    catch (e) { lsSet(SNAP_KEY, null); }
+  }
+  function loadSnap() {
+    try {
+      const d = JSON.parse(lsGet(SNAP_KEY) || 'null');
+      if (!d || d.v !== 1 || !d.user || !d.company || Date.now() - d.at > 30 * 86400e3) return false;
+      Object.assign(S, { company: d.company, user: d.user, users: d.users || [], locations: d.locations || [], shifts: d.shifts || [], logs: d.logs || [], reqs: d.reqs || [],
+        notis: d.notis || [], logsFrom: d.logsFrom, loadedMonths: new Set(), loadedAt: 0, session: { user: d.user, cached: true } });
+      return true;
+    } catch (e) { return false; }
   }
   const unreadCount = () => S.notis.filter(n => !n.read).length;
 
@@ -280,8 +299,24 @@
   }
   async function signOut() {
     try { await API.signOut(); } catch (e) { /* ignore */ }
+    lsSet(SNAP_KEY, null);
     Object.assign(S, { session: null, user: null, logs: [], reqs: [], notis: [], locked: false, tmpPw: null });
     location.hash = ''; render();
+  }
+
+  // Leaflet (bản đồ) tải khi cần.
+  let leafletP = null;
+  function loadLeaflet() {
+    if (window.L) return Promise.resolve();
+    if (!leafletP) {
+      leafletP = new Promise((res, rej) => {
+        const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+        const js = document.createElement('script'); js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        js.onload = () => res(); js.onerror = () => { leafletP = null; js.remove(); rej(new Error('leaflet')); };
+        document.head.appendChild(js);
+      });
+    }
+    return leafletP;
   }
 
   // ---------------------------------------------------------------- home
@@ -449,7 +484,15 @@
   }
 
   // ---------------------------------------------------------------- GPS check-in
+  // Màn chấm công cần địa điểm / ca mới nhất: chờ tải xong nếu app đang hiện dữ liệu lưu trên máy.
+  function waitFresh(screen, again) {
+    if (!S.freshP) return false;
+    $app.innerHTML = `<div class="screen white">${topbar('Chấm công', { back: 'home' })}<div class="form"><div class="banner idle"><i class="icon-loader-circle spin"></i><span>Đang cập nhật dữ liệu...</span></div></div></div>`;
+    S.freshP.then(() => { if (S.session && !S.locked && route().parts[0] === screen) again(); });
+    return true;
+  }
   function renderGps(kind) {
+    if (waitFresh('gps', () => renderGps(kind))) return;
     kind = KIND[kind] ? kind : nextMainKind();
     const locs = myLocations();
     if (!locs.length) { toast('Công ty chưa cài địa điểm chấm công. Liên hệ quản trị.'); return go('home'); }
@@ -476,7 +519,9 @@
     </div>`;
 
     let map = null, userMarker = null, accCircle = null, fitted = false;
-    if (window.L) {
+    const mapEl = document.getElementById('map');
+    const initMap = () => {
+      if (!mapEl.isConnected || map) return;
       map = L.map('map', { zoomControl: false }).setView([locs[0].lat, locs[0].lng], 16);
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles © Esri' }).addTo(map);
       map.attributionControl.setPrefix(false);
@@ -485,15 +530,16 @@
         L.marker([o.lat, o.lng], { icon: L.divIcon({ className: 'leaflet-div-icon plain', html: '<div class="office-pin"><div class="head"><i class="icon-building-2"></i></div><div class="stem"></div></div>', iconSize: [34, 42], iconAnchor: [17, 42] }) }).addTo(map);
       });
       setTimeout(() => map && map.invalidateSize(), 50);
-    } else {
-      document.getElementById('map').innerHTML = '<div class="empty" style="padding-top:120px"><i class="icon-map"></i>Không tải được bản đồ (kiểm tra kết nối mạng)</div>';
-    }
+      update();
+    };
+    // Bản đồ chỉ tải khi mở màn này, để trang chủ mở nhanh.
+    loadLeaflet().then(initMap, () => { if (mapEl.isConnected) mapEl.innerHTML = '<div class="empty" style="padding-top:120px"><i class="icon-map"></i>Không tải được bản đồ (kiểm tra kết nối mạng)</div>'; });
     const fitBoth = () => {
       if (!map) return;
       const { loc } = nearest();
       const b = L.latLng(loc.lat, loc.lng).toBounds(loc.radius * 2);
       if (geo.fix) b.extend([geo.fix.lat, geo.fix.lng]);
-      map.fitBounds(b, { paddingTopLeft: [30, 80], paddingBottomRight: [30, 50], maxZoom: 17 });
+      map.fitBounds(b, { paddingTopLeft: [30, 80], paddingBottomRight: [30, 50], maxZoom: 17, animate: false });
     };
     const update = () => {
       const $dist = document.getElementById('gDist');
@@ -537,7 +583,7 @@
     geo.listeners.add(update);
     startWatch(); update();
     const tick = setInterval(update, 15e3);
-    cleanup.push(() => { geo.listeners.delete(update); stopWatch(); clearInterval(tick); if (map) map.remove(); map = null; });
+    cleanup.push(() => { geo.listeners.delete(update); stopWatch(); clearInterval(tick); if (map) { map.stop(); map.off(); map.remove(); } map = null; });
 
     document.getElementById('recenter').onclick = () => {
       if (map && geo.fix) map.setView([geo.fix.lat, geo.fix.lng], Math.max(map.getZoom(), 17)); else fitBoth();
@@ -564,6 +610,7 @@
    * (Trình duyệt không đọc được tên Wifi, nên dùng IP mạng để xác nhận đang ở văn phòng.)
    */
   async function renderWifi(kind) {
+    if (waitFresh('wifi', () => renderWifi(kind))) return;
     kind = KIND[kind] ? kind : nextMainKind();
     const locs = myLocations();
     const withIp = locs.filter(l => (l.ips || []).length);
@@ -1112,6 +1159,22 @@
 
   // ---------------------------------------------------------------- boot
   (async () => {
+    // Có dữ liệu lưu sẵn: hiện app ngay, tải dữ liệu mới ở nền.
+    if (loadSnap()) {
+      if (faceOn() && await faceAvailable()) S.locked = true;
+      let doneFresh; S.freshP = new Promise(r => { doneFresh = r; });
+      render();
+      const [sess, err] = await Promise.all([API.ready().catch(() => null), loadAll().then(() => null, e => e)]);
+      S.freshP = null; doneFresh();
+      if (!sess) { lsSet(SNAP_KEY, null); Object.assign(S, { session: null, user: null, locked: false }); render(); return; }
+      S.session = sess;
+      if (err) { try { await loadAll(); } catch (e) { toast('Đang dùng dữ liệu lưu trên máy. ' + errMsg(e)); } }
+      // Vẽ lại màn đang xem (trừ khi đang nhập form) để hiện dữ liệu mới.
+      if (!S.locked && ['home', 'notis', 'requests', 'proposals', 'history', 'profile', 'info', ''].includes(route().parts[0] || '')) render();
+      else if (S.user && S.user.mustChangePassword) render();
+      checkOutReminder();
+      return;
+    }
     $app.innerHTML = '<div class="boot"><div class="logo"><i class="icon-scan-face"></i></div></div>';
     try {
       S.session = await API.ready();

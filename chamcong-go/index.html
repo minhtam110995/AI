@@ -12,18 +12,23 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="styles.css?v=2026-10-11d">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Tải trước thư viện để chạy song song, không phải chờ lần lượt -->
+<link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js">
+<link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js">
+<link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js">
+<link rel="stylesheet" href="vendor/lucide.css?v=2026-10-11g">
+<link rel="stylesheet" href="styles.css?v=2026-10-11g">
+<!-- Phông chữ không chặn hiển thị: chưa tải xong thì dùng phông của máy -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
 </head>
 <body>
 <div id="app"></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>window.CCG_BUILD = '2026-10-11d';</script>
-<script src="config.js?v=2026-10-11d"></script>
+<script>window.CCG_BUILD = '2026-10-11g';</script>
+<script src="config.js?v=2026-10-11g"></script>
 <script>
   // Nạp Firebase (chỉ khi đã cấu hình trong config.js) rồi tới mã của app, giữ đúng thứ tự.
   (function () {

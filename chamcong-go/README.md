@@ -98,6 +98,12 @@ Gói miễn phí (Spark) của Firebase đủ cho công ty khoảng 50 người 
 - **Wifi**: trình duyệt không đọc được tên Wifi, nên app so **IP mạng** của điện thoại với IP Wifi văn phòng đã khai báo. Đúng IP mới chấm được, sai mạng (4G, Wifi khác) thì không chấm được. Cài đặt: ngồi ở văn phòng, kết nối Wifi công ty, mở trang quản trị › *Địa điểm chấm công* › bấm **Lấy IP mạng đang dùng** › **Lưu**. Nếu nhà mạng đổi IP (gói Internet không có IP tĩnh), nhân viên sẽ báo không chấm được: làm lại bước trên. Văn phòng có nhiều đường mạng thì thêm đủ các IP, cách nhau bởi dấu phẩy.
 - **GPS** có thể bị làm giả bằng app giả lập vị trí trên máy đã root/jailbreak. App lưu toạ độ, độ chính xác và khoảng cách mỗi lượt chấm để quản trị kiểm tra khi nghi ngờ.
 
+## Tốc độ mở app
+- Lần đầu mở: tải khoảng 1 MB thư viện (Firebase, phông chữ, biểu tượng). Từ lần thứ hai, mọi thứ lấy từ bộ nhớ máy (service worker), không chờ mạng.
+- App lưu bản sao dữ liệu của chính nhân viên trên máy, nên mở lại là **hiện trang chủ ngay**, dữ liệu mới tải ở nền rồi tự cập nhật. Màn chấm công GPS/Wifi luôn chờ dữ liệu mới nhất trước khi chấm. Đăng xuất là xoá bản sao.
+- Bản đồ chỉ tải khi mở màn chấm GPS. Bộ biểu tượng chỉ giữ các biểu tượng app dùng (`vendor/`). Khi thêm biểu tượng mới cần tạo lại bộ này.
+- Nhớ tạo 2 chỉ mục Firestore ở bước 4b: thiếu chỉ mục thì app phải tải toàn bộ lịch sử chấm công, càng dùng lâu càng chậm.
+
 ## Cấu trúc
 ```
 chamcong-go/
@@ -109,4 +115,5 @@ chamcong-go/
 ├── firestore.rules   # luật phân quyền trên máy chủ
 ├── firebase.json     # cấu hình triển khai Firebase (tuỳ chọn)
 ├── sw.js, manifest.webmanifest, icons/   # cài như app, mở được khi mạng yếu
+├── vendor/           # bộ biểu tượng Lucide rút gọn
 ```

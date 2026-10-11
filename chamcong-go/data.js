@@ -247,7 +247,8 @@
 
     function wrap(fn) {
       return async (...args) => {
-        try { return await fn(...args); }
+        // Chờ Firebase khôi phục phiên đăng nhập (app có thể hiện dữ liệu lưu sẵn trước khi xong).
+        try { await authReady; return await fn(...args); }
         catch (e) {
           if (e.userMessage) throw e;
           const code = e.code || '';
