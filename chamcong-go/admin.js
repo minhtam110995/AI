@@ -660,14 +660,14 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
   async function pLocations(page) {
     const locs = A.locations;
     if (!ui.locSel || (ui.locSel !== 'new' && !locs.find(l => l.id === ui.locSel))) ui.locSel = locs[0] ? locs[0].id : 'new';
-    const cur = ui.locSel === 'new' ? { id: '', name: '', address: '', lat: 21.0285, lng: 105.8542, radius: 150, wifi: '' } : { ...locs.find(l => l.id === ui.locSel) };
+    const cur = ui.locSel === 'new' ? { id: '', name: '', address: '', lat: 21.0285, lng: 105.8542, radius: 150, wifi: '', ips: [] } : { ...locs.find(l => l.id === ui.locSel) };
     const using = id => A.users.filter(u => (u.locationIds || []).includes(id)).length;
     page.innerHTML = `<div class="loc-grid">
       <div class="card loc-list">
         <div class="card-h"><h2 class="grow">Địa điểm (${locs.length})</h2><button class="btn btn-p btn-sm" id="newLoc"><i class="icon-plus"></i>Thêm</button></div>
         <div class="card-b" style="padding:10px 0 6px">
           ${locs.map(l => `<div class="li ${l.id === ui.locSel ? 'on' : ''}" data-loc="${l.id}"><div class="pin"><i class="icon-building-2"></i></div>
-            <div class="m"><div class="t1">${esc(l.name)}</div><div class="t2">Bán kính ${l.radius}m${l.wifi ? ' · Wifi ' + esc(l.wifi) : ''}${using(l.id) ? ` · ${using(l.id)} NV riêng` : ''}</div></div></div>`).join('')}
+            <div class="m"><div class="t1">${esc(l.name)}</div><div class="t2">Bán kính ${l.radius}m${l.wifi ? ' · Wifi ' + esc(l.wifi) : ''}${(l.ips || []).length ? ' · IP ' + esc(l.ips.join(', ')) : ''}${using(l.id) ? ` · ${using(l.id)} NV riêng` : ''}</div></div></div>`).join('')}
           ${ui.locSel === 'new' ? '<div class="li on"><div class="pin"><i class="icon-plus"></i></div><div class="m"><div class="t1">Địa điểm mới</div><div class="t2">Bấm lên bản đồ để đặt ghim</div></div></div>' : ''}
           ${!locs.length && ui.locSel !== 'new' ? '<div class="empty">Chưa có địa điểm nào</div>' : ''}
         </div>
@@ -677,6 +677,9 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
         <form class="loc-form" id="lf">
           <div class="field"><label for="l_name">Tên địa điểm <em>*</em></label><input class="input" id="l_name" name="name" required value="${esc(cur.name)}" placeholder="VD: Văn phòng Hà Nội"></div>
           <div class="field"><label for="l_wifi">Tên Wifi văn phòng</label><input class="input" id="l_wifi" name="wifi" value="${esc(cur.wifi || '')}" placeholder="VD: Office-5G"></div>
+          <div class="field full"><label for="l_ips">IP mạng Wifi văn phòng</label>
+            <div class="row"><input class="input grow mono" id="l_ips" name="ips" value="${esc((cur.ips || []).join(', '))}" placeholder="VD: 113.190.25.10"><button type="button" class="btn btn-o" id="getIp"><i class="icon-wifi"></i>Lấy IP mạng đang dùng</button></div>
+            <div class="hint">Bấm khi máy đang kết nối Wifi văn phòng. Nhân viên chỉ chấm Wifi được khi máy dùng đúng mạng có IP này. Nhiều mạng thì cách nhau bởi dấu phẩy.</div></div>
           <div class="field full"><label for="l_addr">Địa chỉ</label><input class="input" id="l_addr" name="address" value="${esc(cur.address || '')}" placeholder="Số nhà, đường, quận, thành phố"></div>
           <div class="field full"><label>Bán kính chấm công</label>
             <div class="radius-row"><input type="range" id="l_rad" name="radius" min="50" max="500" step="10" value="${cur.radius}" aria-label="Bán kính"><span class="radius-val" id="radV">${cur.radius}m</span></div>
@@ -731,6 +734,13 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       navigator.geolocation.getCurrentPosition(p => { btn.disabled = false; f.lat.value = p.coords.latitude.toFixed(6); f.lng.value = p.coords.longitude.toFixed(6); fromInputs(); map && map.setView([p.coords.latitude, p.coords.longitude], 17); },
         () => { btn.disabled = false; toast('Không lấy được vị trí. Hãy cho phép quyền Vị trí.'); }, { enableHighAccuracy: true, timeout: 15000 });
     };
+    page.querySelector('#getIp').onclick = e => busy(e.currentTarget, async () => {
+      const ip = await C.publicIp();
+      if (!ip) return toast('Không lấy được IP. Kiểm tra kết nối mạng.');
+      const list = C.ipList(f.ips.value);
+      if (list.includes(ip)) return toast('IP ' + ip + ' đã có trong danh sách');
+      f.ips.value = list.concat(ip).join(', '); toast('Đã thêm IP ' + ip + '. Bấm Lưu để áp dụng.');
+    });
     const del = page.querySelector('#delLoc');
     if (del) del.onclick = () => confirmModal('Xoá địa điểm', `Xoá "${cur.name}"? Nhân viên sẽ không chấm công ở địa điểm này được nữa.`, 'Xoá', async () => {
       await API.deleteLocation(cur.id); A.locations = A.locations.filter(l => l.id !== cur.id); ui.locSel = null; toast('Đã xoá địa điểm'); pLocations(page);
@@ -741,7 +751,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       const lat = Number(String(d.lat).replace(',', '.')), lng = Number(String(d.lng).replace(',', '.'));
       if (!d.name.trim()) return toast('Nhập tên địa điểm');
       if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return toast('Toạ độ không hợp lệ');
-      const loc = { id: cur.id || undefined, name: d.name.trim(), address: d.address.trim(), wifi: d.wifi.trim(), lat, lng, radius: Number(d.radius) };
+      const loc = { id: cur.id || undefined, name: d.name.trim(), address: d.address.trim(), wifi: d.wifi.trim(), ips: C.ipList(d.ips), lat, lng, radius: Number(d.radius) };
       busy(f.querySelector('[type=submit]'), async () => {
         const id = await API.saveLocation(loc);
         loc.id = id;
@@ -933,7 +943,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
             <div class="field"><label for="c_name">Tên công ty</label><input class="input" id="c_name" name="name" value="${esc(A.company.name)}" required></div>
             <div class="field"><label for="c_code">Mã công ty</label><input class="input" id="c_code" value="${esc(A.company.code)}" disabled><div class="hint">Nhân viên nhập mã này khi đăng nhập. Không đổi được.</div></div>
             <div class="field"><label for="c_leave">Số ngày phép năm mặc định</label><input class="input" id="c_leave" name="leavePerYear" type="number" min="0" max="60" step="0.5" value="${s.leavePerYear}"><div class="hint">Áp dụng cho nhân viên thêm mới; sửa riêng từng người ở mục Nhân viên.</div></div>
-            <div class="field"><label>Chấm công bằng Wifi</label><label class="switch"><input type="checkbox" name="allowWifi"${s.allowWifi !== false ? ' checked' : ''}>Cho phép nhân viên chọn Wifi</label><div class="hint">Lượt chấm Wifi không xác minh được sẽ vào mục Duyệt đơn › Chấm công chờ duyệt.</div></div>
+            <div class="field"><label>Chấm công bằng Wifi</label><label class="switch"><input type="checkbox" name="allowWifi"${s.allowWifi !== false ? ' checked' : ''}>Cho phép nhân viên chọn Wifi</label><div class="hint">Chỉ chấm được khi điện thoại đang dùng mạng Wifi văn phòng (IP khai báo ở mục Địa điểm chấm công). Sai mạng thì không chấm được.</div></div>
             <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><b>Quy định nghỉ</b><div class="hint">Áp dụng cho form xin nghỉ, cảnh báo khi duyệt đơn và cột KPI trong Báo cáo.</div></div>
             <div class="field"><label for="p_max">Số ngày nghỉ tối đa/tháng</label><input class="input" id="p_max" name="maxLeavePerMonth" type="number" min="0" max="31" step="0.5" value="${pol.maxLeavePerMonth}"><div class="hint">Gồm phép năm và nghỉ không lương; không tính nghỉ đột xuất hợp lệ.</div></div>
             <div class="field"><label for="p_notice">Báo trước tối thiểu (ngày)</label><input class="input" id="p_notice" name="noticeDays" type="number" min="0" max="30" value="${pol.noticeDays}"><div class="hint">Đơn thường gửi muộn hơn sẽ bị chặn; nhân viên phải chọn Nghỉ đột xuất.</div></div>

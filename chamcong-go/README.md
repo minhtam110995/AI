@@ -15,7 +15,7 @@ Gồm 2 phần, dùng chung một dữ liệu:
 | Xem bảng công, đơn, thông báo **của mình** | ✓ | ✓ |
 | Gửi đơn (nghỉ phép, đi muộn, làm thêm, công tác, giải trình, đổi ca) | ✓ | ✓ |
 | Xem dữ liệu của người khác | ✗ | ✓ |
-| Duyệt / từ chối đơn, duyệt lượt chấm Wifi | ✗ | ✓ |
+| Duyệt / từ chối đơn | ✗ | ✓ |
 | Thêm, sửa, khoá nhân viên; cấp quyền quản trị | ✗ | ✓ |
 | Cài địa điểm chấm công, ca làm việc, cài đặt công ty | ✗ | ✓ |
 | Bảng công, báo cáo, xuất Excel cả công ty | ✗ | ✓ |
@@ -35,9 +35,9 @@ Khi dùng Firebase, quyền được **máy chủ** kiểm tra (file `firestore.
 - **Tổng quan**: Có mặt hôm nay, Đi muộn, Vắng mặt, Đơn chờ duyệt; biểu đồ chuyên cần 14 ngày; danh sách chấm công hôm nay và người chưa chấm.
 - **Nhân viên**: thêm từng người hoặc **nhập cả danh sách** (dán từ Excel / Google Sheets, hoặc file CSV). Tài khoản tự gợi ý theo họ tên (VD *Nguyễn Văn An* → `an.nguyen`), mật khẩu tạm tạo sẵn. Sau khi tạo có **phiếu đăng nhập**: chép tin nhắn gửi Zalo cho từng người hoặc tải danh sách Excel. Sửa, khoá/mở, gán ca, gán địa điểm, cấp quyền.
 - Nhân viên đăng nhập lần đầu bằng mật khẩu tạm **phải đặt mật khẩu riêng** mới dùng được app; trước đó danh sách hiện trạng thái *Chưa kích hoạt*.
-- **Địa điểm chấm công**: bấm lên bản đồ hoặc kéo ghim để đặt văn phòng, kéo thanh trượt bán kính 50–500m, tên Wifi; nhiều địa điểm.
+- **Địa điểm chấm công**: bấm lên bản đồ hoặc kéo ghim để đặt văn phòng, kéo thanh trượt bán kính 50–500m, tên Wifi và **IP Wifi văn phòng** (nút *Lấy IP mạng đang dùng*); nhiều địa điểm.
 - **Ca làm việc**: giờ vào/ra, ngày làm việc trong tuần, số phút cho phép đến muộn.
-- **Duyệt đơn**: duyệt / từ chối kèm ý kiến, xem ảnh đính kèm; duyệt giải trình thì tự thêm lượt chấm bù; duyệt lượt chấm Wifi chưa xác minh.
+- **Duyệt đơn**: duyệt / từ chối kèm ý kiến, xem ảnh đính kèm; duyệt giải trình thì tự thêm lượt chấm bù.
 - **Bảng công**: bảng tháng (nhân viên × ngày) với ký hiệu ✓ / M / T / V / P / CT; bấm ô để xem chi tiết hoặc thêm lượt chấm thủ công; xuất Excel (CSV).
 - **Báo cáo**: công thực tế, phép, đi muộn (lần, phút), về sớm, vắng, thiếu chấm, giờ làm thêm theo từng người; tỉ lệ chuyên cần theo phòng ban; xuất Excel.
 - **Cài đặt**: tên công ty, số ngày phép mặc định, bật/tắt chấm Wifi, đổi mật khẩu, link mời nhân viên.
@@ -93,7 +93,7 @@ Gói miễn phí (Spark) của Firebase đủ cho công ty khoảng 50 người 
 
 ### Lưu ý khác
 - **Face ID / vân tay** dùng chuẩn WebAuthn của trình duyệt để mở khoá app trên máy đã đăng nhập (phiên đăng nhập vẫn do Firebase giữ). Cần iOS 16+ / Android 9+ và mở app qua HTTPS.
-- **Wifi**: trình duyệt không đọc được tên Wifi. Trên Android app biết máy đang dùng Wifi hay 4G; trên iPhone lượt chấm Wifi vào mục *Chấm công chờ duyệt* để quản trị duyệt.
+- **Wifi**: trình duyệt không đọc được tên Wifi, nên app so **IP mạng** của điện thoại với IP Wifi văn phòng đã khai báo. Đúng IP mới chấm được, sai mạng (4G, Wifi khác) thì không chấm được. Cài đặt: ngồi ở văn phòng, kết nối Wifi công ty, mở trang quản trị › *Địa điểm chấm công* › bấm **Lấy IP mạng đang dùng** › **Lưu**. Nếu nhà mạng đổi IP (gói Internet không có IP tĩnh), nhân viên sẽ báo không chấm được: làm lại bước trên. Văn phòng có nhiều đường mạng thì thêm đủ các IP, cách nhau bởi dấu phẩy.
 - **GPS** có thể bị làm giả bằng app giả lập vị trí trên máy đã root/jailbreak. App lưu toạ độ, độ chính xác và khoảng cách mỗi lượt chấm để quản trị kiểm tra khi nghi ngờ.
 
 ## Cấu trúc

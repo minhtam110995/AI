@@ -219,6 +219,29 @@
     });
   }
 
+  /**
+   * IP công cộng (IPv4) của mạng thiết bị đang dùng. Máy bắt Wifi văn phòng sẽ ra Internet bằng IP của văn phòng,
+   * nên so IP này với IP văn phòng đã lưu để biết nhân viên có đang dùng Wifi công ty không.
+   */
+  async function publicIp() {
+    const tries = [
+      ['https://api.ipify.org?format=json', r => r.json().then(j => j.ip)],
+      ['https://ipv4.icanhazip.com', r => r.text()],
+      ['https://api4.my-ip.io/v2/ip.json', r => r.json().then(j => j.ip)]
+    ];
+    for (const [url, read] of tries) {
+      try {
+        const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 6000);
+        const r = await fetch(url, { cache: 'no-store', signal: ctl.signal }); clearTimeout(t);
+        if (!r.ok) continue;
+        const ip = String(await read(r)).trim();
+        if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return ip;
+      } catch (e) { /* thử dịch vụ tiếp theo */ }
+    }
+    throw new Error('Không kiểm tra được mạng. Hãy kiểm tra kết nối Internet rồi thử lại.');
+  }
+  const ipList = s => String(s || '').split(/[\s,;]+/).map(x => x.trim()).filter(x => /^\d{1,3}(\.\d{1,3}){3}$/.test(x));
+
   function csvDownload(filename, rows) {
     const csv = '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const a = document.createElement('a');
@@ -233,6 +256,6 @@
     initials, relTime, haversine, eachDay, KIND, REQ_TYPES, LEAVE_TYPES, LEAVE_FORM_TYPES, SUDDEN_GROUPS, DEFAULT_POLICY, policyOf,
     leaveDaysInMonth, monthLeave, kpiDeduction, STATUS, ROLES, reqBg, reqFg,
     DEFAULT_SHIFT, shiftFor, locationsFor, isWorkday, leaveDays, reqSummary, leaveUsed, daySummary, dayStatus,
-    monthSummary, compressImage, csvDownload
+    monthSummary, compressImage, csvDownload, publicIp, ipList
   };
 })();

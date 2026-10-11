@@ -507,43 +507,47 @@
   }
 
   // ---------------------------------------------------------------- Wifi check-in
-  function renderWifi(kind) {
+  /**
+   * Chấm công Wifi: chỉ chấp nhận khi IP mạng của máy trùng IP Wifi văn phòng mà quản trị đã lưu.
+   * (Trình duyệt không đọc được tên Wifi, nên dùng IP mạng để xác nhận đang ở văn phòng.)
+   */
+  async function renderWifi(kind) {
     kind = KIND[kind] ? kind : nextMainKind();
-    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    const type = c && c.type;
     const locs = myLocations();
-    const ssid = locs.map(l => l.wifi).filter(Boolean).join(' / ') || 'Wifi văn phòng';
-    let state = 'unknown';
-    if (!navigator.onLine) state = 'offline';
-    else if (type === 'wifi' || type === 'ethernet') state = 'wifi';
-    else if (type === 'cellular') state = 'cellular';
-    const banners = {
-      wifi: ['ok', 'circle-check', 'Thiết bị đang kết nối mạng Wifi.'],
-      cellular: ['bad', 'wifi-off', 'Bạn đang dùng dữ liệu di động, chưa kết nối Wifi văn phòng.'],
-      offline: ['bad', 'wifi-off', 'Thiết bị đang mất kết nối mạng.'],
-      unknown: ['warn', 'info', 'Trình duyệt không cho biết tên mạng Wifi. Lượt chấm sẽ ở trạng thái Chờ phê duyệt để nhân sự kiểm tra.']
-    };
-    const [cls, icon, text] = banners[state];
-    const canSubmit = state === 'wifi' || state === 'unknown';
-    $app.innerHTML = `<div class="screen white">
-      ${topbar(kind === 'in' || kind === 'out' ? 'Chấm công Wifi' : KIND[kind].label + ' · Wifi', { back: 'home' })}
-      <div class="form">
-        <div class="place">
-          <div class="sq" style="background:var(--blue-soft);color:var(--blue)"><i class="icon-wifi"></i></div>
-          <div><b>${esc(ssid)}</b><small>${esc(locs.map(l => l.name).join(' · '))}</small></div>
+    const withIp = locs.filter(l => (l.ips || []).length);
+    const names = locs.map(l => l.wifi).filter(Boolean).join(' / ') || 'Wifi văn phòng';
+    const title = kind === 'in' || kind === 'out' ? 'Chấm công Wifi' : KIND[kind].label + ' · Wifi';
+    const view = (cls, icon, text, cta) => {
+      $app.innerHTML = `<div class="screen white">
+        ${topbar(title, { back: 'home' })}
+        <div class="form">
+          <div class="place">
+            <div class="sq" style="background:var(--blue-soft);color:var(--blue)"><i class="icon-wifi"></i></div>
+            <div><b>${esc(names)}</b><small>${esc(locs.map(l => l.name).join(' · '))}</small></div>
+          </div>
+          <div class="banner ${cls}"><i class="icon-${icon}"></i><span>${text}</span></div>
+          <div style="height:8px"></div>
+          ${cta || ''}
+          <button class="btn-outline" id="wRetry"><i class="icon-refresh-cw"></i>Kiểm tra lại</button>
+          <button class="btn-outline" data-go="gps?kind=${kind}"><i class="icon-locate-fixed"></i>Chấm bằng GPS</button>
         </div>
-        <div class="banner ${cls}"><i class="icon-${icon}"></i><span>${esc(text)}</span></div>
-        ${canSubmit ? `<label class="check-line"><input type="checkbox" id="wConfirm"><span>Tôi xác nhận đang kết nối mạng <b>${esc(ssid)}</b> tại văn phòng.</span></label>` : ''}
-        <div style="height:8px"></div>
-        ${canSubmit ? `<button class="btn-primary" id="wCta" disabled><i class="icon-fingerprint"></i>${KIND[kind].cta}</button>` : ''}
-        <button class="btn-outline" data-go="gps?kind=${kind}"><i class="icon-locate-fixed"></i>Chấm bằng GPS</button>
-      </div>
-    </div>`;
-    const cb = document.getElementById('wConfirm');
-    if (!cb) return;
+      </div>`;
+      document.getElementById('wRetry').onclick = () => renderWifi(kind);
+    };
+    if (!withIp.length) return view('warn', 'info', 'Công ty chưa cài <b>IP Wifi văn phòng</b> nên chưa chấm bằng Wifi được. Hãy chấm bằng GPS, hoặc báo quản trị cài trong trang quản trị › Địa điểm chấm công.');
+    view('idle', 'loader-circle spin', 'Đang kiểm tra mạng Wifi...');
+    let ip;
+    try { ip = await C.publicIp(); }
+    catch (e) { if (route().parts[0] === 'wifi') view('bad', 'wifi-off', esc(errMsg(e))); return; }
+    if (route().parts[0] !== 'wifi') return;
+    const loc = withIp.find(l => l.ips.includes(ip));
+    if (!loc) {
+      return view('bad', 'wifi-off', `Bạn <b>chưa kết nối Wifi văn phòng</b> nên không chấm công được. Hãy bật Wifi và kết nối mạng <b>${esc(names)}</b> rồi bấm "Kiểm tra lại".<br><small style="opacity:.8">Mạng hiện tại: ${esc(ip)}</small>`);
+    }
+    view('ok', 'circle-check', `Đã kết nối Wifi văn phòng <b>${esc(loc.wifi || loc.name)}</b>.`,
+      `<button class="btn-primary" id="wCta"><i class="icon-fingerprint"></i>${KIND[kind].cta}</button>`);
     const btn = document.getElementById('wCta');
-    cb.onchange = () => { btn.disabled = !cb.checked; };
-    btn.onclick = () => saveLog({ kind, method: 'Wifi', ssid, status: state === 'wifi' ? 'ok' : 'pending', locationId: locs[0] ? locs[0].id : '' }, btn);
+    btn.onclick = () => saveLog({ kind, method: 'Wifi', ssid: loc.wifi || '', ip, status: 'ok', locationId: loc.id }, btn);
   }
 
   // ---------------------------------------------------------------- success
