@@ -123,6 +123,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ---------- Tìm theo từ khoá → video nhiều view ----------
 // Mở trang tìm kiếm video của TikTok trong tab nền, tự cuộn để TikTok tải kết quả, rồi đóng tab.
 let searching = false;
+// Mở (hoặc chuyển tới) báo cáo từ khoá trong Dashboard
+async function openReport(keyword) {
+  const base = chrome.runtime.getURL('dashboard.html');
+  const url = `${base}#keyword?kw=${encodeURIComponent(TTA.kwKey(keyword))}`;
+  const [tab] = await chrome.tabs.query({ url: base + '*' }).catch(() => []);
+  if (tab) { await chrome.tabs.update(tab.id, { url, active: true }); await chrome.windows.update(tab.windowId, { focused: true }); }
+  else await chrome.tabs.create({ url });
+}
+
 // Cửa sổ nhỏ hiển thị thật (tab nền bị Chrome tạm dừng vẽ nên TikTok không tải thêm kết quả khi cuộn)
 async function openWorkWindow(url) {
   const w = await chrome.windows.create({ url, type: 'popup', focused: true, width: 520, height: 900, left: 40, top: 40 });
@@ -147,6 +156,8 @@ async function searchKeyword(input, scrolls) {
     try { await chrome.tabs.sendMessage(win.tabId, { type: 'flushNow' }); } catch (_) {}
     await sleep(1000);
     const n = await count();
+    if (win) { try { await chrome.windows.remove(win.winId); } catch (_) {} win = null; }
+    if (n) await openReport(keyword);
     await setKw({ step: 'done', msg: n ? `✓ Xong: có ${n} video cho từ khoá "${keyword}" (+${Math.max(0, n - before)} video mới lần này).` : `Không lấy được video nào. Hãy mở tiktok.com, đăng nhập (hoặc giải captcha) rồi thử lại.`, n });
   } catch (e) {
     await setKw({ step: 'error', msg: 'Lỗi: ' + (e.message || e) });

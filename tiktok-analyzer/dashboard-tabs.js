@@ -250,7 +250,7 @@ PANES.trends = (list, author) => {
 
 // ================= 🔎 Từ khoá → video nhiều view =================
 // Video lấy từ trang tìm kiếm TikTok (do tiện ích tự mở, hoặc bạn tự tìm rồi cuộn).
-const KW = { kw: '', range: '30', from: '', to: '', sort: 'views', min: 0, cart: '' };
+const KW = { kw: '', range: '0', from: '', to: '', sort: 'views', min: 0, cart: '', view: 'grid', limit: 60 };
 PANES.keyword = () => {
   const el = $('#paneKeyword');
   const job = state.kwJob;
@@ -260,6 +260,8 @@ PANES.keyword = () => {
   state.videos.forEach((v) => (v.kw || []).forEach((k) => (counts[k] = (counts[k] || 0) + 1)));
   const kws = [...new Set([...Object.keys(state.keywords), ...Object.keys(counts)])]
     .sort((a, b) => (state.keywords[b]?.last || 0) - (state.keywords[a]?.last || 0));
+  const fromHash = TTA.kwKey(decodeURIComponent((location.hash.match(/[?&]kw=([^&]*)/) || [])[1] || ''));
+  if (fromHash && fromHash !== KW.hashKw) { KW.hashKw = fromHash; KW.kw = fromHash; KW.limit = 60; }
   if (!KW.kw || !kws.includes(KW.kw)) KW.kw = kws[0] || '';
 
   const now = Date.now() / 1000;
@@ -309,12 +311,20 @@ PANES.keyword = () => {
     </div></section>
     ${kpiRow([['Video phù hợp', `${res.length} / ${all.length}`], ['Tổng lượt xem', TTA.fmt(res.reduce((a, v) => a + v.views, 0))], ['View trung vị', TTA.fmt(TTA.median(res.map((v) => v.views)))],
       ['ER trung vị', TTA.pct(TTA.median(res.filter((v) => v.views).map(TTA.er)))], ['Số kênh', chans.length], ['Video gắn giỏ', res.filter((v) => v.products?.length).length]])}
-    <section class="card"><h2>🏆 Video nhiều view — "${esc(KW.kw)}"</h2>
-      <p class="muted small">View/ngày = lượt xem chia số ngày từ lúc đăng (video mới mà cao là đang lên). 🔥/⚡ = gấp ≥3×/≥2× view trung vị của chính kênh đó (khi đã có ≥ 5 video của kênh).</p>
-      ${tbl(['Video', 'Kênh', 'Ngày đăng', 'View', 'View/ngày', 'Tim', 'ER', 'Gắn giỏ'],
-        res.slice(0, 200).map((v) => [vlink(v) + badge(v), `<a href="https://www.tiktok.com/@${esc(v.author)}" target="_blank">@${esc(v.author)}</a>`, TTA.fmtDate(v.createTime),
-          `<b>${TTA.fmt(v.views)}</b>`, TTA.fmt(perDay(v)), TTA.fmt(v.likes), TTA.pct(TTA.er(v)), v.products?.length ? '🛒' : '']),
-        'Không có video nào trong khoảng thời gian / bộ lọc này. Thử chọn khoảng dài hơn hoặc quét sâu hơn.')}</section>
+    <section class="card"><div class="tablehead"><h2>🏆 Video nhiều view — "${esc(KW.kw)}"</h2>
+        <div class="toolbar" style="margin:0"><button id="kwGrid" class="${KW.view === 'grid' ? 'primary' : ''}">▦ Thẻ video</button><button id="kwTable" class="${KW.view === 'table' ? 'primary' : ''}">☰ Bảng</button></div></div>
+      <p class="muted small">Bấm vào video để xem ngay tại đây. View/ngày = lượt xem chia số ngày từ lúc đăng (video mới mà cao là đang lên). 🔥/⚡ = gấp ≥3×/≥2× view trung vị của chính kênh đó.</p>
+      ${!res.length ? '<p class="muted">Không có video nào trong khoảng thời gian / bộ lọc này. Thử chọn “Toàn bộ” hoặc quét sâu hơn.</p>' : KW.view === 'grid' ? `<div class="vgrid">${res.slice(0, KW.limit).map((v, i) => `
+        <div class="vcard" data-play="${v.id}" data-author="${esc(v.author)}">
+          <div class="vcover">${v.cover ? `<img loading="lazy" src="${esc(v.cover)}" alt="">` : ''}<span class="vrank">#${i + 1}</span><span class="vviews">▶ ${TTA.fmt(v.views)}</span>${v.products?.length ? '<span class="vcart">🛒</span>' : ''}</div>
+          <div class="vbody"><div class="vdesc">${esc((v.desc || '').slice(0, 110))}</div>
+            <div class="vmeta">@${esc(v.author)} · ${TTA.fmtDate(v.createTime)}</div>
+            <div class="vmeta">${TTA.fmt(perDay(v))} view/ngày · ER ${TTA.pct(TTA.er(v))} ${badge(v)}</div></div>
+        </div>`).join('')}</div>
+        ${res.length > KW.limit ? `<div class="toolbar" style="justify-content:center"><button id="kwMore">Xem thêm (${res.length - KW.limit} video)</button></div>` : ''}`
+      : tbl(['Video', 'Kênh', 'Ngày đăng', 'View', 'View/ngày', 'Tim', 'ER', 'Gắn giỏ', ''],
+        res.slice(0, 500).map((v) => [vlink(v) + badge(v), `<a href="https://www.tiktok.com/@${esc(v.author)}" target="_blank">@${esc(v.author)}</a>`, TTA.fmtDate(v.createTime),
+          `<b>${TTA.fmt(v.views)}</b>`, TTA.fmt(perDay(v)), TTA.fmt(v.likes), TTA.pct(TTA.er(v)), v.products?.length ? '🛒' : '', `<button class="mini" data-play="${v.id}" data-author="${esc(v.author)}">▶ Xem</button>`]))}</section>
     <div class="grid2">
       <section class="card"><h2>Kênh nổi bật trong từ khoá</h2><p class="muted small">Tổng lượt xem các video của kênh trong kết quả.</p>
         ${hbarsSVG(chans.slice(0, 12).map((g) => ({ label: '@' + g.name, value: g.total, tip: `<b>@${esc(g.name)}</b><br>${g.n} video · tổng ${TTA.fmt(g.total)} view` })))}</section>
@@ -330,8 +340,12 @@ PANES.keyword = () => {
     KW.kw = TTA.kwKey(q);
     $('#kwJob').textContent = 'Đã bắt đầu… (tiến trình cập nhật tự động)';
   };
-  el.querySelectorAll('.kwChip').forEach((b) => (b.onclick = () => { KW.kw = b.dataset.kw; rerender(); }));
+  el.querySelectorAll('.kwChip').forEach((b) => (b.onclick = () => { KW.kw = b.dataset.kw; KW.limit = 60; rerender(); }));
   if (!KW.kw) return;
+  $('#kwGrid').onclick = () => { KW.view = 'grid'; rerender(); };
+  $('#kwTable').onclick = () => { KW.view = 'table'; rerender(); };
+  if ($('#kwMore')) $('#kwMore').onclick = () => { KW.limit += 60; rerender(); };
+  el.querySelectorAll('[data-play]').forEach((c) => (c.onclick = (e) => { if (!e.target.closest('a')) playModal(c.dataset.play, c.dataset.author); }));
   const bind = (id, key, num) => ($(id).onchange = (e) => { KW[key] = num ? Number(e.target.value) : e.target.value; rerender(); });
   bind('#kwRange', 'range'); bind('#kwSort', 'sort'); bind('#kwMin', 'min', true); bind('#kwCart', 'cart');
   if ($('#kwFrom')) { bind('#kwFrom', 'from'); bind('#kwTo', 'to'); }
@@ -345,3 +359,19 @@ PANES.keyword = () => {
     await chrome.storage.local.set({ videos, ttKeywords });
   };
 };
+
+// Xem video ngay trong Dashboard bằng trình phát nhúng chính thức của TikTok
+function playModal(id, author) {
+  document.getElementById('vmodal')?.remove();
+  const m = document.createElement('div');
+  m.id = 'vmodal';
+  const link = `https://www.tiktok.com/@${author}/video/${id}`;
+  m.innerHTML = `<div class="vm-inner"><div class="vm-head"><a href="${esc(link)}" target="_blank">Mở trên TikTok ↗</a><button class="vm-x">✕</button></div>
+    <iframe src="https://www.tiktok.com/player/v1/${id}?autoplay=1&controls=1&description=1&music_info=1" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe></div>`;
+  document.body.appendChild(m);
+  const close = () => { m.remove(); document.removeEventListener('keydown', esc1); };
+  const esc1 = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', esc1);
+  m.querySelector('.vm-x').onclick = close;
+  m.onclick = (e) => { if (e.target === m) close(); };
+}

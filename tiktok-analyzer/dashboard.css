@@ -74,3 +74,22 @@ button:disabled { opacity: .6; cursor: wait; }
 code { background: var(--grid); padding: 1px 5px; border-radius: 4px; }
 .grid2 td.desc { min-width: 140px; }
 .grid2 .tablewrap table { font-size: 12.5px; }
+
+/* Báo cáo từ khoá: thẻ video + trình phát */
+.vgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; margin-top: 10px; }
+.vcard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; background: var(--card); display: flex; flex-direction: column; }
+.vcard:hover { border-color: var(--series); }
+.vcover { position: relative; aspect-ratio: 9 / 16; background: var(--grid); }
+.vcover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vcover span { position: absolute; color: #fff; font-size: 12px; font-weight: 700; background: rgba(0,0,0,.6); border-radius: 6px; padding: 2px 6px; }
+.vrank { top: 6px; left: 6px; } .vviews { bottom: 6px; left: 6px; font-size: 13px !important; } .vcart { top: 6px; right: 6px; }
+.vbody { padding: 8px 10px 10px; display: grid; gap: 4px; }
+.vdesc { font-size: 12.5px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.vmeta { font-size: 11.5px; color: var(--muted); }
+button.mini { padding: 3px 8px; font-size: 12px; }
+#vmodal { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 50; display: flex; align-items: center; justify-content: center; }
+#vmodal .vm-inner { background: #121214; border-radius: 12px; padding: 10px; width: min(420px, 92vw); }
+#vmodal .vm-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+#vmodal .vm-head a { color: #25f4ee; font-size: 13px; }
+#vmodal .vm-x { background: #333; color: #fff; border: 0; }
+#vmodal iframe { width: 100%; aspect-ratio: 9 / 16; max-height: 80vh; border: 0; border-radius: 8px; background: #000; display: block; }
