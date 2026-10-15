@@ -1038,8 +1038,9 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
             <div class="field full"><label>Chống chấm công hộ</label>
               <label class="switch"><input type="checkbox" name="bindDevice"${s.bindDevice ? ' checked' : ''}>Mỗi người chỉ chấm trên <b>một điện thoại</b> đã đăng ký</label>
               <div class="hint">Lần chấm đầu tiên tự đăng ký máy; một máy không dùng được cho hai người. Đổi máy: Nhân viên › sửa › Gỡ máy chấm công.</div>
-              <label class="switch" style="margin-top:8px"><input type="checkbox" name="selfie"${s.selfie ? ' checked' : ''}>Bắt buộc <b>chụp ảnh khuôn mặt</b> mỗi lần chấm công</label>
-              <div class="hint">Mở camera trước để chụp trực tiếp (không chọn ảnh có sẵn). Xem ảnh ở Bảng công › bấm vào ô ngày, hoặc Tổng quan.</div></div>
+              <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>Chụp ảnh khuôn mặt khi chấm:</span>
+                <select class="select" name="selfieMode" style="width:auto">${[['off', 'Không chụp'], ['random', 'Ngẫu nhiên, khoảng 1/5 số lần'], ['gps', 'Chỉ khi chấm bằng GPS (ngoài Wifi văn phòng)'], ['always', 'Mỗi lần chấm']].map(([k, n]) => `<option value="${k}"${C.selfieMode(s) === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+              <div class="hint">Mở camera trước để chụp trực tiếp (không chọn ảnh có sẵn). Nên chọn <b>Ngẫu nhiên</b>: nhân viên ít phải chụp nhưng không biết lần nào bị hỏi, nên vẫn không dám nhờ chấm hộ. Xem ảnh ở Tổng quan hoặc Bảng công › bấm ô ngày.</div></div>
             <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><b>Quy định nghỉ</b><div class="hint">Áp dụng cho form xin nghỉ, cảnh báo khi duyệt đơn và cột KPI trong Báo cáo.</div></div>
             <div class="field"><label for="p_max">Số ngày nghỉ tối đa/tháng</label><input class="input" id="p_max" name="maxLeavePerMonth" type="number" min="0" max="31" step="0.5" value="${pol.maxLeavePerMonth}"><div class="hint">Gồm phép năm và nghỉ không lương; không tính nghỉ đột xuất hợp lệ.</div></div>
             <div class="field"><label for="p_notice">Báo trước tối thiểu (ngày)</label><input class="input" id="p_notice" name="noticeDays" type="number" min="0" max="30" value="${pol.noticeDays}"><div class="hint">Đơn thường gửi muộn hơn sẽ bị chặn; nhân viên phải chọn Nghỉ đột xuất.</div></div>
@@ -1070,7 +1071,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       busy(f.querySelector('[type=submit]'), async () => {
         const steps = String(d.kpiSteps || '').split(/[,;\s]+/).map(x => Number(x.replace(',', '.'))).filter(x => Number.isFinite(x) && x >= 0);
         const policy = { maxLeavePerMonth: Number(d.maxLeavePerMonth) || 0, noticeDays: Number(d.noticeDays) || 0, longLeaveDays: Math.max(1, Number(d.longLeaveDays) || 1), kpiSteps: steps.length ? steps : C.DEFAULT_POLICY.kpiSteps };
-        const settings = { leavePerYear: Number(d.leavePerYear) || 0, leaveReset: !!d.leaveReset, allowWifi: !!d.allowWifi, bindDevice: !!d.bindDevice, selfie: !!d.selfie, policy };
+        const settings = { leavePerYear: Number(d.leavePerYear) || 0, leaveReset: !!d.leaveReset, allowWifi: !!d.allowWifi, bindDevice: !!d.bindDevice, selfieMode: d.selfieMode || 'off', selfie: d.selfieMode === 'always', policy };
         await API.updateCompany({ name: d.name.trim(), settings });
         A.company.name = d.name.trim(); A.company.settings = { ...A.company.settings, ...settings };
         toast('Đã lưu cài đặt'); render();

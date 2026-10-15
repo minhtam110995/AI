@@ -101,8 +101,8 @@ Gói miễn phí (Spark) của Firebase đủ cho công ty khoảng 50 người 
 ## Chống chấm công hộ
 Bật trong trang quản trị › **Cài đặt › Chống chấm công hộ** (mặc định tắt). **Trước khi bật, dán lại `firestore.rules` mới vào Firebase › Firestore › Rules › Publish.**
 - **Mỗi người một điện thoại**: lần chấm đầu tiên app đăng ký máy đang dùng. Sau đó tài khoản chỉ chấm được trên máy đó, và một máy không đăng ký được cho người thứ hai. Đổi máy: nhân viên bấm *Gửi yêu cầu đổi máy*, quản trị vào Nhân viên › sửa › **Gỡ máy chấm công**.
-- **Chụp ảnh khuôn mặt**: mỗi lần chấm mở camera trước để chụp trực tiếp (không chọn được ảnh có sẵn), ảnh khoảng 15 KB lưu riêng. Quản trị xem ở Tổng quan (biểu tượng máy ảnh) hoặc Bảng công › bấm ô ngày.
-- Máy chủ (rules) kiểm tra cả hai điều trên, nên sửa app cũng không lách được.
+- **Chụp ảnh khuôn mặt**: chọn mức Không chụp / Ngẫu nhiên (khoảng 1/5 số lần) / Chỉ khi chấm GPS / Mỗi lần. Khi cần chụp, app mở camera trước để chụp trực tiếp (không chọn được ảnh có sẵn), ảnh khoảng 15 KB lưu riêng. Quản trị xem ở Tổng quan (biểu tượng máy ảnh) hoặc Bảng công › bấm ô ngày.
+- Máy chủ (rules) kiểm tra mã máy, và ảnh khi chọn mức *Mỗi lần*, nên sửa app cũng không lách được.
 - Lưu ý: mã máy lưu trong trình duyệt. Xoá dữ liệu trình duyệt, hoặc chuyển từ Safari sang app ngoài màn hình chính, sẽ thành "máy mới" và cần quản trị gỡ máy cũ. Nên cài app ra màn hình chính trước khi chấm lần đầu.
 
 ## Tốc độ mở app

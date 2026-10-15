@@ -172,6 +172,14 @@
     return { leaveBase: Math.round((Number(remaining) + annualLeaveSince(reqs, month, shift)) * 100) / 100, leaveBaseMonth: month };
   }
 
+  /** Mức chụp ảnh khi chấm công: off | random | gps | always (bản cũ chỉ có selfie: true = always). */
+  const selfieMode = settings => (settings && settings.selfieMode) || (settings && settings.selfie ? 'always' : 'off');
+  /** Lượt chấm này có cần chụp ảnh không. */
+  const needSelfie = (settings, method) => {
+    const m = selfieMode(settings);
+    return m === 'always' || (m === 'gps' && method === 'GPS') || (m === 'random' && Math.random() < 0.2);
+  };
+
   /** Tóm tắt một ngày của một người: giờ vào đầu tiên, giờ ra cuối cùng, muộn/sớm. */
   function daySummary(logs, key, shift) {
     const list = logs.filter(l => l.day === key && l.status !== 'rejected').sort((a, b) => a.ts - b.ts);
@@ -286,6 +294,6 @@
     initials, relTime, haversine, eachDay, KIND, REQ_TYPES, LEAVE_TYPES, LEAVE_FORM_TYPES, SUDDEN_GROUPS, DEFAULT_POLICY, policyOf,
     leaveDaysInMonth, monthLeave, kpiDeduction, STATUS, ROLES, reqBg, reqFg,
     DEFAULT_SHIFT, shiftFor, locationsFor, isWorkday, leaveDays, reqSummary, leaveUsed, daySummary, dayStatus,
-    monthSummary, compressImage, csvDownload, publicIp, ipList, leaveBalance, leaveSetRemaining, leaveRate, monthKeyOf
+    monthSummary, compressImage, csvDownload, publicIp, ipList, leaveBalance, leaveSetRemaining, leaveRate, monthKeyOf, selfieMode, needSelfie
   };
 })();

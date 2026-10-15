@@ -546,7 +546,7 @@
     const st = S.company.settings || {};
     if (st.bindDevice && !isAdmin() && !(await ensureDevice())) return;
     let photo = null;
-    if (st.selfie && !isAdmin()) { photo = await takeSelfie(KIND[log.kind] ? KIND[log.kind].cta : 'Chụp ảnh chấm công'); if (!photo) return; }
+    if (!isAdmin() && C.needSelfie(st, log.method)) { photo = await takeSelfie(KIND[log.kind] ? KIND[log.kind].cta : 'Chụp ảnh chấm công'); if (!photo) return; }
     return busy(btn, async () => {
       const saved = await API.addLog({ ...log, deviceId: deviceId() }, photo);
       S.logs.push(saved);
