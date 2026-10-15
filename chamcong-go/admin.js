@@ -121,6 +121,7 @@
     document.querySelectorAll('.modal-bg').forEach(m => m.remove());
     if (!A.session) return renderLogin();
     const r = route();
+    if (r === 'users') A.usersAt = 0; // mở mục Nhân viên: luôn tải lại danh sách
     const page = shell(r);
     const pages = { overview: pOverview, users: pUsers, locations: pLocations, shifts: pShifts, approvals: pApprovals, leave: pLeave, timesheet: pTimesheet, reports: pReports, settings: pSettings };
     try { await (pages[r] || pOverview)(page); }
@@ -250,7 +251,7 @@
             <div class="card-b" style="padding:8px 0 4px">${todayLogs.length ? todayLogs.map(l => { const u = userBy(l.uid); return `
               <div class="li"><div class="av sm">${esc(initials(u.name))}</div>
                 <div class="m"><div class="t1">${esc(u.name)}</div><div class="t2">${KIND[l.kind].type} · ${esc(l.method)}${l.dist != null ? ' · cách ' + C.fmtDist(l.dist) : ''}${l.status === 'pending' ? ' · chờ duyệt' : ''}</div></div>
-                <div class="tm">${hm(l.ts)}</div></div>`; }).join('') : '<div class="empty"><i class="icon-clock"></i>Chưa có lượt chấm công nào hôm nay</div>'}</div>
+                ${l.hasPhoto ? `<button class="icon-b" data-photo="${l.id}" title="Xem ảnh"><i class="icon-camera"></i></button>` : ''}<div class="tm">${hm(l.ts)}</div></div>`; }).join('') : '<div class="empty"><i class="icon-clock"></i>Chưa có lượt chấm công nào hôm nay</div>'}</div>
           </div>
         </div>
         <div class="col">
@@ -277,6 +278,7 @@
       </div>`;
     drawChart(page.querySelector('#chart'), series);
     bindDecide(page);
+    bindPhotos(page);
     const remind = async list => {
       await Promise.all(list.map(x => API.notify(x.u.uid, `Đã quá giờ ra ca ${x.sh.end} hôm nay, bạn chưa chấm công ra. Hãy chấm công ra, hoặc gửi giải trình nếu quên.`)));
       toast(list.length > 1 ? `Đã nhắc ${list.length} người chấm công ra` : `Đã nhắc ${list[0].u.name} chấm công ra`);
@@ -449,6 +451,11 @@
 
   // ---------------------------------------------------------------- users
   async function pUsers(page) {
+    // Tải lại danh sách (trạng thái kích hoạt, máy chấm công có thể vừa đổi); khi gõ tìm kiếm thì dùng bản vừa tải.
+    if (Date.now() - (A.usersAt || 0) > 15000) {
+      A.users = await API.listUsers(); A.usersAt = Date.now();
+      if (!page.isConnected) return;
+    }
     const depts = [...new Set(A.users.map(u => u.dept).filter(Boolean))].sort();
     const q = ui.userQ.toLowerCase();
     const list = A.users.filter(u => (!q || [u.name, u.account, u.code, u.title].join(' ').toLowerCase().includes(q)) && (!ui.userDept || u.dept === ui.userDept));
@@ -466,7 +473,7 @@
         <td>${esc(u.account || '')}</td><td>${esc(u.dept || '—')}</td><td>${esc(u.title || '—')}</td>
         <td>${esc(sh.name)} <span class="muted">${esc(sh.start)}–${esc(sh.end)}</span></td><td>${esc(locs)}</td>
         <td><span class="chip ${u.role === 'admin' ? 'admin' : 'gray'}">${ROLES[u.role] || u.role}</span>${u.uid === A.company.ownerUid ? ' <span class="chip blue">Chủ</span>' : ''}</td>
-        <td>${exempt(u) ? '<span class="chip gray" title="Không tính vào chuyên cần, bảng công, báo cáo">Không chấm công</span> ' : ''}${u.active === false ? '<span class="chip bad">Đã khoá</span>' : u.mustChangePassword ? '<span class="chip pending" title="Chưa đăng nhập lần đầu / chưa đổi mật khẩu tạm">Chưa kích hoạt</span>' : '<span class="chip ok">Đang làm</span>'}</td>
+        <td>${exempt(u) ? '<span class="chip gray" title="Không tính vào chuyên cần, bảng công, báo cáo">Không chấm công</span> ' : ''}${u.active === false ? '<span class="chip bad">Đã khoá</span>' : u.mustChangePassword ? '<span class="chip pending" title="Chưa đăng nhập lần đầu / chưa đổi mật khẩu tạm">Chưa kích hoạt</span>' : '<span class="chip ok">Đang làm</span>'}${A.company.settings.bindDevice && !exempt(u) ? (u.deviceId ? ` <span class="chip gray" title="Máy chấm công đã đăng ký"><i class="icon-smartphone"></i> ${esc(u.deviceName || 'Đã đăng ký')}</span>` : ' <span class="chip gray" title="Chưa chấm công lần nào trên app">Chưa đăng ký máy</span>') : ''}</td>
         <td><div class="acts"><button class="icon-b" data-edit="${u.uid}" title="Sửa"><i class="icon-pencil"></i></button>
           ${u.uid !== A.company.ownerUid && u.uid !== A.me.uid ? `<button class="icon-b" data-lock="${u.uid}" title="${u.active === false ? 'Mở khoá' : 'Khoá tài khoản'}"><i class="icon-${u.active === false ? 'lock-open' : 'lock'}"></i></button>` : ''}</div></td></tr>`; }).join('') || '<tr><td colspan="9"><div class="empty">Không có nhân viên phù hợp</div></td></tr>'}
       </tbody></table></div></div>`;
@@ -497,9 +504,16 @@
       <div class="field"><label for="u_role">Quyền</label><select class="select" id="u_role" name="role" ${u.uid === A.company.ownerUid ? 'disabled' : ''}>${Object.entries(ROLES).map(([k, n]) => `<option value="${k}"${k === u.role ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
       <div class="field"><label for="u_leave">Phép năm còn lại (tháng này)</label><input class="input" id="u_leave" name="leaveLeft" type="number" min="-60" max="200" step="0.5" value="${leftNow}"><div class="hint">Mỗi tháng tự cộng ${num(C.leaveRate(A.company.settings))} ngày.</div></div>
       <div class="field"><label>Địa điểm được chấm</label><div class="days">${A.locations.map(l => `<label><input type="checkbox" name="loc" value="${l.id}"${(u.locationIds || []).includes(l.id) ? ' checked' : ''}>${esc(l.name)}</label>`).join('') || '<span class="hint">Chưa có địa điểm</span>'}</div><div class="hint">Không chọn = được chấm ở mọi địa điểm.</div></div>
+      ${!isNew ? `<div class="field full"><label>Máy chấm công</label><div class="row">${u.deviceId ? `<span class="grow"><i class="icon-smartphone"></i> <b>${esc(u.deviceName || 'Điện thoại')}</b>${u.deviceAt ? ` · đăng ký ngày ${dmy(u.deviceAt)}` : ''}</span><button type="button" class="btn btn-o btn-sm" id="resetDev"><i class="icon-smartphone-nfc"></i>Gỡ máy chấm công</button>` : '<span class="grow muted">Chưa đăng ký. Máy dùng chấm công lần đầu sẽ tự được đăng ký.</span>'}</div><div class="hint">Gỡ khi nhân viên đổi điện thoại; lần chấm tiếp theo sẽ đăng ký máy mới.</div></div>` : ''}
       <div class="field full"><label class="switch"><input type="checkbox" name="noAttendance" ${!isNew && exempt(u) ? 'checked' : ''}>Không chấm công (không tính vào chuyên cần, bảng công, báo cáo)</label><div class="hint">Dùng cho tài khoản chỉ để quản lý, VD tài khoản Admin bàn giao cho nhân sự.</div></div>
       ${isNew ? `<div class="full hint">Tài khoản tự gợi ý theo họ tên, mật khẩu tạm tạo sẵn (có thể sửa). Lần đầu đăng nhập, nhân viên phải đặt mật khẩu riêng.</div>` : ''}
     </form>`, `<button class="btn btn-o" data-close>Hủy</button><button class="btn btn-p" id="saveU">${isNew ? 'Thêm nhân viên' : 'Lưu thay đổi'}</button>`);
+    const rd = m.querySelector('#resetDev');
+    if (rd) rd.onclick = () => busy(rd, async () => {
+      await API.resetDevice(u.uid); Object.assign(u, { deviceId: null, deviceName: null, deviceAt: null });
+      await API.notify(u.uid, 'Quản trị đã gỡ máy chấm công cũ của bạn. Lần chấm công tiếp theo sẽ đăng ký máy bạn đang dùng.').catch(() => {});
+      rd.closest('.row').innerHTML = '<span class="grow muted">Đã gỡ. Lần chấm tiếp theo sẽ đăng ký máy mới.</span>'; toast('Đã gỡ máy chấm công của ' + u.name); render();
+    });
     if (isNew) {
       const nameIn = m.querySelector('#u_name'), accIn = m.querySelector('#u_acc');
       let touched = false;
@@ -884,6 +898,19 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       C.csvDownload(`bang-cong-${mk}.csv`, [head, ...rows.map(r => [r.u.code, r.u.name, r.u.dept, ...r.cells.map(st => CODE[st.code] || ''), num(r.sum.work), num(r.sum.leave), r.sum.late, r.sum.absent])]);
     };
   }
+  // Xem ảnh chụp lúc chấm công
+  function bindPhotos(root) {
+    root.querySelectorAll('[data-photo]').forEach(b => {
+      b.onclick = e => {
+        e.stopPropagation();
+        const l = A.logs.find(x => x.id === b.dataset.photo), u = l ? userBy(l.uid) : { name: '' };
+        const pm = modal(`Ảnh chấm công · ${u.name}`, `<div class="modal-b"><div class="full" style="text-align:center"><div class="photo-box"><i class="icon-loader-circle spin"></i></div>
+          <div class="hint" style="margin-top:8px">${l ? `${KIND[l.kind].type} lúc ${hm(l.ts)} ngày ${dmy(l.ts)} · ${esc(l.method)}` : ''}</div></div></div>`, '<button class="btn btn-o" data-close>Đóng</button>');
+        API.getPhoto(b.dataset.photo).then(src => { const box = pm.querySelector('.photo-box'); if (box) box.innerHTML = src ? `<img src="${src}" alt="Ảnh chấm công">` : '<span class="muted">Không có ảnh</span>'; })
+          .catch(err => { const box = pm.querySelector('.photo-box'); if (box) box.textContent = errMsg(err); });
+      };
+    });
+  }
   function dayModal(uid, key, page) {
     const u = userBy(uid), sh = shiftOf(u);
     const st = C.dayStatus({ logs: logsOf(uid), reqs: reqsOf(uid), key, shift: sh, startKey: startKeyOf(u) });
@@ -893,12 +920,13 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
         <span>Giờ vào</span><b>${st.s.in ? hm(st.s.in.ts) + (st.s.lateBy ? ` · <span style="color:var(--absent)">muộn ${st.s.lateBy} phút</span>` : '') : '—'}</b>
         <span>Giờ ra</span><b>${st.s.out ? hm(st.s.out.ts) + (st.s.earlyBy ? ` · <span style="color:var(--absent)">sớm ${st.s.earlyBy} phút</span>` : '') : '—'}</b>
         <span>Công</span><b>${num(st.work)}${st.leave ? ` · nghỉ phép ${num(st.leave)}` : ''}</b></div>
-      <div class="full"><table class="tbl"><thead><tr><th>Giờ</th><th>Loại</th><th>Phương thức</th><th>Trạng thái</th></tr></thead><tbody>
-        ${logs.map(l => `<tr><td class="num">${hm(l.ts)}</td><td>${KIND[l.kind].type}</td><td>${esc(l.method)}${l.dist != null ? ' · ' + C.fmtDist(l.dist) : ''}</td><td>${l.status === 'ok' ? '<span class="chip ok">Hợp lệ</span>' : l.status === 'pending' ? '<span class="chip pending">Chờ duyệt</span>' : '<span class="chip bad">Từ chối</span>'}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Không có lượt chấm nào</td></tr>'}
+      <div class="full"><table class="tbl"><thead><tr><th>Giờ</th><th>Loại</th><th>Phương thức</th><th>Trạng thái</th><th>Ảnh</th></tr></thead><tbody>
+        ${logs.map(l => `<tr><td class="num">${hm(l.ts)}</td><td>${KIND[l.kind].type}</td><td>${esc(l.method)}${l.dist != null ? ' · ' + C.fmtDist(l.dist) : ''}${l.deviceId && u.deviceId && l.deviceId !== u.deviceId ? ' · <span class="chip bad">máy khác</span>' : ''}</td><td>${l.status === 'ok' ? '<span class="chip ok">Hợp lệ</span>' : l.status === 'pending' ? '<span class="chip pending">Chờ duyệt</span>' : '<span class="chip bad">Từ chối</span>'}</td><td>${l.hasPhoto ? `<button class="icon-b" data-photo="${l.id}" title="Xem ảnh"><i class="icon-camera"></i></button>` : '<span class="muted">—</span>'}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Không có lượt chấm nào</td></tr>'}
       </tbody></table></div>
       <div class="field"><label for="addKind">Thêm lượt chấm thủ công</label><select class="select" id="addKind"><option value="in">Vào ca</option><option value="out">Ra ca</option></select></div>
       <div class="field"><label for="addTime">Giờ</label><input class="input" type="time" id="addTime" value="${sh.start}"></div>
     </div>`, `<button class="btn btn-o" data-close>Đóng</button><button class="btn btn-p" id="addLog"><i class="icon-plus"></i>Thêm lượt chấm</button>`);
+    bindPhotos(m);
     m.querySelector('#addLog').onclick = e => busy(e.currentTarget, async () => {
       const [h, mi] = m.querySelector('#addTime').value.split(':').map(Number);
       const d = fromKey(key); d.setHours(h, mi, 0, 0);
@@ -1007,6 +1035,11 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
             <div class="field"><label for="c_leave">Số ngày phép mỗi năm</label><input class="input" id="c_leave" name="leavePerYear" type="number" min="0" max="60" step="0.5" value="${s.leavePerYear ?? 12}"><div class="hint">Chia đều 12 tháng: 12 ngày/năm = mỗi tháng tự cộng 1 ngày. Xem, sửa phép từng người ở mục Phép năm.</div></div>
             <div class="field"><label>Phép tồn cuối năm</label><label class="switch"><input type="checkbox" name="leaveReset"${s.leaveReset ? ' checked' : ''}>Xoá phép chưa dùng khi sang năm mới</label><div class="hint">Tắt: phép chưa dùng được cộng dồn sang năm sau.</div></div>
             <div class="field"><label>Chấm công bằng Wifi</label><label class="switch"><input type="checkbox" name="allowWifi"${s.allowWifi !== false ? ' checked' : ''}>Cho phép nhân viên chọn Wifi</label><div class="hint">Chỉ chấm được khi điện thoại đang dùng mạng Wifi văn phòng (IP khai báo ở mục Địa điểm chấm công). Sai mạng thì không chấm được.</div></div>
+            <div class="field full"><label>Chống chấm công hộ</label>
+              <label class="switch"><input type="checkbox" name="bindDevice"${s.bindDevice ? ' checked' : ''}>Mỗi người chỉ chấm trên <b>một điện thoại</b> đã đăng ký</label>
+              <div class="hint">Lần chấm đầu tiên tự đăng ký máy; một máy không dùng được cho hai người. Đổi máy: Nhân viên › sửa › Gỡ máy chấm công.</div>
+              <label class="switch" style="margin-top:8px"><input type="checkbox" name="selfie"${s.selfie ? ' checked' : ''}>Bắt buộc <b>chụp ảnh khuôn mặt</b> mỗi lần chấm công</label>
+              <div class="hint">Mở camera trước để chụp trực tiếp (không chọn ảnh có sẵn). Xem ảnh ở Bảng công › bấm vào ô ngày, hoặc Tổng quan.</div></div>
             <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px"><b>Quy định nghỉ</b><div class="hint">Áp dụng cho form xin nghỉ, cảnh báo khi duyệt đơn và cột KPI trong Báo cáo.</div></div>
             <div class="field"><label for="p_max">Số ngày nghỉ tối đa/tháng</label><input class="input" id="p_max" name="maxLeavePerMonth" type="number" min="0" max="31" step="0.5" value="${pol.maxLeavePerMonth}"><div class="hint">Gồm phép năm và nghỉ không lương; không tính nghỉ đột xuất hợp lệ.</div></div>
             <div class="field"><label for="p_notice">Báo trước tối thiểu (ngày)</label><input class="input" id="p_notice" name="noticeDays" type="number" min="0" max="30" value="${pol.noticeDays}"><div class="hint">Đơn thường gửi muộn hơn sẽ bị chặn; nhân viên phải chọn Nghỉ đột xuất.</div></div>
@@ -1037,7 +1070,7 @@ Lần đầu đăng nhập, app sẽ yêu cầu bạn đặt mật khẩu mới.
       busy(f.querySelector('[type=submit]'), async () => {
         const steps = String(d.kpiSteps || '').split(/[,;\s]+/).map(x => Number(x.replace(',', '.'))).filter(x => Number.isFinite(x) && x >= 0);
         const policy = { maxLeavePerMonth: Number(d.maxLeavePerMonth) || 0, noticeDays: Number(d.noticeDays) || 0, longLeaveDays: Math.max(1, Number(d.longLeaveDays) || 1), kpiSteps: steps.length ? steps : C.DEFAULT_POLICY.kpiSteps };
-        const settings = { leavePerYear: Number(d.leavePerYear) || 0, leaveReset: !!d.leaveReset, allowWifi: !!d.allowWifi, policy };
+        const settings = { leavePerYear: Number(d.leavePerYear) || 0, leaveReset: !!d.leaveReset, allowWifi: !!d.allowWifi, bindDevice: !!d.bindDevice, selfie: !!d.selfie, policy };
         await API.updateCompany({ name: d.name.trim(), settings });
         A.company.name = d.name.trim(); A.company.settings = { ...A.company.settings, ...settings };
         toast('Đã lưu cài đặt'); render();

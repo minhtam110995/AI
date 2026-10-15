@@ -98,6 +98,13 @@ Gói miễn phí (Spark) của Firebase đủ cho công ty khoảng 50 người 
 - **Wifi**: trình duyệt không đọc được tên Wifi, nên app so **IP mạng** của điện thoại với IP Wifi văn phòng đã khai báo. Đúng IP mới chấm được, sai mạng (4G, Wifi khác) thì không chấm được. Cài đặt: ngồi ở văn phòng, kết nối Wifi công ty, mở trang quản trị › *Địa điểm chấm công* › bấm **Lấy IP mạng đang dùng** › **Lưu**. Nếu nhà mạng đổi IP (gói Internet không có IP tĩnh), nhân viên sẽ báo không chấm được: làm lại bước trên. Văn phòng có nhiều đường mạng thì thêm đủ các IP, cách nhau bởi dấu phẩy.
 - **GPS** có thể bị làm giả bằng app giả lập vị trí trên máy đã root/jailbreak. App lưu toạ độ, độ chính xác và khoảng cách mỗi lượt chấm để quản trị kiểm tra khi nghi ngờ.
 
+## Chống chấm công hộ
+Bật trong trang quản trị › **Cài đặt › Chống chấm công hộ** (mặc định tắt). **Trước khi bật, dán lại `firestore.rules` mới vào Firebase › Firestore › Rules › Publish.**
+- **Mỗi người một điện thoại**: lần chấm đầu tiên app đăng ký máy đang dùng. Sau đó tài khoản chỉ chấm được trên máy đó, và một máy không đăng ký được cho người thứ hai. Đổi máy: nhân viên bấm *Gửi yêu cầu đổi máy*, quản trị vào Nhân viên › sửa › **Gỡ máy chấm công**.
+- **Chụp ảnh khuôn mặt**: mỗi lần chấm mở camera trước để chụp trực tiếp (không chọn được ảnh có sẵn), ảnh khoảng 15 KB lưu riêng. Quản trị xem ở Tổng quan (biểu tượng máy ảnh) hoặc Bảng công › bấm ô ngày.
+- Máy chủ (rules) kiểm tra cả hai điều trên, nên sửa app cũng không lách được.
+- Lưu ý: mã máy lưu trong trình duyệt. Xoá dữ liệu trình duyệt, hoặc chuyển từ Safari sang app ngoài màn hình chính, sẽ thành "máy mới" và cần quản trị gỡ máy cũ. Nên cài app ra màn hình chính trước khi chấm lần đầu.
+
 ## Tốc độ mở app
 - Lần đầu mở: tải khoảng 1 MB thư viện (Firebase, phông chữ, biểu tượng). Từ lần thứ hai, mọi thứ lấy từ bộ nhớ máy (service worker), không chờ mạng.
 - App lưu bản sao dữ liệu của chính nhân viên trên máy, nên mở lại là **hiện trang chủ ngay**, dữ liệu mới tải ở nền rồi tự cập nhật. Màn chấm công GPS/Wifi luôn chờ dữ liệu mới nhất trước khi chấm. Đăng xuất là xoá bản sao.

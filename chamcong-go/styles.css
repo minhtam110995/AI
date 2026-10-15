@@ -706,3 +706,16 @@ details.policy ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-dir
 .remind b { font-size: 14px; }
 .remind small { font-size: 12px; opacity: .9; }
 .remind.warn { background: #FFF4E5; color: #A85A00; box-shadow: none; border: 1px solid rgba(217, 119, 6, .25); }
+
+/* Chụp ảnh khi chấm công */
+.cam { position: fixed; inset: 0; z-index: 60; background: #0E0F12; color: #fff; display: flex; flex-direction: column; align-items: center; padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom); }
+.cam-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 0; font-size: 16px; }
+.cam-x { width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .12); color: #fff; font-size: 20px; cursor: pointer; }
+.cam-view { position: relative; width: min(78vw, 340px); aspect-ratio: 1; margin-top: 6vh; border-radius: 50%; overflow: hidden; background: #22252B; }
+.cam-view video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.cam-ring { position: absolute; inset: 0; border-radius: 50%; border: 4px solid var(--orange, #F2572B); }
+.cam-hint { margin-top: 22px; font-size: 14px; opacity: .8; text-align: center; }
+.cam-foot { margin-top: auto; padding-bottom: 36px; }
+.cam-shot { width: 76px; height: 76px; border-radius: 50%; border: 4px solid #fff; background: transparent; padding: 5px; cursor: pointer; }
+.cam-shot span { display: block; width: 100%; height: 100%; border-radius: 50%; background: #fff; }
+.cam-shot:active span { background: var(--orange, #F2572B); }

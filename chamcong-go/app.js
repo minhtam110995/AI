@@ -474,9 +474,81 @@
     document.body.appendChild(wrap);
   }
 
-  function saveLog(log, btn) {
+  // ---------------------------------------------------------------- chống chấm hộ
+  // Mã máy: tạo một lần, lưu trên máy. Tài khoản chỉ chấm được trên máy đã đăng ký (khi công ty bật).
+  function deviceId() {
+    let id = lsGet('ccg.deviceId');
+    if (!id) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join(''));
+      lsSet('ccg.deviceId', id);
+    }
+    return id;
+  }
+  const ask = (title, html, okText, cancelText = 'Hủy') => new Promise(res => {
+    const w = dialog(title, html, [{ text: cancelText, on: () => res(false) }, { text: okText, cls: 'btn-primary', on: () => res(true) }]);
+    w.addEventListener('click', e => { if (e.target === w || e.target.closest('[data-x]')) res(false); });
+  });
+  async function ensureDevice() {
+    const id = deviceId(), u = S.user;
+    if (u.deviceId === id) return true;
+    if (u.deviceId) {
+      const when = u.deviceAt ? ` từ ngày ${dmy(u.deviceAt)}` : '';
+      const send = await ask('Không phải máy chấm công của bạn',
+        `Tài khoản của bạn đã đăng ký chấm công trên <b>máy khác (${esc(u.deviceName || 'điện thoại')})</b>${when}, nên không chấm được trên máy này.<br><br>Nếu bạn đã đổi điện thoại, hãy gửi yêu cầu để quản trị gỡ máy cũ.`,
+        'Gửi yêu cầu đổi máy', 'Đóng');
+      if (send) {
+        const admins = S.users.filter(x => x.role === 'admin' && x.uid !== u.uid);
+        await Promise.all(admins.map(a => API.notify(a.uid, `${u.name} xin đổi máy chấm công sang ${deviceName()}. Vào trang quản trị › Nhân viên › sửa ${u.name} › Gỡ máy chấm công.`).catch(() => {})));
+        toast(admins.length ? 'Đã gửi yêu cầu cho quản trị' : 'Hãy báo quản trị gỡ máy cũ cho bạn');
+      }
+      return false;
+    }
+    const ok = await ask('Đăng ký máy chấm công',
+      `Máy này (<b>${esc(deviceName())}</b>) sẽ là máy chấm công của bạn. Từ nay bạn chỉ chấm được trên máy này, mỗi điện thoại chỉ dùng cho một người.<br><br>Đổi máy sau này cần quản trị duyệt.`, 'Đăng ký máy này');
+    if (!ok) return false;
+    try { await API.bindDevice(id, deviceName()); Object.assign(S.user, { deviceId: id, deviceName: deviceName(), deviceAt: Date.now() }); saveSnap(); return true; }
+    catch (e) { dialog('Không đăng ký được máy', esc(errMsg(e)), [{ text: 'Đã hiểu', cls: 'btn-primary' }]); return false; }
+  }
+  /** Mở camera trước, chụp ảnh nhỏ (khoảng 15 KB). Trả về ảnh (data URL) hoặc null nếu huỷ / không mở được camera. */
+  function takeSelfie(title) {
+    return new Promise(async resolve => {
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } }, audio: false }); }
+      catch (e) {
+        dialog('Chưa mở được camera', 'Chấm công cần chụp ảnh khuôn mặt. Hãy cho phép <b>Camera</b> cho ChấmCông Go (Cài đặt của máy › Safari/Chrome › Camera › Cho phép) rồi thử lại.', [{ text: 'Đã hiểu', cls: 'btn-primary' }]);
+        return resolve(null);
+      }
+      const w = document.createElement('div');
+      w.className = 'cam';
+      w.innerHTML = `<div class="cam-head"><button class="cam-x" aria-label="Huỷ"><i class="icon-x"></i></button><b>${esc(title)}</b></div>
+        <div class="cam-view"><video playsinline autoplay muted></video><div class="cam-ring"></div></div>
+        <div class="cam-hint">Đưa khuôn mặt vào khung tròn rồi bấm chụp</div>
+        <div class="cam-foot"><button class="cam-shot" aria-label="Chụp"><span></span></button></div>`;
+      document.body.appendChild(w);
+      const video = w.querySelector('video'); video.srcObject = stream;
+      const done = v => { stream.getTracks().forEach(t => t.stop()); w.remove(); resolve(v); };
+      w.querySelector('.cam-x').onclick = () => done(null);
+      w.querySelector('.cam-shot').onclick = () => {
+        if (!video.videoWidth) return;
+        const size = Math.min(video.videoWidth, video.videoHeight), out = 320;
+        const cv = document.createElement('canvas'); cv.width = cv.height = out;
+        const g = cv.getContext('2d');
+        g.translate(out, 0); g.scale(-1, 1); // ảnh như soi gương, giống lúc xem
+        g.drawImage(video, (video.videoWidth - size) / 2, (video.videoHeight - size) / 2, size, size, 0, 0, out, out);
+        done(cv.toDataURL('image/jpeg', 0.6));
+      };
+      cleanup.push(() => { if (w.isConnected) done(null); });
+    });
+  }
+
+  async function saveLog(log, btn) {
+    if (btn.disabled) return;
+    const st = S.company.settings || {};
+    if (st.bindDevice && !isAdmin() && !(await ensureDevice())) return;
+    let photo = null;
+    if (st.selfie && !isAdmin()) { photo = await takeSelfie(KIND[log.kind] ? KIND[log.kind].cta : 'Chụp ảnh chấm công'); if (!photo) return; }
     return busy(btn, async () => {
-      const saved = await API.addLog(log);
+      const saved = await API.addLog({ ...log, deviceId: deviceId() }, photo);
       S.logs.push(saved);
       if (navigator.vibrate) navigator.vibrate(40);
       go('success/' + saved.id);
@@ -1042,7 +1114,7 @@
           <button class="list-row tap" data-go="password"><i class="icon-lock-keyhole lead"></i><span class="name">Đổi mật khẩu</span><span class="val"></span><i class="icon-chevron-right"></i></button>
           ${exempt() ? '' : `<button class="list-row tap" data-act="remind"><i class="icon-alarm-clock lead"></i><span class="name">Nhắc chấm công ra</span><span class="val">${remindOn() ? 'Đang bật' : 'Đang tắt'}</span><i class="icon-chevron-right"></i></button>`}
           <button class="list-row tap" data-act="faceid" id="faceRow" hidden><i class="icon-scan-face lead"></i><span class="name">Đăng nhập bằng Face ID</span><span class="val">${faceOn() ? 'Đang bật' : 'Đang tắt'}</span><i class="icon-chevron-right"></i></button>
-          <button class="list-row tap" data-act="device"><i class="icon-smartphone lead"></i><span class="name">Thiết bị đăng ký</span><span class="val">${esc(deviceName())}</span><i class="icon-chevron-right"></i></button>
+          <button class="list-row tap" data-act="device"><i class="icon-smartphone lead"></i><span class="name">Máy chấm công</span><span class="val">${!u.deviceId ? 'Chưa đăng ký' : u.deviceId === deviceId() ? 'Máy này' : 'Máy khác'}</span><i class="icon-chevron-right"></i></button>
           <button class="list-row tap" data-act="lang"><i class="icon-languages lead"></i><span class="name">Ngôn ngữ</span><span class="val">Tiếng Việt</span><i class="icon-chevron-right"></i></button>
         </div>
         <div class="card list"><button class="list-row danger tap" data-act="logout"><i class="icon-log-out" style="font-size:20px"></i><span class="name">Đăng xuất</span></button></div>
@@ -1132,7 +1204,13 @@
       case 'htab': ui.histTab = a.dataset.tab; renderHistory(); break;
       case 'selday': ui.histSel = a.dataset.key; renderHistory(); break;
       case 'reqtab': ui.reqTab = a.dataset.tab; renderMyRequests(); break;
-      case 'device': toast(`Thiết bị đang dùng: ${deviceName()}`); break;
+      case 'device': {
+        const u = S.user;
+        dialog('Máy chấm công', !u.deviceId ? `Chưa đăng ký. Lần chấm công đầu tiên, máy đang dùng (<b>${esc(deviceName())}</b>) sẽ được đăng ký làm máy chấm công của bạn.`
+          : u.deviceId === deviceId() ? `Máy này (<b>${esc(u.deviceName || deviceName())}</b>) là máy chấm công của bạn${u.deviceAt ? `, đăng ký ngày ${dmy(u.deviceAt)}` : ''}.`
+          : `Bạn đã đăng ký chấm công trên máy khác (<b>${esc(u.deviceName || 'điện thoại')}</b>). Muốn chấm trên máy này, nhờ quản trị gỡ máy cũ.`, [{ text: 'Đóng', cls: 'btn-primary' }]);
+        break;
+      }
       case 'lang': toast('Hiện ứng dụng hỗ trợ Tiếng Việt'); break;
       case 'faceid':
         if (faceOn()) confirmDialog('Face ID', 'Tắt đăng nhập bằng Face ID trên máy này?', 'Tắt', () => { lsSet(FACE_KEY, null); renderProfile(); });

@@ -180,12 +180,18 @@
       async listShifts() { return Object.values(co().shifts).map(clone); },
       async saveShift(sh) { needAdmin(); const c = co(); const id = sh.id || C.uid(); c.shifts[id] = { ...sh, id }; persist(); return id; },
       async deleteShift(id) { needAdmin(); delete co().shifts[id]; persist(); },
-      async addLog(l) {
+      async addLog(l, photo) {
         const c = co(), m = me();
         const forOther = l.uid && l.uid !== m.uid;
         if (forOther) needAdmin();
         const log = { ...l, id: C.uid(), uid: l.uid || m.uid, ts: forOther || l.ts ? (isAdmin() && l.ts ? l.ts : Date.now()) : Date.now() };
         log.day = C.dayKey(log.ts);
+        const st = c.settings || {};
+        if (!forOther && !isAdmin()) {
+          if (st.bindDevice && (!m.deviceId || log.deviceId !== m.deviceId)) fail('Máy này chưa được đăng ký chấm công cho tài khoản của bạn');
+          if (st.selfie && !photo) fail('Cần chụp ảnh khi chấm công');
+        }
+        if (photo) { log.hasPhoto = true; (c.photos = c.photos || {})[log.id] = { uid: log.uid, day: log.day, data: photo }; }
         c.logs[log.id] = log; persist(); return clone(log);
       },
       async myLogs(from, to) { const uid = me().uid; return Object.values(co().logs).filter(l => l.uid === uid && (!from || l.day >= from) && (!to || l.day <= to)).map(clone); },
@@ -215,6 +221,20 @@
         delete c.requests[id]; delete c.attachments[id]; persist();
       },
       async getAttachment(id) { const a = co().attachments[id]; return a ? a.data : null; },
+      async getPhoto(id) { const p = (co().photos || {})[id]; return p && (isAdmin() || p.uid === me().uid) ? p.data : null; },
+      async bindDevice(deviceId, name) {
+        const c = co(), m = me(); c.devices = c.devices || {};
+        const d = c.devices[deviceId];
+        if (d && d.uid !== m.uid) fail('Máy này đã đăng ký chấm công cho người khác. Mỗi điện thoại chỉ dùng cho một người.');
+        if (m.deviceId && m.deviceId !== deviceId) fail('Tài khoản đã đăng ký chấm công trên máy khác');
+        c.devices[deviceId] = { uid: m.uid, at: Date.now(), name };
+        Object.assign(m, { deviceId, deviceName: name, deviceAt: Date.now() }); persist();
+      },
+      async resetDevice(uid) {
+        needAdmin(); const c = co(), u = c.users[uid]; if (!u) return;
+        if (u.deviceId && c.devices) delete c.devices[u.deviceId];
+        Object.assign(u, { deviceId: null, deviceName: null, deviceAt: null }); persist();
+      },
       async myNotis(sinceTs) { const uid = me().uid; return Object.values(co().notis).filter(n => n.uid === uid && (!sinceTs || n.ts >= sinceTs)).map(clone); },
       async notify(uid, text) { notify(co(), uid, text); persist(); },
       async markRead(id) { const n = co().notis[id]; if (n) { n.read = true; persist(); } },
@@ -239,7 +259,7 @@
     const ms = v => v && typeof v.toMillis === 'function' ? v.toMillis() : (typeof v === 'number' ? v : (v ? Date.now() : v));
     const norm = snap => {
       const d = { ...snap.data(), id: snap.id };
-      ['ts', 'created', 'decidedAt', 'createdAt'].forEach(k => { if (k in d) d[k] = ms(d[k]); });
+      ['ts', 'created', 'decidedAt', 'createdAt', 'deviceAt'].forEach(k => { if (k in d && d[k] != null) d[k] = ms(d[k]); });
       return d;
     };
     const all = q => q.get().then(s => s.docs.map(norm));
@@ -374,14 +394,39 @@
       listShifts: wrap(() => all(col('shifts'))),
       saveShift: wrap(async sh => { const { id, ...rest } = sh; const ref = id ? col('shifts').doc(id) : col('shifts').doc(); await ref.set(strip(rest)); return ref.id; }),
       deleteShift: wrap(id => col('shifts').doc(id).delete()),
-      addLog: wrap(async l => {
+      addLog: wrap(async (l, photo) => {
         const uid = l.uid || myUid();
         const own = uid === myUid() && !l.ts;
         const ts = own ? Date.now() : l.ts;
         const doc = strip({ ...l, uid, day: C.dayKey(ts), ts: own ? FV.serverTimestamp() : firebase.firestore.Timestamp.fromMillis(ts) });
         delete doc.id;
-        const ref = await col('logs').add(doc);
+        const ref = col('logs').doc();
+        // Ảnh chụp lưu riêng (collection photos) để danh sách chấm công vẫn nhẹ.
+        if (photo) doc.hasPhoto = true;
+        const b = fs.batch();
+        b.set(ref, doc);
+        if (photo) b.set(col('photos').doc(ref.id), { uid, day: doc.day, data: photo, ts: FV.serverTimestamp() });
+        await b.commit();
         return { ...doc, id: ref.id, ts };
+      }),
+      getPhoto: wrap(async id => { const s = await col('photos').doc(id).get(); return s.exists ? s.data().data : null; }),
+      bindDevice: wrap(async (deviceId, name) => {
+        const uid = myUid(), dref = col('devices').doc(deviceId);
+        const d = await dref.get();
+        if (d.exists && d.data().uid !== uid) fail('Máy này đã đăng ký chấm công cho người khác. Mỗi điện thoại chỉ dùng cho một người.');
+        const b = fs.batch();
+        b.set(dref, { uid, name, at: FV.serverTimestamp() });
+        b.update(col('users').doc(uid), { deviceId, deviceName: name, deviceAt: FV.serverTimestamp() });
+        await b.commit();
+        if (meCache) Object.assign(meCache, { deviceId, deviceName: name });
+      }),
+      resetDevice: wrap(async uid => {
+        const u = await col('users').doc(uid).get();
+        const old = u.exists && u.data().deviceId;
+        const b = fs.batch();
+        if (old) b.delete(col('devices').doc(old));
+        b.update(col('users').doc(uid), { deviceId: null, deviceName: null, deviceAt: null });
+        await b.commit();
       }),
       // Chỉ tải khoảng ngày cần xem. Cần chỉ mục (uid, day) trong firestore.indexes.json;
       // khi chưa tạo chỉ mục thì tải hết rồi lọc tại máy để app vẫn chạy.

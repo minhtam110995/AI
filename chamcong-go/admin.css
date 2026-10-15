@@ -285,3 +285,7 @@ textarea.input { height: auto; min-height: 84px; padding: 10px 12px; resize: ver
 
 .flags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .flags .chip { font-size: 11.5px; }
+
+/* Ảnh chụp lúc chấm công */
+.photo-box { display: inline-flex; align-items: center; justify-content: center; width: 280px; height: 280px; border-radius: 16px; background: var(--line-2, #F1F2F5); overflow: hidden; }
+.photo-box img { width: 100%; height: 100%; object-fit: cover; }

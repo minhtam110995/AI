@@ -1,5 +1,5 @@
 /* Bộ biểu tượng Lucide 0.460.0 (ISC), chỉ giữ các biểu tượng app dùng. Tạo lại khi thêm biểu tượng mới. */
-@font-face { font-family: "lucide"; src: url("lucide.woff2?v=0.460.0-124") format("woff2"); font-display: block; }
+@font-face { font-family: "lucide"; src: url("lucide.woff2?v=0.460.0-128") format("woff2"); font-display: block; }
 [class^="icon-"], [class*=" icon-"] { font-family: 'lucide' !important; font-size: inherit; font-style: normal; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 .icon-alarm-clock:before { content: "\e03a"; }
 .icon-arrow-left:before { content: "\e04c"; }
@@ -13,6 +13,7 @@
 .icon-calendar-clock:before { content: "\e304"; }
 .icon-calendar-days:before { content: "\e2b9"; }
 .icon-calendar-heart:before { content: "\e305"; }
+.icon-camera:before { content: "\e068"; }
 .icon-chart-column:before { content: "\e2a3"; }
 .icon-check:before { content: "\e070"; }
 .icon-check-check:before { content: "\e392"; }
@@ -87,6 +88,7 @@
 .icon-route:before { content: "\e543"; }
 .icon-router:before { content: "\e3c3"; }
 .icon-save:before { content: "\e151"; }
+.icon-scale:before { content: "\e212"; }
 .icon-scan-face:before { content: "\e375"; }
 .icon-scroll:before { content: "\e2ed"; }
 .icon-search:before { content: "\e155"; }
@@ -98,6 +100,7 @@
 .icon-signal:before { content: "\e25f"; }
 .icon-slice:before { content: "\e2f0"; }
 .icon-smartphone:before { content: "\e167"; }
+.icon-smartphone-nfc:before { content: "\e3c8"; }
 .icon-split:before { content: "\e445"; }
 .icon-square-pen:before { content: "\e176"; }
 .icon-store:before { content: "\e3e8"; }
@@ -119,6 +122,7 @@
 .icon-user-x:before { content: "\e1a3"; }
 .icon-users:before { content: "\e1a4"; }
 .icon-vibrate:before { content: "\e223"; }
+.icon-video:before { content: "\e1a5"; }
 .icon-view:before { content: "\e1a7"; }
 .icon-watch:before { content: "\e1ad"; }
 .icon-weight:before { content: "\e535"; }

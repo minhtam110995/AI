@@ -13,6 +13,8 @@ service cloud.firestore {
       function isAdmin() { return isMember() && me().role == 'admin'; }
       function owner() { return get(/databases/$(database)/documents/companies/$(cid)).data.ownerUid; }
       function onlyKeys(keys) { return request.resource.data.keys().hasOnly(keys); }
+      function settings() { return get(/databases/$(database)/documents/companies/$(cid)).data.get('settings', {}); }
+      function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
 
       // Công ty: ai cũng tạo được công ty mới (mã chưa có) và trở thành chủ.
       allow read: if isMember();
@@ -29,8 +31,14 @@ service cloud.firestore {
                       && (uid != owner() || (request.resource.data.role == 'admin' && request.resource.data.active == true)))
                       // Nhân viên chỉ được gỡ dấu "phải đổi mật khẩu" của chính mình sau khi đã đổi.
                       || (isMember() && request.auth.uid == uid
-                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword'])
-                          && request.resource.data.mustChangePassword == false);
+                          && changed().hasOnly(['mustChangePassword'])
+                          && request.resource.data.mustChangePassword == false)
+                      // Đăng ký máy chấm công lần đầu (hoặc sau khi quản trị gỡ máy cũ); máy phải đã ghi tên mình ở devices.
+                      || (isMember() && request.auth.uid == uid
+                          && changed().hasOnly(['deviceId', 'deviceName', 'deviceAt'])
+                          && resource.data.get('deviceId', null) == null
+                          && request.resource.data.deviceId is string
+                          && getAfter(/databases/$(database)/documents/companies/$(cid)/devices/$(request.resource.data.deviceId)).data.uid == request.auth.uid);
         allow delete: if isAdmin() && uid != owner();
       }
 
@@ -50,7 +58,13 @@ service cloud.firestore {
                       || (isMember() && request.resource.data.uid == request.auth.uid
                           && request.resource.data.ts == request.time
                           && request.resource.data.kind in ['in', 'out', 'ot', 'duty']
-                          && request.resource.data.status in ['ok', 'pending']);
+                          && request.resource.data.status in ['ok', 'pending']
+                          // Bật "chỉ chấm trên máy đã đăng ký": lượt chấm phải mang đúng mã máy của người đó.
+                          && (settings().get('bindDevice', false) != true
+                              || request.resource.data.get('deviceId', '') == me().get('deviceId', 'none'))
+                          // Bật "chụp ảnh khi chấm công": phải kèm ảnh, lưu cùng lúc ở photos.
+                          && (settings().get('selfie', false) != true
+                              || existsAfter(/databases/$(database)/documents/companies/$(cid)/photos/$(id))));
         allow update, delete: if isAdmin();
       }
 
@@ -67,6 +81,24 @@ service cloud.firestore {
         allow create: if isMember() && request.resource.data.uid == request.auth.uid
                       && request.resource.data.data is string && request.resource.data.data.size() < 900000;
         allow delete: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
+      }
+
+      // Máy chấm công: mỗi điện thoại (mã máy) chỉ gắn với một người.
+      match /devices/{id} {
+        allow get: if isMember();
+        allow list: if isAdmin();
+        allow create: if isMember() && onlyKeys(['uid', 'name', 'at']) && request.resource.data.uid == request.auth.uid;
+        allow update: if isMember() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid;
+        allow delete: if isAdmin();
+      }
+
+      // Ảnh chụp khi chấm công (cùng mã với lượt chấm).
+      match /photos/{id} {
+        allow read: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
+        allow create: if isMember() && request.resource.data.uid == request.auth.uid
+                      && request.resource.data.data is string && request.resource.data.data.size() < 300000
+                      && getAfter(/databases/$(database)/documents/companies/$(cid)/logs/$(id)).data.uid == request.auth.uid;
+        allow delete: if isAdmin();
       }
 
       match /notis/{id} {
