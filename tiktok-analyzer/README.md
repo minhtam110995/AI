@@ -13,7 +13,7 @@ Tiện ích Chrome (Manifest V3) tự ghi lại số liệu video và kênh khi 
 1. Mở một trang kênh, ví dụ `https://www.tiktok.com/@tenkenh`. Nếu tab đã mở sẵn trước khi cài tiện ích thì bấm F5.
 2. Bấm biểu tượng tiện ích, chọn **⬇ Tự cuộn để thu thập**. Trang sẽ tự cuộn để TikTok tải thêm video, và tiện ích ghi lại số liệu trong lúc cuộn.
 3. Bấm **Mở Dashboard phân tích**, hoặc bấm nút nổi `📊 +N video mới` ở góc dưới trang.
-4. Muốn phân tích đối thủ thì làm tương tự với kênh của họ. Bảng **So sánh kênh** sẽ tự hiện khi có từ 2 kênh trở lên.
+4. Muốn phân tích đối thủ thì làm tương tự với kênh của họ, rồi chọn kênh ở bộ lọc.
 
 Tiện ích cũng ghi dữ liệu khi bạn xem trang hashtag, trang tìm kiếm, trang một video hoặc lướt For You.
 
@@ -38,7 +38,7 @@ Tiện ích chỉ hỗ trợ **xem**, không tải video xuống.
 ## 🔎 Tìm video nhiều view theo từ khoá (bản 1.6)
 1. Mở Dashboard, vào tab **🔎 Từ khoá** (hoặc popup → **🔎 Tìm video nhiều view theo từ khoá**).
 2. Gõ từ khoá (vd: *bất động sản*), chọn độ sâu, bấm **Tìm & thu thập**. Tiện ích mở trang tìm kiếm video của TikTok trong một cửa sổ nhỏ, tự cuộn lấy kết quả rồi tự đóng (để cửa sổ đó mở tới khi xong; cần đang đăng nhập tiktok.com). Quét nhiều lần sẽ cộng dồn video.
-3. Lọc theo **thời gian đăng** (24 giờ, 7/30 ngày, 3/6/12 tháng, hoặc tự chọn ngày), view tối thiểu, gắn giỏ; sắp xếp theo view, view/ngày, bứt phá, ER. Có biểu đồ kênh nổi bật và hashtag đi kèm, xuất CSV.
+3. Lọc theo **thời gian đăng** (24 giờ, 7/30 ngày, 3/6/12 tháng, hoặc tự chọn ngày), view tối thiểu, gắn giỏ; sắp xếp theo view, **📈 video xu hướng** (bứt phá ≥ 2× và ER > 2%), view/ngày, bứt phá, ER. Có biểu đồ kênh nổi bật và hashtag đi kèm, xuất CSV.
 
 ## Tính năng mới (bản 1.2) – chạy hoàn toàn trong tiện ích, không cần API key
 - **Nhãn trên lưới video TikTok:** ER · share · lưu · 🔥 *gấp X lần view trung vị của kênh* (viền đỏ khi ≥ 3×) · 🛒 nếu video gắn giỏ.

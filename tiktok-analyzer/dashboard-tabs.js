@@ -275,11 +275,18 @@ PANES.keyword = () => {
   const med = {};
   const authorMed = (a) => (med[a] ??= (() => { const vs = state.videos.filter((v) => v.author === a); return vs.length >= 5 ? TTA.median(vs.map((v) => v.views)) : null; })());
   const ratio = (v) => { const m = authorMed(v.author); return m ? v.views / m : null; };
-  const SORT = { views: (v) => v.views, perDay, er: TTA.er, likes: (v) => v.likes, new: (v) => v.createTime, ratio: (v) => ratio(v) ?? 0 };
+  // Mức bứt phá: so với view trung vị của kênh (khi có ≥ 5 video của kênh), nếu chưa đủ thì so với số follower
+  const followersOf = (v) => v.authorFollowers || state.users[v.author]?.followers || 0;
+  const breakout = (v) => ratio(v) ?? (followersOf(v) ? v.views / followersOf(v) : null);
+  const TREND_ER = 0.02;
+  const isTrend = (v) => v.views > 0 && TTA.er(v) > TREND_ER && (breakout(v) ?? 0) >= 2;
+  const SORT = { views: (v) => v.views, perDay, er: TTA.er, likes: (v) => v.likes, new: (v) => v.createTime, ratio: (v) => ratio(v) ?? 0,
+    trend: (v) => (breakout(v) ?? 0) * 1e6 + perDay(v) / 1e6 };
 
   const all = KW.kw ? state.videos.filter((v) => v.kw?.includes(KW.kw)) : [];
   const res = all.filter((v) => v.createTime >= since && v.createTime <= until && v.views >= KW.min &&
-    (!KW.cart || (KW.cart === 'yes' ? v.products?.length : !v.products?.length)))
+    (!KW.cart || (KW.cart === 'yes' ? v.products?.length : !v.products?.length)) &&
+    (KW.sort !== 'trend' || isTrend(v)))
     .sort((a, b) => SORT[KW.sort](b) - SORT[KW.sort](a));
   state.kwResult = res;
 
@@ -289,7 +296,12 @@ PANES.keyword = () => {
   const tagRows = Object.entries(tags).filter(([, x]) => x.length >= 2).map(([h, x]) => ({ label: '#' + h, value: TTA.median(x), tip: `<b>#${esc(h)}</b><br>${x.length} video · view trung vị ${TTA.fmt(TTA.median(x))}` }))
     .sort((a, b) => b.value - a.value).slice(0, 12);
   const opt = (v, l, cur) => `<option value="${v}"${String(cur) === String(v) ? ' selected' : ''}>${l}</option>`;
-  const badge = (v) => { const r = ratio(v); return r >= 3 ? `<span class="tag">🔥 ${r.toFixed(1)}×</span>` : r >= 2 ? `<span class="tag">⚡ ${r.toFixed(1)}×</span>` : ''; };
+  const badge = (v) => {
+    const r = breakout(v), tr = isTrend(v) ? '<span class="tag">📈 Xu hướng</span>' : '';
+    if (r == null || r < 2) return tr;
+    const t = ratio(v) != null ? 'so với view trung vị của kênh' : 'so với số follower của kênh';
+    return `<span class="tag" title="Gấp ${r.toFixed(1)} lần ${t}">${r >= 3 ? '🔥' : '⚡'} ${r.toFixed(1)}×</span> ` + tr;
+  };
 
   el.innerHTML = `
     <section class="card"><h2>🔎 Tìm video nhiều view theo từ khoá</h2>
@@ -304,7 +316,7 @@ PANES.keyword = () => {
     <section class="card"><div class="toolbar">
       <label class="small">Thời gian đăng <select id="kwRange">${[['1', '24 giờ qua'], ['7', '7 ngày'], ['30', '30 ngày'], ['90', '3 tháng'], ['180', '6 tháng'], ['365', '12 tháng'], ['0', 'Toàn bộ'], ['custom', 'Tự chọn ngày…']].map(([v, l]) => opt(v, l, KW.range)).join('')}</select></label>
       ${KW.range === 'custom' ? `<label class="small">Từ <input id="kwFrom" type="date" value="${KW.from}"></label><label class="small">Đến <input id="kwTo" type="date" value="${KW.to}"></label>` : ''}
-      <label class="small">Sắp xếp <select id="kwSort">${[['views', 'Nhiều view nhất'], ['perDay', 'View / ngày (đang lên)'], ['ratio', 'Bứt phá so với kênh'], ['er', 'Tương tác (ER)'], ['likes', 'Nhiều tim nhất'], ['new', 'Mới nhất']].map(([v, l]) => opt(v, l, KW.sort)).join('')}</select></label>
+      <label class="small">Sắp xếp <select id="kwSort">${[['views', 'Nhiều view nhất'], ['trend', '📈 Video xu hướng (bứt phá ≥ 2× & ER > 2%)'], ['perDay', 'View / ngày (đang lên)'], ['ratio', 'Bứt phá so với kênh'], ['er', 'Tương tác (ER)'], ['likes', 'Nhiều tim nhất'], ['new', 'Mới nhất']].map(([v, l]) => opt(v, l, KW.sort)).join('')}</select></label>
       <label class="small">View tối thiểu <select id="kwMin">${[[0, 'Tất cả'], [10000, '10K'], [100000, '100K'], [500000, '500K'], [1000000, '1 triệu']].map(([v, l]) => opt(v, l, KW.min)).join('')}</select></label>
       <label class="small">Gắn giỏ <select id="kwCart">${[['', 'Tất cả'], ['yes', 'Chỉ video gắn giỏ'], ['no', 'Không gắn giỏ']].map(([v, l]) => opt(v, l, KW.cart)).join('')}</select></label>
       <button id="kwCsv">Xuất CSV</button><button id="kwDel" title="Xoá nhãn từ khoá này (video vẫn giữ)">Xoá từ khoá</button>
@@ -313,7 +325,7 @@ PANES.keyword = () => {
       ['ER trung vị', TTA.pct(TTA.median(res.filter((v) => v.views).map(TTA.er)))], ['Số kênh', chans.length], ['Video gắn giỏ', res.filter((v) => v.products?.length).length]])}
     <section class="card"><div class="tablehead"><h2>🏆 Video nhiều view — "${esc(KW.kw)}"</h2>
         <div class="toolbar" style="margin:0"><button id="kwGrid" class="${KW.view === 'grid' ? 'primary' : ''}">▦ Thẻ video</button><button id="kwTable" class="${KW.view === 'table' ? 'primary' : ''}">☰ Bảng</button></div></div>
-      <p class="muted small">Bấm vào video để xem ngay tại đây. View/ngày = lượt xem chia số ngày từ lúc đăng (video mới mà cao là đang lên). 🔥/⚡ = gấp ≥3×/≥2× view trung vị của chính kênh đó.</p>
+      <p class="muted small">Bấm vào video để xem ngay tại đây. View/ngày = lượt xem chia số ngày từ lúc đăng (video mới mà cao là đang lên). 🔥/⚡ = gấp ≥3×/≥2× view trung vị của kênh (khi đã có ≥ 5 video của kênh), nếu chưa đủ thì so với số follower của kênh. 📈 Xu hướng = bứt phá ≥ 2× và ER > 2%.</p>
       ${!res.length ? '<p class="muted">Không có video nào trong khoảng thời gian / bộ lọc này. Thử chọn “Toàn bộ” hoặc quét sâu hơn.</p>' : KW.view === 'grid' ? `<div class="vgrid">${res.slice(0, KW.limit).map((v, i) => `
         <div class="vcard" data-play="${v.id}" data-author="${esc(v.author)}">
           <div class="vcover">${v.cover ? `<img loading="lazy" src="${esc(v.cover)}" alt="">` : ''}<span class="vrank">#${i + 1}</span><span class="vviews">▶ ${TTA.fmt(v.views)}</span>${v.products?.length ? '<span class="vcart">🛒</span>' : ''}</div>

@@ -310,22 +310,6 @@ function renderInsights(list, author) {
   $('#insights').innerHTML = out.map((x) => `<li>${x}</li>`).join('');
 }
 
-function renderChannels(list) {
-  const by = {};
-  list.forEach((v) => (by[v.author] ||= []).push(v));
-  const rows = Object.entries(by).map(([a, vs]) => {
-    const u = state.users[a];
-    return { a, u, n: vs.length, med: TTA.median(vs.map((v) => v.views)), er: vs.reduce((s, v) => s + TTA.er(v), 0) / vs.length, ppw: postsPerWeek(vs), last: Math.max(...vs.map((v) => v.createTime)) };
-  }).sort((x, y) => y.med - x.med);
-  $('#channelsCard').classList.toggle('hidden', rows.length < 2);
-  $('#channels').innerHTML = `<thead><tr><th>Kênh</th><th>Follower</th><th>Video thu thập</th><th>View trung vị</th><th>ER TB</th><th>Video/tuần</th><th>Đăng gần nhất</th></tr></thead><tbody>` +
-    rows.map((r) => `<tr data-author="${esc(r.a)}" style="cursor:pointer"><td>@${esc(r.a)}</td><td>${r.u ? TTA.fmt(r.u.followers) : '–'}</td><td>${r.n}</td><td>${TTA.fmt(r.med)}</td><td>${TTA.pct(r.er)}</td><td>${r.ppw.toFixed(1)}</td><td>${TTA.fmtDate(r.last)}</td></tr>`).join('') + '</tbody>';
-}
-$('#channels').addEventListener('click', (e) => {
-  const tr = e.target.closest('tr[data-author]');
-  if (tr) { $('#fAuthor').value = tr.dataset.author; render(); scrollTo({ top: 0, behavior: 'smooth' }); }
-});
-
 const COLS = [
   { key: 'desc', label: 'Video', cls: 'l' },
   { key: 'createTime', label: 'Ngày đăng', fmt: TTA.fmtDate },
@@ -380,7 +364,6 @@ function render() {
   chartDuration(list);
   chartTags(list);
   chartGrowth(author);
-  renderChannels(list);
   renderTable(list);
 }
 
