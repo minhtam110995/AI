@@ -312,6 +312,47 @@ const TTA = (() => {
   // Chuẩn hoá từ khoá tìm kiếm (để gom video theo từ khoá)
   const kwKey = (q) => String(q || '').trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80);
 
+  // Bộ chỉ số xu hướng cho video tìm theo từ khoá (dùng chung cho Dashboard và nền)
+  // breakout: gấp bao nhiêu lần view trung vị của kênh (khi có ≥ 5 video), nếu chưa đủ thì so với follower
+  // growth24: view tăng thật / 24h từ các lần quét trước; score: điểm xu hướng 0–100
+  function trendKit(videos, users = {}, nowSec = Date.now() / 1000) {
+    const byAuthor = {};
+    videos.forEach((v) => (byAuthor[v.author] ||= []).push(v.views));
+    const med = {};
+    for (const a in byAuthor) med[a] = byAuthor[a].length >= 5 ? median(byAuthor[a]) : null;
+    const clamp = (x) => Math.max(0, Math.min(1, x || 0));
+    const age = (v) => Math.max(1, (nowSec - v.createTime) / 86400);
+    const perDay = (v) => v.views / age(v);
+    const channelRatio = (v) => (med[v.author] ? v.views / med[v.author] : null);
+    const followers = (v) => v.authorFollowers || users[v.author]?.followers || 0;
+    const breakout = (v) => channelRatio(v) ?? (followers(v) ? v.views / followers(v) : null);
+    const isTrend = (v) => v.views > 0 && er(v) > 0.02 && (breakout(v) ?? 0) >= 2;
+    function growth24(v) {
+      const h = v.hist || [];
+      if (h.length < 2) return null;
+      const last = h[h.length - 1];
+      let best = null;
+      for (const x of h) {
+        const hrs = (last.t - x.t) / 3600e3;
+        if (hrs >= 6 && hrs <= 72 && (!best || Math.abs(hrs - 24) < Math.abs((last.t - best.t) / 3600e3 - 24))) best = x;
+      }
+      return best ? Math.max(0, (last.views - best.views) / ((last.t - best.t) / 86400e3)) : null;
+    }
+    function score(v) {
+      if (!v.views) return 0;
+      const b = breakout(v) ?? 0;
+      const vel = growth24(v) ?? perDay(v);
+      const days = age(v);
+      return Math.round(100 * (
+        0.35 * clamp(Math.log(1 + b) / Math.log(11)) +
+        0.2 * clamp(er(v) / 0.1) +
+        0.15 * clamp((v.shares + v.saves) / v.views / 0.02) +
+        0.2 * clamp(Math.log10(1 + vel) / 6) +
+        0.1 * (days <= 3 ? 1 : clamp(1 - (days - 3) / 57))));
+    }
+    return { perDay, channelRatio, breakout, isTrend, growth24, score };
+  }
+
   const fmtDate = (sec) => (sec ? new Date(sec * 1000).toLocaleDateString('vi-VN') : '–');
 
   const load = () => new Promise((r) => chrome.storage.local.get({ videos: {}, users: {} }, r));
@@ -341,6 +382,6 @@ const TTA = (() => {
   return {
     extract, normalizeVideo, normalizeUser, engagement, er, fmt, pct, median, fmtDate, load, toCSV, download,
     hookType, formatType, isIntent, isQuestion, phrases, hookText, viewVelocity, HOOKS, FORMATS,
-    parseMoney, parseCount, productKey, kwKey, normalizeProduct, playUrlsOf, isVideoUrl, deepProducts,
+    parseMoney, parseCount, productKey, kwKey, trendKit, normalizeProduct, playUrlsOf, isVideoUrl, deepProducts,
   };
 })();

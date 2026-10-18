@@ -49,6 +49,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   }
 
   if (msg.type === 'refreshChannels') { refreshChannels().then((n) => reply({ ok: true, n })); return true; }
+  if (msg.type === 'runWatched') { runWatchedKeywords(); reply({ ok: true }); }
   if (msg.type === 'searchKeyword') { searchKeyword(msg.keyword, msg.scrolls || 15); reply({ ok: true }); }
   if (msg.type === 'flushed') scheduleBreakoutCheck();
 });
@@ -111,6 +112,7 @@ async function checkBreakouts() {
 }
 
 chrome.notifications.onClicked.addListener((id) => {
+  if (id.startsWith('ttkw-')) { openReport(id.slice(5)); return; }
   const vid = id.replace(/^tta-/, '');
   chrome.storage.local.get('videos', ({ videos = {} }) => {
     const v = videos[vid];
@@ -137,7 +139,7 @@ async function openWorkWindow(url) {
   const w = await chrome.windows.create({ url, type: 'popup', focused: true, width: 520, height: 900, left: 40, top: 40 });
   return { winId: w.id, tabId: w.tabs[0].id };
 }
-async function searchKeyword(input, scrolls) {
+async function searchKeyword(input, scrolls, { silent = false } = {}) {
   const keyword = String(input || '').trim();
   if (!keyword || searching) return;
   searching = true;
@@ -157,13 +159,56 @@ async function searchKeyword(input, scrolls) {
     await sleep(1000);
     const n = await count();
     if (win) { try { await chrome.windows.remove(win.winId); } catch (_) {} win = null; }
-    if (n) await openReport(keyword);
+    if (n && !silent) await openReport(keyword);
     await setKw({ step: 'done', msg: n ? `✓ Xong: có ${n} video cho từ khoá "${keyword}" (+${Math.max(0, n - before)} video mới lần này).` : `Không lấy được video nào. Hãy mở tiktok.com, đăng nhập (hoặc giải captcha) rồi thử lại.`, n });
   } catch (e) {
     await setKw({ step: 'error', msg: 'Lỗi: ' + (e.message || e) });
   }
   if (win) try { await chrome.windows.remove(win.winId); } catch (_) {}
   searching = false;
+}
+
+// ---------- Theo dõi từ khoá hằng ngày ----------
+// Tự quét các từ khoá đã ⭐ vào giờ đã chọn, rồi thông báo video xu hướng mới.
+async function syncKwAlarm() {
+  const { kwWatch = [], kwSettings = {} } = await chrome.storage.local.get(['kwWatch', 'kwSettings']);
+  if (!kwWatch.length) return chrome.alarms.clear('kwDaily');
+  const at = new Date();
+  at.setHours(kwSettings.hour ?? 7, 3, 0, 0);
+  if (at <= new Date()) at.setDate(at.getDate() + 1);
+  const cur = await chrome.alarms.get('kwDaily');
+  if (cur && Math.abs(cur.scheduledTime - at.getTime()) < 60e3) return;
+  chrome.alarms.create('kwDaily', { when: at.getTime(), periodInMinutes: 24 * 60 });
+}
+chrome.runtime.onInstalled.addListener(syncKwAlarm);
+chrome.runtime.onStartup.addListener(syncKwAlarm);
+chrome.storage.onChanged.addListener((ch) => { if (ch.kwWatch || ch.kwSettings) syncKwAlarm(); });
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'kwDaily') runWatchedKeywords(); });
+
+async function runWatchedKeywords() {
+  const { kwWatch = [] } = await chrome.storage.local.get('kwWatch');
+  for (const kw of kwWatch) {
+    await searchKeyword(kw, 25, { silent: true });
+    await sleep(5000 + Math.random() * 5000);
+  }
+  const { videos = {}, users = {}, kwNotified = [], ttSettings = {} } = await chrome.storage.local.get(['videos', 'users', 'kwNotified', 'ttSettings']);
+  if (ttSettings.notify === false) return;
+  const all = Object.values(videos).filter((v) => !v.isAd);
+  const K = TTA.trendKit(all, users);
+  const done = new Set(kwNotified);
+  const recent = Date.now() / 1000 - 30 * 86400;
+  for (const kw of kwWatch) {
+    const fresh = all.filter((v) => v.kw?.includes(kw) && v.createTime >= recent && K.isTrend(v) && !done.has(kw + ':' + v.id))
+      .sort((a, b) => K.score(b) - K.score(a));
+    if (!fresh.length) continue;
+    fresh.forEach((v) => done.add(kw + ':' + v.id));
+    chrome.notifications.create('ttkw-' + kw, {
+      type: 'basic', iconUrl: 'icons/icon128.png',
+      title: `📈 "${kw}": ${fresh.length} video xu hướng mới`,
+      message: `Top: ${TTA.fmt(fresh[0].views)} view · điểm ${K.score(fresh[0])} · ${(fresh[0].desc || '').slice(0, 70)}`,
+    });
+  }
+  await chrome.storage.local.set({ kwNotified: [...done].slice(-5000) });
 }
 
 // ---------- địa chỉ phát cho video gắn giỏ bị chặn trên web ----------

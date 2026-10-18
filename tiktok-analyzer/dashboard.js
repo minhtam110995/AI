@@ -18,6 +18,8 @@ async function loadData() {
   state.products = all.products || {};
   state.kwJob = all.kwJob || null;
   state.keywords = all.ttKeywords || {};
+  state.kwWatch = all.kwWatch || [];
+  state.kwSettings = all.kwSettings || {};
   state.users = users;
   state.comments = Object.fromEntries(Object.keys(all).filter((k) => k.startsWith('c:')).map((k) => [k.slice(2), all[k]]));
   state.watchChannels = all.watchChannels || [];

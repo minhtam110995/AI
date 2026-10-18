@@ -39,6 +39,13 @@ Tiện ích chỉ hỗ trợ **xem**, không tải video xuống.
 1. Mở Dashboard, vào tab **🔎 Từ khoá** (hoặc popup → **🔎 Tìm video nhiều view theo từ khoá**).
 2. Gõ từ khoá (vd: *bất động sản*), chọn độ sâu, bấm **Tìm & thu thập**. Tiện ích mở trang tìm kiếm video của TikTok trong một cửa sổ nhỏ, tự cuộn lấy kết quả rồi tự đóng (để cửa sổ đó mở tới khi xong; cần đang đăng nhập tiktok.com). Quét nhiều lần sẽ cộng dồn video.
 3. Lọc theo **thời gian đăng** (24 giờ, 7/30 ngày, 3/6/12 tháng, hoặc tự chọn ngày), view tối thiểu, gắn giỏ; sắp xếp theo view, **📈 video xu hướng** (bứt phá ≥ 2× và ER > 2%), view/ngày, bứt phá, ER. Có biểu đồ kênh nổi bật và hashtag đi kèm, xuất CSV.
+4. **Thông minh hơn (bản 1.9):**
+   - **🧠 Điểm xu hướng 0–100** cho mỗi video: bứt phá 35%, view tăng/ngày 20%, ER 20%, share + lưu 15%, độ mới 10%.
+   - **🚀 Tăng view thật 24h** khi từ khoá được quét lại (từ lần quét thứ hai).
+   - **💡 Công thức video xu hướng:** kiểu mở đầu, độ dài, lời nói, âm thanh, giờ đăng, hashtag của nhóm video xu hướng so với phần còn lại.
+   - **🔗 Từ khoá liên quan** gợi ý từ hashtag đi kèm, bấm để quét tiếp.
+   - **⭐ Theo dõi từ khoá hằng ngày:** tự quét vào giờ đã chọn và thông báo khi có video xu hướng mới (Chrome cần đang mở).
+   - **📝 Lời thoại 10 video điểm cao nhất** để đọc kịch bản, copy tất cả.
 
 ## Tính năng mới (bản 1.2) – chạy hoàn toàn trong tiện ích, không cần API key
 - **Nhãn trên lưới video TikTok:** ER · share · lưu · 🔥 *gấp X lần view trung vị của kênh* (viền đỏ khi ≥ 3×) · 🛒 nếu video gắn giỏ.
