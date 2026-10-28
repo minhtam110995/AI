@@ -142,7 +142,13 @@ async function openReport(keyword) {
 // Cửa sổ nhỏ hiển thị thật (tab nền bị Chrome tạm dừng vẽ nên TikTok không tải thêm kết quả khi cuộn)
 async function openWorkWindow(url, { wide = false } = {}) {
   // Lấy bình luận cần cửa sổ rộng: TikTok chỉ hiện khung bình luận bên phải ở giao diện máy tính
-  const w = await chrome.windows.create({ url, type: 'popup', focused: true, width: wide ? 1200 : 520, height: 900, left: 40, top: 40 });
+  // Màn hình nhỏ: Chrome từ chối cửa sổ quá to → lùi dần về kích thước nhỏ hơn
+  const sizes = wide ? [[1200, 900], [1000, 760], [520, 900], [520, 640]] : [[520, 900], [520, 640]];
+  let w = null, err = null;
+  for (const [width, height] of sizes) {
+    try { w = await chrome.windows.create({ url, type: 'popup', focused: true, width, height, left: 20, top: 20 }); break; } catch (e) { err = e; }
+  }
+  if (!w) w = await chrome.windows.create({ url, type: 'popup', focused: true }).catch(() => { throw err; });
   return { winId: w.id, tabId: w.tabs[0].id };
 }
 async function searchKeyword(input, scrolls, { silent = false } = {}) {
@@ -247,7 +253,7 @@ async function analyzeChannel(input, scrolls, { comments = true } = {}) {
     await sleep(1000);
     if (comments) {
       // chuyển sang cửa sổ rộng để TikTok hiện khung bình luận
-      try { await chrome.windows.update(win.winId, { width: 1200 }); } catch (_) {}
+      for (const width of [1200, 1000]) { try { await chrome.windows.update(win.winId, { width }); break; } catch (_) {} }
       await commentsForTop(win, user, await mine(), setJob);
     }
     try { await chrome.windows.remove(win.winId); } catch (_) {}
