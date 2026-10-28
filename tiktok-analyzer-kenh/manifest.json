@@ -1,0 +1,78 @@
+{
+  "manifest_version": 3,
+  "name": "TikTok Analyzer",
+  "version": "1.9.1",
+  "description": "Phân tích TikTok: video nhiều view theo từ khoá, hook & công thức viral, bình luận, theo dõi đối thủ, lời thoại gốc.",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "tabs",
+    "alarms",
+    "notifications",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "https://*.tiktok.com/*",
+    "https://*.tiktokcdn.com/*",
+    "https://*.tiktokcdn-us.com/*",
+    "https://*.tiktokcdn-eu.com/*",
+    "https://*.tiktokv.com/*",
+    "https://*.tiktokv.us/*",
+    "https://*.tiktokv.eu/*",
+    "https://*.byteoversea.com/*",
+    "https://*.ibytedtos.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "TikTok Analyzer",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.tiktok.com/*",
+        "https://shop.tiktok.com/*"
+      ],
+      "js": [
+        "src/inject.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.tiktok.com/*",
+        "https://shop.tiktok.com/*"
+      ],
+      "js": [
+        "src/common.js",
+        "src/content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "player.html",
+        "src/player.js"
+      ],
+      "matches": [
+        "https://www.tiktok.com/*",
+        "https://shop.tiktok.com/*"
+      ]
+    }
+  ]
+}

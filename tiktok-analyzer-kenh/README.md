@@ -1,0 +1,110 @@
+# TikTok Analyzer – Tiện ích Chrome phân tích TikTok
+
+Tiện ích Chrome (Manifest V3) tự ghi lại số liệu video và kênh khi bạn duyệt **tiktok.com**, rồi phân tích trên một Dashboard riêng. Không cần tài khoản hay API key, và dữ liệu chỉ lưu trên máy bạn (`chrome.storage.local`).
+
+## Cài đặt (2 phút)
+1. Tải thư mục `tiktok-analyzer` về máy (GitHub → **Code → Download ZIP**, rồi giải nén).
+2. Mở Chrome, vào `chrome://extensions`.
+3. Bật **Developer mode** (góc trên bên phải).
+4. Bấm **Load unpacked**, rồi chọn thư mục `tiktok-analyzer`.
+5. Ghim biểu tượng 📊 lên thanh công cụ.
+
+## Cách dùng
+1. Mở một trang kênh, ví dụ `https://www.tiktok.com/@tenkenh`. Nếu tab đã mở sẵn trước khi cài tiện ích thì bấm F5.
+2. Bấm biểu tượng tiện ích, chọn **⬇ Tự cuộn để thu thập**. Trang sẽ tự cuộn để TikTok tải thêm video, và tiện ích ghi lại số liệu trong lúc cuộn.
+3. Bấm **Mở Dashboard phân tích**, hoặc bấm nút nổi `📊 +N video mới` ở góc dưới trang.
+4. Muốn phân tích đối thủ thì làm tương tự với kênh của họ, rồi chọn kênh ở bộ lọc.
+
+Tiện ích cũng ghi dữ liệu khi bạn xem trang hashtag, trang tìm kiếm, trang một video hoặc lướt For You.
+
+## Dashboard có gì
+- **KPI:** tổng view, view trung vị, tỉ lệ tương tác (ER), like, bình luận, share, lưu, tần suất đăng, số video bứt phá (≥ 3× trung vị), tỉ lệ view/follower.
+- **Gợi ý tự động:** khung giờ và ngày đăng tốt nhất, độ dài video tối ưu, hashtag và âm thanh kéo view, video nổi bật nhất.
+- **Biểu đồ:** lượt xem từng video theo thời gian, bản đồ nhiệt giờ đăng, view theo độ dài video, top hashtag, tăng trưởng follower. Rê chuột lên biểu đồ để xem chi tiết, bấm vào cột để mở video.
+- **Bảng video:** sắp xếp theo từng cột, có ảnh bìa và đánh dấu 🔥 bứt phá.
+- **Bộ lọc:** theo kênh, khoảng thời gian, từ khoá hoặc hashtag.
+- **Xuất CSV** (mở được bằng Excel hoặc Google Sheets) và **sao lưu/nhập JSON** để chuyển dữ liệu sang máy khác.
+
+## ▶ Xem video gắn giỏ trên máy tính (bản 1.5)
+Khi TikTok báo video gắn giỏ "chỉ xem được trên ứng dụng", tiện ích tự gắn nút **▶ Xem trên máy tính** ngay chỗ thông báo. Ngoài ra, khi đang mở một video, bạn có thể bấm biểu tượng tiện ích và chọn **▶ Xem video này trên máy tính**.
+
+Video phát trong khung riêng, kèm tên sản phẩm gắn giỏ. Tiện ích phát video theo thứ tự sau:
+1. Dùng địa chỉ video TikTok đã gửi về trang.
+2. Nếu địa chỉ đó hết hạn, lấy địa chỉ mới.
+3. Nếu vẫn không phát được, dùng trình phát nhúng chính thức của TikTok.
+
+Tiện ích chỉ hỗ trợ **xem**, không tải video xuống.
+
+## 🧭 Phân tích kênh
+1. Mở Dashboard, vào tab **🧭 Phân tích kênh** (thay cho tab Nội dung & Hook cũ).
+2. Dán link kênh (`https://www.tiktok.com/@tenkenh`) hoặc `@tenkenh`, chọn độ sâu, bấm **Phân tích**. Tiện ích mở kênh trong một cửa sổ nhỏ, tự cuộn lấy video, lấy bình luận 3 video nhiều view nhất (bỏ chọn ô “Lấy bình luận” nếu muốn nhanh hơn), lấy lời thoại 10 video nhiều view nhất, rồi tự chọn kênh đó trong báo cáo (cần đang đăng nhập tiktok.com). Kênh đã có dữ liệu thì bấm tên kênh để xem ngay; bấm **✕** cạnh tên kênh để xoá toàn bộ dữ liệu của kênh đó (video, hồ sơ, bình luận).
+3. Báo cáo gồm:
+   - **Thẻ kênh** và **chân dung kênh 1 câu** (chủ đề chính, tần suất, format và độ dài ăn view, view trung vị, tỉ lệ bứt phá).
+   - **✅ Việc nên làm**: gợi ý tự sinh (làm thêm/giảm tuyến nào, kiểu hook, độ dài, giờ đăng…), có nút Copy.
+   - **❤️ Sức khoẻ kênh**: view trung vị, view/follower, ER, tỉ lệ lưu, tỉ lệ share, bình luận/1.000 view, tỉ lệ trúng, tần suất đăng, đà kênh 30 ngày. Tô xanh/vàng/đỏ theo mốc tham khảo (rê chuột để xem mốc). Video đăng chưa đủ 3 ngày không tính vào trung vị.
+   - **🔥 Video hot**: nhiều view nhất, hoặc **bứt phá nhất** (so với 10 video đăng gần nhất về thời gian). Đánh dấu 📌 ghim, 🛒 gắn giỏ, 📷 ảnh lướt, 🔁 công thức đã lặp lại thành công. Nút **📋** ở từng video copy toàn bộ caption + lời thoại (chưa có lời thoại thì bấm lần 1 để lấy, lần 2 để copy); **📋 Copy tất cả** copy cả 10 video.
+   - **🧱 Tuyến nội dung**: gom video theo hashtag chủ đề (bỏ #fyp, #xuhuong…) hoặc theo format, xếp vào 4 ô 🟢 Trụ cột · 🟡 Cơ hội · 🔴 Lãng phí · ⚪ Cân nhắc bỏ.
+   - **🧪 Công thức nội dung**: nhóm 20% video top so với phần còn lại (độ dài, lời nói, âm thanh gốc, ảnh lướt, kêu gọi hành động, series, gắn giỏ…), kiểu hook, format, khung giờ, câu mở đầu của 10 video top.
+   - **💰 Kiếm tiền**: % video gắn giỏ, view video gắn giỏ so với video thường, sản phẩm (số video, view, giá, đã bán), hợp tác nhãn hàng, người bán TikTok Shop, link bio, tỉ lệ bình luận muốn mua ở video gắn giỏ.
+   - **👥 Khán giả (suy luận từ bình luận)**: chân dung khán giả 1 câu, nhóm bình luận (hỏi giá, hỏi cách làm, kể trải nghiệm, khen, chê, tag bạn bè), cụm từ hay nhắc, câu hỏi và bình luận muốn mua được like nhiều nhất, quốc gia đăng video. Nút **Lấy bình luận 3 video top** lấy bình luận của 3 video nhiều view nhất **trong khoảng thời gian đang lọc** (mở cửa sổ rộng để TikTok hiện khung bình luận).
+   - **📅 Nhịp đăng**: số video và view trung vị theo tuần (26 tuần), khoảng nghỉ dài nhất, đăng nhiều video/ngày có bị chia view không, ngày trong tuần tốt nhất, bản đồ nhiệt giờ đăng.
+   - **📈 Kênh thay đổi theo thời gian**: bảng theo tháng (số video, view, ER, tuyến và format chính, % có lời nói, % gắn giỏ), chủ đề chính trước và nay, các video **bước ngoặt** (≥ 5× trung vị 10 video trước nó). Dùng toàn bộ video đã lấy, không theo bộ lọc thời gian.
+   - **📋 Brief cho ChatGPT / Claude**: đổi **Mục tiêu** (kế hoạch nội dung, học từ đối thủ, viết kịch bản, nội dung bán hàng) thì cả brief đổi theo: vai trò của AI, nhiệm vụ (đặt ngay đầu brief) và phần dữ liệu đưa vào. Mục tiêu “Viết kịch bản” kèm caption + lời thoại 5 video top để AI học cách nói.
+   - **🔬 Kiểm chứng dữ liệu TikTok** (bấm để mở): TikTok có thật sự gửi các trường như video ghim, ảnh lướt, danh mục, điểm chất lượng, từ khoá gợi ý, chữ trên video, nhãn chủ đề, người bán… hay không, kèm % có giá trị. Có nút copy toàn bộ thống kê trường.
+
+> Số liệu dựa trên dữ liệu công khai. TikTok không công khai thời gian xem, tỉ lệ xem hết và nhân khẩu học người xem, nên báo cáo không có các số này. Link rút gọn dạng `vt.tiktok.com/...` chưa được hỗ trợ: hãy mở link rồi copy địa chỉ kênh.
+
+## 🔎 Tìm video nhiều view theo từ khoá (bản 1.6)
+1. Mở Dashboard, vào tab **🔎 Từ khoá** (hoặc popup → **🔎 Tìm video nhiều view theo từ khoá**).
+2. Gõ từ khoá (vd: *bất động sản*), chọn độ sâu, bấm **Tìm & thu thập**. Tiện ích mở trang tìm kiếm video của TikTok trong một cửa sổ nhỏ, tự cuộn lấy kết quả rồi tự đóng (để cửa sổ đó mở tới khi xong; cần đang đăng nhập tiktok.com). Quét nhiều lần sẽ cộng dồn video.
+3. Lọc theo **thời gian đăng** (24 giờ, 7/30 ngày, 3/6/12 tháng, hoặc tự chọn ngày), view tối thiểu, gắn giỏ; sắp xếp theo view, **📈 video xu hướng** (bứt phá ≥ 2× và ER > 2%), view/ngày, bứt phá, ER. Có biểu đồ kênh nổi bật và hashtag đi kèm, xuất CSV.
+4. **Thông minh hơn (bản 1.9):**
+   - **🧠 Điểm xu hướng 0–100** cho mỗi video: bứt phá 35%, view tăng/ngày 20%, ER 20%, share + lưu 15%, độ mới 10%.
+   - **🚀 Tăng view thật 24h** khi từ khoá được quét lại (từ lần quét thứ hai).
+   - **💡 Công thức video xu hướng:** kiểu mở đầu, độ dài, lời nói, âm thanh, giờ đăng, hashtag của nhóm video xu hướng so với phần còn lại.
+   - **🔗 Từ khoá liên quan** gợi ý từ hashtag đi kèm, bấm để quét tiếp.
+   - **⭐ Theo dõi từ khoá hằng ngày:** tự quét vào giờ đã chọn và thông báo khi có video xu hướng mới (Chrome cần đang mở).
+   - **📝 Lời thoại 10 video điểm cao nhất** để đọc kịch bản, copy tất cả.
+
+## Tính năng mới (bản 1.2) – chạy hoàn toàn trong tiện ích, không cần API key
+- **Nhãn trên lưới video TikTok:** ER · share · lưu · 🔥 *gấp X lần view trung vị của kênh* (viền đỏ khi ≥ 3×) · 🛒 nếu video gắn giỏ.
+- **🎬 Nội dung & Hook** (nay nằm trong tab 🧭 Phân tích kênh, phần Công thức nội dung):
+  - **Công thức viral:** so sánh nhóm 20% video top với phần còn lại theo độ dài, lời nói, âm thanh gốc, hook câu hỏi, tỉ lệ share và lưu, giờ đăng.
+  - **Kiểu hook mở đầu:** câu hỏi, con số, POV, cảnh báo, gây tò mò, kể chuyện, trước/sau.
+  - **Format video:** review, unbox, hướng dẫn, so sánh, bán hàng, vlog…
+  - **Lịch đăng gợi ý** và **câu mở đầu của 10 video top**.
+  - Nút lấy lời thoại hàng loạt cho 20 video top.
+- **💬 Bình luận:** mở một video, rồi bấm popup → **💬 Lấy bình luận video này**. Tiện ích tự cuộn khung bình luận. Dashboard cho thấy:
+  - **Ý định mua:** hỏi giá, xin link, ib, còn hàng…
+  - **Câu hỏi khách hay hỏi.**
+  - **Cụm từ nổi bật.**
+  - **Video nào khiến khách muốn mua nhất.**
+  - Xuất CSV hoặc copy nội dung.
+- **📡 Theo dõi & Trend:**
+  - Theo dõi kênh đối thủ (popup → ⭐ khi đang ở trang kênh), tự cập nhật mỗi ngày, **thông báo khi có video bứt phá**.
+  - **Video tăng view nhanh** (view/giờ) và **video "vượt tầm"** (view so với follower).
+  - **Âm thanh và hashtag đang được dùng nhiều** trong 14 ngày.
+- **Phụ đề .SRT:** nút **Tải .srt** ở trang *Lấy nội dung gốc video*.
+
+> Các phân tích về trend, âm thanh dựa trên dữ liệu **bạn đã thu thập**. Lướt For You, tìm kiếm và mở kênh càng nhiều thì kết quả càng chính xác.
+
+## 📝 Lấy nội dung gốc video (lời thoại, caption)
+- **Đang xem một video** trên TikTok: bấm biểu tượng tiện ích, chọn **📝 Lấy nội dung gốc video**.
+- **Trong Dashboard:** bấm 📝 ở cột *Nội dung* của từng video. Video đã lấy lời thoại sẽ có dấu ✓.
+- **Lấy hàng loạt:** dán tối đa 50 link (mỗi dòng 1 link) vào trang *Lấy nội dung gốc video*, rồi bấm **Xuất CSV kết quả**.
+
+Kết quả gồm caption, hashtag, âm thanh và **lời thoại** lấy từ phụ đề tự động hoặc phụ đề của tác giả do TikTok tạo. Bạn có thể bật mốc thời gian, chọn ngôn ngữ (bản gốc hoặc bản dịch máy), copy hoặc tải file .txt. Lời thoại cũng được lưu lại và có trong cột `transcript` khi xuất CSV.
+
+Video không có lời nói (chỉ có nhạc), hoặc video TikTok chưa tạo phụ đề, sẽ không có lời thoại.
+
+## Cách hoạt động
+- `src/inject.js` chạy trong trang TikTok và **đọc** các phản hồi API mà chính trang đã tải (danh sách video, thông tin kênh, tìm kiếm). Nó không gửi thêm request nào.
+- `src/content.js` đọc thêm dữ liệu nhúng sẵn trong trang, chuẩn hoá rồi lưu vào `chrome.storage.local`. Thông tin follower được lưu tối đa 1 mốc mỗi giờ để vẽ đường tăng trưởng.
+- `src/transcript.js` (chạy trong `src/background.js`) tải trang video, đọc danh sách phụ đề rồi tải bản phụ đề gốc.
+- `dashboard.html/js` và `popup.html/js` đọc dữ liệu đã lưu và vẽ biểu đồ bằng SVG thuần, không dùng thư viện ngoài.
+
+## Lưu ý
+- Số liệu là con số tại thời điểm bạn xem. Mở lại kênh sau vài ngày để cập nhật.
+- Giờ đăng hiển thị theo múi giờ máy của bạn.
+- Nếu TikTok đổi cấu trúc trang thì có thể cần cập nhật `src/common.js` (hàm `extract`).
+- Chỉ dùng để phân tích dữ liệu công khai mà bạn xem được. Hãy tuân thủ điều khoản của TikTok.

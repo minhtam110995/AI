@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nội dung gốc video – TikTok Analyzer</title>
+<link rel="stylesheet" href="dashboard.css">
+<style>
+  body { max-width: 900px; }
+  textarea { width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 14px/1.55 system-ui, sans-serif; resize: vertical; }
+  #links { min-height: 70px; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  button.primary { background: var(--series); color: #fff; border-color: var(--series); }
+  .item h3 { margin: 0 0 2px; font-size: 15px; }
+  .item h3 a { color: var(--text); }
+  .block { margin-top: 14px; }
+  .block .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .block .head b { font-size: 13px; }
+  .text { white-space: pre-wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; max-height: 420px; overflow: auto; }
+  .note { background: var(--series-soft); border-radius: 8px; padding: 8px 12px; margin-top: 12px; font-size: 13px; }
+  .err { color: var(--bad); }
+  .stats { color: var(--text2); font-size: 12.5px; }
+  button.small { padding: 4px 10px; font-size: 12px; }
+  select { min-width: 0; padding: 4px 8px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>📝 Lấy nội dung gốc video</h1>
+    <p class="muted">Caption, hashtag, âm thanh và lời thoại (phụ đề tự động của TikTok).</p>
+  </div>
+  <div class="actions"><button id="csv" class="hidden">Xuất CSV kết quả</button></div>
+</header>
+
+<section class="card">
+  <label class="small muted" for="links">Dán link video TikTok (mỗi dòng 1 link, tối đa 50 link)</label>
+  <textarea id="links" placeholder="https://www.tiktok.com/@kenh/video/7412345678901234567"></textarea>
+  <div class="bar">
+    <button id="go" class="primary">Lấy nội dung</button>
+    <span class="muted small" id="progress"></span>
+  </div>
+</section>
+
+<div id="results"></div>
+
+<script src="src/common.js"></script>
+<script src="original.js"></script>
+</body>
+</html>
