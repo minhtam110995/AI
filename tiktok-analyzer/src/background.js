@@ -1,4 +1,4 @@
-importScripts('common.js', 'transcript.js');
+importScripts('config.js', 'common.js', 'transcript.js', 'auth.js');
 
 // Trình phát của tiện ích: gửi kèm Referer tiktok.com khi tải video từ máy chủ TikTok
 // (giống khi xem trên chính trang TikTok). Chỉ áp dụng cho yêu cầu do tiện ích tạo ra.
@@ -142,6 +142,18 @@ async function openWorkWindow(url) {
 async function searchKeyword(input, scrolls, { silent = false } = {}) {
   const keyword = String(input || '').trim();
   if (!keyword || searching) return;
+  // Kiểm tra gói: chưa đăng nhập / hết lượt tìm trong ngày / giới hạn độ sâu
+  if (!silent) {
+    const u = await Auth.useSearch();
+    if (!u.ok) {
+      const msg = u.st.plan === 'none'
+        ? (u.st.reason === 'device' ? '🔒 Tài khoản đã dùng đủ số máy của gói. Mở trang Tài khoản để xoá máy cũ hoặc nâng cấp.' : '🔒 Hãy đăng nhập (trang Tài khoản) để tìm theo từ khoá.')
+        : `🔒 Gói Miễn phí được ${u.st.limits.searchesPerDay} lượt tìm mỗi ngày (đã dùng ${u.used}). Nâng cấp Pro để tìm không giới hạn.`;
+      await chrome.storage.local.set({ kwJob: { keyword, step: 'error', msg, locked: true, t: Date.now() } });
+      return;
+    }
+    scrolls = Math.min(scrolls, u.st.limits.maxDepth);
+  }
   searching = true;
   const setKw = (job) => chrome.storage.local.set({ kwJob: { keyword, ...job, t: Date.now() } });
   const key = TTA.kwKey(keyword);
@@ -186,7 +198,10 @@ chrome.storage.onChanged.addListener((ch) => { if (ch.kwWatch || ch.kwSettings) 
 chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'kwDaily') runWatchedKeywords(); });
 
 async function runWatchedKeywords() {
-  const { kwWatch = [] } = await chrome.storage.local.get('kwWatch');
+  const st = await Auth.refresh();
+  const { kwWatch: watchList = [] } = await chrome.storage.local.get('kwWatch');
+  const kwWatch = watchList.slice(0, st.limits.watch); // số từ khoá theo dõi theo gói
+  if (!kwWatch.length) return;
   for (const kw of kwWatch) {
     await searchKeyword(kw, 25, { silent: true });
     await sleep(5000 + Math.random() * 5000);

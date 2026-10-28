@@ -25,7 +25,29 @@ async function render() {
       tile('Kênh có hồ sơ', TTA.fmt(Object.keys(users).length));
 }
 
+let auth = null;
+async function showAccount() {
+  auth = await Auth.refresh();
+  const locked = auth.plan === 'none';
+  $('#loginGate').classList.toggle('hidden', !locked);
+  $('#mainBox').classList.toggle('hidden', locked);
+  if (locked) {
+    $('#gateWhy').textContent = auth.reason === 'device' ? `Tài khoản ${auth.email} đã dùng đủ ${auth.deviceLimit} máy. Mở trang Tài khoản để xoá máy cũ hoặc nâng cấp.`
+      : auth.reason === 'offline' || auth.reason === 'checking' ? 'Chưa kiểm tra được gói với máy chủ. Kiểm tra mạng rồi mở trang Tài khoản.' : '';
+    $('#goLogin').textContent = auth.loggedIn ? '⚙️ Mở trang Tài khoản' : '🔐 Đăng nhập / Đăng ký';
+  }
+  if (auth.configured && auth.loggedIn) {
+    $('#acct').innerHTML = `<span>${auth.email || ''} · <span class="pbadge">${Auth.PLANS[auth.plan]?.name || auth.plan}</span></span><a id="accLink">${auth.plan === 'free' ? '⭐ Nâng cấp' : 'Tài khoản'}</a>`;
+    $('#acct').classList.remove('hidden');
+    $('#accLink').onclick = () => chrome.tabs.create({ url: Auth.accountUrl() });
+  }
+  if (!auth.limits.csv) $('#csv').textContent = '🔒 Xuất CSV (Pro)';
+  return locked;
+}
+$('#goLogin').onclick = () => chrome.tabs.create({ url: Auth.accountUrl() });
+
 async function init() {
+  if (await showAccount()) return;
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const onTikTok = /^https:\/\/www\.tiktok\.com\//.test(tab?.url || '');
   if (onTikTok) {
@@ -66,6 +88,7 @@ $('#watchCh').onclick = async () => {
 $('#scroll').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: 30 });
 $('#stop').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'stopScroll' });
 $('#csv').onclick = async () => {
+  if (!auth?.limits.csv) { chrome.tabs.create({ url: Auth.accountUrl() }); return; }
   const { videos } = await TTA.load();
   let list = Object.values(videos);
   if (profile) list = list.filter((v) => v.author === profile);

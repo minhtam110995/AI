@@ -13,6 +13,7 @@
     <p class="muted" id="subtitle">Phân tích dữ liệu đã thu thập từ tiktok.com</p>
   </div>
   <div class="actions">
+    <button id="acctBtn" class="hidden"></button>
     <button id="exportCsv">Xuất CSV</button>
     <button id="exportJson">Sao lưu JSON</button>
     <label class="btn">Nhập JSON<input type="file" id="importJson" accept=".json" hidden></label>
@@ -70,6 +71,8 @@
 <div data-pane="trends" id="paneTrends"></div>
 
 <div id="tip" class="tip" role="tooltip"></div>
+<script src="src/config.js"></script>
+<script src="src/auth.js"></script>
 <script src="src/common.js"></script>
 <script src="dashboard.js"></script>
 <script src="dashboard-tabs.js"></script>

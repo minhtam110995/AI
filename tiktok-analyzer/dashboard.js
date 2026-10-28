@@ -11,6 +11,14 @@ const state = { videos: [], users: {}, comments: {}, watchChannels: [], ttSettin
 
 // ---------- dữ liệu ----------
 async function loadData() {
+  // Tài khoản: chưa đăng nhập → chuyển sang trang Tài khoản
+  state.auth = await Auth.refresh();
+  if (state.auth.plan === 'none') { location.replace(Auth.accountUrl('dashboard')); return; }
+  if (state.auth.configured) {
+    $('#acctBtn').textContent = `👤 ${Auth.PLANS[state.auth.plan].name}${state.auth.plan === 'free' ? ' · ⭐ Nâng cấp' : ''}`;
+    $('#acctBtn').classList.remove('hidden');
+    $('#acctBtn').onclick = () => chrome.tabs.create({ url: Auth.accountUrl() });
+  }
   const all = await chrome.storage.local.get(null);
   const videos = all.videos || {}, users = all.users || {};
   state.allVideos = Object.values(videos);
@@ -43,6 +51,11 @@ function filtered() {
     (!author || v.author === author) &&
     (!since || v.createTime >= since) &&
     (!q || v.desc.toLowerCase().includes(q) || v.hashtags.some((h) => h.includes(q))));
+}
+
+// Tính năng thuộc gói trả phí → mời nâng cấp
+function upgrade(feature) {
+  if (confirm(`🔒 “${feature}” có trong gói Pro. Mở trang Tài khoản để nâng cấp?`)) chrome.tabs.create({ url: Auth.accountUrl() });
 }
 
 // ---------- tooltip ----------
@@ -370,7 +383,7 @@ function render() {
 }
 
 // ---------- xuất / nhập ----------
-$('#exportCsv').onclick = () => TTA.download(`tiktok-${$('#fAuthor').value || 'all'}-${new Date().toISOString().slice(0, 10)}.csv`, TTA.toCSV(filtered()));
+$('#exportCsv').onclick = () => !state.auth?.limits.csv ? upgrade('Xuất CSV') : TTA.download(`tiktok-${$('#fAuthor').value || 'all'}-${new Date().toISOString().slice(0, 10)}.csv`, TTA.toCSV(filtered()));
 $('#exportJson').onclick = async () => TTA.download(`tiktok-analyzer-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(await TTA.load()), 'application/json');
 $('#importJson').onchange = async (e) => {
   const f = e.target.files[0];

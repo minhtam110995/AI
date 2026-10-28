@@ -99,6 +99,7 @@ PANES.content = (list) => {
 
   $('#copyHooks').onclick = (e) => navigator.clipboard.writeText(sorted.slice(0, 10).map((v) => `${TTA.hookText(v)} — ${TTA.fmt(v.views)} view`).join('\n')).then(() => (e.target.textContent = '✓ Đã copy'));
   $('#trFetch').onclick = async (e) => {
+    if (!state.auth?.limits.bulkTranscript) return upgrade('Lấy lời thoại hàng loạt');
     const todo = sorted.filter((v) => !v.transcript && !v.trTried).slice(0, 20);
     if (!todo.length) { $('#trInfo').textContent = 'Tất cả video top đã có lời thoại.'; return; }
     e.target.disabled = true;
@@ -254,6 +255,8 @@ const KW = { kw: '', range: '0', from: '', to: '', sort: 'views', min: 0, cart: 
 PANES.keyword = () => {
   const el = $('#paneKeyword');
   const job = state.kwJob;
+  const L = state.auth?.limits || Auth.PLANS.dev; // quyền theo gói
+  const rowsCap = Math.min(KW.limit, L.kwRows);
   // đang gõ từ khoá → chỉ cập nhật dòng tiến trình, không vẽ lại cả tab
   if (document.activeElement?.id === 'kwInput') { if (job && $('#kwJob')) $('#kwJob').textContent = job.msg; return; }
   const counts = {};
@@ -334,9 +337,9 @@ PANES.keyword = () => {
   el.innerHTML = `
     <section class="card"><h2>🔎 Tìm video nhiều view theo từ khoá</h2>
       <div class="toolbar"><input id="kwInput" type="search" placeholder="vd: bất động sản, review son, mẹo nấu ăn" style="flex:1;min-width:260px" value="${esc(KW.input || '')}">
-        <select id="kwDepth"><option value="10">Nhanh (~100 video)</option><option value="25" selected>Vừa (~250 video)</option><option value="50">Sâu (~500 video)</option><option value="100">Rất sâu (~1000 video)</option></select>
+        <select id="kwDepth">${[[10, 'Nhanh (~100 video)'], [25, 'Vừa (~250 video)'], [50, 'Sâu (~500 video)'], [100, 'Rất sâu (~1000 video)']].map(([v, l]) => `<option value="${v}"${v > L.maxDepth ? ' disabled' : ''}${v === Math.min(25, L.maxDepth) ? ' selected' : ''}>${v > L.maxDepth ? '🔒 ' : ''}${l}${v > L.maxDepth ? ' – Pro' : ''}</option>`).join('')}</select>
         <button id="kwGo" class="primary">Tìm & thu thập</button></div>
-      <p class="muted small" id="kwJob">${job ? esc(job.msg) + (job.step === 'run' ? ' (đừng đóng Chrome)' : '') : 'Tiện ích mở trang tìm kiếm video của TikTok trong một cửa sổ nhỏ, tự cuộn lấy kết quả rồi tự đóng. Để cửa sổ đó mở (đừng thu nhỏ) tới khi xong. Cần đang đăng nhập tiktok.com. Quét nhiều lần sẽ cộng dồn thêm video.'}</p>
+      <p class="muted small" id="kwJob">${job ? esc(job.msg) + (job.step === 'run' ? ' (đừng đóng Chrome)' : '') + (job.locked ? ' <a href="#" id="kwUp">Mở trang Tài khoản →</a>' : '') : 'Tiện ích mở trang tìm kiếm video của TikTok trong một cửa sổ nhỏ, tự cuộn lấy kết quả rồi tự đóng. Để cửa sổ đó mở (đừng thu nhỏ) tới khi xong. Cần đang đăng nhập tiktok.com. Quét nhiều lần sẽ cộng dồn thêm video.'}</p>
       <p class="muted small">Cách thủ công: tự tìm từ khoá trên tiktok.com (tab Video) rồi bấm “Tự cuộn để thu thập” — kết quả cũng tự vào đây. Quét lại vài ngày một lần để có video mới.</p>
       ${kws.length ? `<div class="toolbar">${kws.map((k) => `<button class="kwChip${k === KW.kw ? ' primary' : ''}" data-kw="${esc(k)}">${esc(k)} · ${counts[k] || 0}</button>`).join('')}</div>` : ''}
     </section>
@@ -347,7 +350,7 @@ PANES.keyword = () => {
       <label class="small">Sắp xếp <select id="kwSort">${[['views', 'Nhiều view nhất'], ['score', '🧠 Điểm xu hướng (0–100)'], ['growth', '🚀 Tăng view nhanh 24h (từ lần quét trước)'], ['trend', '📈 Video xu hướng (bứt phá ≥ 2× & ER > 2%)'], ['perDay', 'View / ngày (đang lên)'], ['ratio', 'Bứt phá so với kênh'], ['er', 'Tương tác (ER)'], ['likes', 'Nhiều tim nhất'], ['new', 'Mới nhất']].map(([v, l]) => opt(v, l, KW.sort)).join('')}</select></label>
       <label class="small">View tối thiểu <select id="kwMin">${[[0, 'Tất cả'], [10000, '10K'], [100000, '100K'], [500000, '500K'], [1000000, '1 triệu']].map(([v, l]) => opt(v, l, KW.min)).join('')}</select></label>
       <label class="small">Gắn giỏ <select id="kwCart">${[['', 'Tất cả'], ['yes', 'Chỉ video gắn giỏ'], ['no', 'Không gắn giỏ']].map(([v, l]) => opt(v, l, KW.cart)).join('')}</select></label>
-      <button id="kwCsv">Xuất CSV</button><button id="kwDel" title="Xoá nhãn từ khoá này (video vẫn giữ)">Xoá từ khoá</button>
+      <button id="kwCsv">${L.csv ? '' : '🔒 '}Xuất CSV</button><button id="kwDel" title="Xoá nhãn từ khoá này (video vẫn giữ)">Xoá từ khoá</button>
     </div>
     <div class="toolbar"><button id="kwWatch" class="${watched ? 'primary' : ''}">${watched ? '★ Đang theo dõi hằng ngày (bấm để bỏ)' : '⭐ Theo dõi từ khoá này hằng ngày'}</button>
       <label class="small">Tự quét lúc <select id="kwHour">${Array.from({ length: 24 }, (_, h) => opt(h, h + 'h', state.kwSettings.hour ?? 7)).join('')}</select> mỗi ngày</label>
@@ -361,7 +364,7 @@ PANES.keyword = () => {
     <section class="card"><div class="tablehead"><h2>🏆 Video nhiều view — "${esc(KW.kw)}"</h2>
         <div class="toolbar" style="margin:0"><button id="kwGrid" class="${KW.view === 'grid' ? 'primary' : ''}">▦ Thẻ video</button><button id="kwTable" class="${KW.view === 'table' ? 'primary' : ''}">☰ Bảng</button></div></div>
       <p class="muted small">Bấm vào video để xem ngay tại đây. View/ngày = lượt xem chia số ngày từ lúc đăng (video mới mà cao là đang lên). 🔥/⚡ = gấp ≥3×/≥2× view trung vị của kênh (khi đã có ≥ 5 video của kênh), nếu chưa đủ thì so với số follower của kênh. 📈 Xu hướng = bứt phá ≥ 2× và ER > 2%. 🧠 Điểm xu hướng 0–100 gộp: bứt phá 35%, view tăng/ngày 20%, ER 20%, tỉ lệ share + lưu 15%, độ mới 10%. 🚀 = view tăng thật trong 24h, có từ lần quét thứ hai (bật “Theo dõi hằng ngày” để có số này).</p>
-      ${!res.length ? '<p class="muted">Không có video nào trong khoảng thời gian / bộ lọc này. Thử chọn “Toàn bộ” hoặc quét sâu hơn.</p>' : KW.view === 'grid' ? `<div class="vgrid">${res.slice(0, KW.limit).map((v, i) => `
+      ${!res.length ? '<p class="muted">Không có video nào trong khoảng thời gian / bộ lọc này. Thử chọn “Toàn bộ” hoặc quét sâu hơn.</p>' : KW.view === 'grid' ? `<div class="vgrid">${res.slice(0, rowsCap).map((v, i) => `
         <div class="vcard" data-play="${v.id}" data-author="${esc(v.author)}">
           <div class="vcover">${v.cover ? `<img loading="lazy" src="${esc(v.cover)}" alt="">` : ''}<span class="vrank">#${i + 1}</span><span class="vviews">▶ ${TTA.fmt(v.views)}</span>${v.products?.length ? '<span class="vcart">🛒</span>' : ''}</div>
           <div class="vbody"><div class="vdesc">${esc((v.desc || '').slice(0, 110))}</div>
@@ -369,9 +372,10 @@ PANES.keyword = () => {
             <div class="vmeta">${TTA.fmt(perDay(v))} view/ngày · ER ${TTA.pct(TTA.er(v))} ${badge(v)}</div>
             <div class="vmeta"><b class="score" title="Điểm xu hướng 0–100">🧠 ${score(v)}</b>${growth24(v) != null ? ` · 🚀 +${TTA.fmt(growth24(v))} view/24h` : ''}</div></div>
         </div>`).join('')}</div>
-        ${res.length > KW.limit ? `<div class="toolbar" style="justify-content:center"><button id="kwMore">Xem thêm (${res.length - KW.limit} video)</button></div>` : ''}`
+        ${res.length > L.kwRows ? `<div class="card lockcard">🔒 Gói ${esc(Auth.PLANS[state.auth.plan].name)} xem được ${L.kwRows} video đầu. Còn <b>${res.length - L.kwRows}</b> video nữa — <button id="kwUnlock" class="primary">Nâng cấp Pro để xem tất cả</button></div>`
+          : res.length > KW.limit ? `<div class="toolbar" style="justify-content:center"><button id="kwMore">Xem thêm (${res.length - KW.limit} video)</button></div>` : ''}`
       : tbl(['Video', 'Kênh', 'Ngày đăng', 'View', 'View/ngày', '+View/24h', 'Điểm', 'Tim', 'ER', 'Gắn giỏ', ''],
-        res.slice(0, 500).map((v) => [vlink(v) + badge(v), `<a href="https://www.tiktok.com/@${esc(v.author)}" target="_blank">@${esc(v.author)}</a>`, TTA.fmtDate(v.createTime),
+        res.slice(0, Math.min(500, L.kwRows)).map((v) => [vlink(v) + badge(v), `<a href="https://www.tiktok.com/@${esc(v.author)}" target="_blank">@${esc(v.author)}</a>`, TTA.fmtDate(v.createTime),
           `<b>${TTA.fmt(v.views)}</b>`, TTA.fmt(perDay(v)), growth24(v) != null ? TTA.fmt(growth24(v)) : '–', `<b>${score(v)}</b>`, TTA.fmt(v.likes), TTA.pct(TTA.er(v)), v.products?.length ? '🛒' : '', `<button class="mini" data-play="${v.id}" data-author="${esc(v.author)}">▶ Xem</button>`]))}</section>
     <div class="grid2">
       <section class="card"><h2>Kênh nổi bật trong từ khoá</h2><p class="muted small">Tổng lượt xem các video của kênh trong kết quả.</p>
@@ -379,7 +383,7 @@ PANES.keyword = () => {
       <section class="card"><h2>Hashtag đi kèm hiệu quả</h2><p class="muted small">View trung vị của video chứa hashtag (≥ 2 video).</p>${hbarsSVG(tagRows)}</section>
     </div>
     <section class="card"><div class="tablehead"><h2>📝 Lời thoại 10 video điểm xu hướng cao nhất</h2>
-      <div class="toolbar" style="margin:0"><button id="kwTr" class="primary">Lấy lời thoại (${trTop.length - withTr.length} video chưa có)</button>${withTr.length ? '<button id="kwTrCopy">Copy tất cả</button>' : ''}</div></div>
+      <div class="toolbar" style="margin:0"><button id="kwTr" class="primary">${L.bulkTranscript ? '' : '🔒 '}Lấy lời thoại (${trTop.length - withTr.length} video chưa có)</button>${withTr.length ? '<button id="kwTrCopy">Copy tất cả</button>' : ''}</div></div>
       <p class="muted small" id="kwTrMsg">Đọc kịch bản người ta nói trong video xu hướng (lấy từ phụ đề TikTok tạo sẵn; video chỉ có nhạc sẽ không có lời).</p>
       ${withTr.length ? tbl(['Video', 'Điểm', 'Câu mở đầu', 'Lời thoại'], withTr.map((v) => [vlink(v, (v.desc || '').slice(0, 50)), `<b>${score(v)}</b>`, esc(v.hookLine || '–'), `<span class="small">${esc((v.transcript || '').slice(0, 400))}${(v.transcript || '').length > 400 ? '…' : ''}</span>`])) : ''}
     </section>`}`;
@@ -393,10 +397,12 @@ PANES.keyword = () => {
     KW.kw = TTA.kwKey(q);
     $('#kwJob').textContent = 'Đã bắt đầu… (tiến trình cập nhật tự động)';
   };
+  if ($('#kwUp')) $('#kwUp').onclick = (e) => { e.preventDefault(); chrome.tabs.create({ url: Auth.accountUrl() }); };
   el.querySelectorAll('.kwChip').forEach((b) => (b.onclick = () => { KW.kw = b.dataset.kw; KW.limit = 60; rerender(); }));
   if (!KW.kw) return;
   $('#kwGrid').onclick = () => { KW.view = 'grid'; rerender(); };
   $('#kwTable').onclick = () => { KW.view = 'table'; rerender(); };
+  if ($('#kwUnlock')) $('#kwUnlock').onclick = () => chrome.tabs.create({ url: Auth.accountUrl() });
   if ($('#kwMore')) $('#kwMore').onclick = () => { KW.limit += 60; rerender(); };
   el.querySelectorAll('[data-play]').forEach((c) => (c.onclick = (e) => { if (!e.target.closest('a')) playModal(c.dataset.play, c.dataset.author); }));
   const bind = (id, key, num) => ($(id).onchange = (e) => { KW[key] = num ? Number(e.target.value) : e.target.value; rerender(); });
@@ -408,11 +414,13 @@ PANES.keyword = () => {
   }));
   $('#kwWatch').onclick = async () => {
     const list = state.kwWatch || [];
+    if (!list.includes(KW.kw) && list.length >= L.watch) return upgrade(L.watch ? `Theo dõi hơn ${L.watch} từ khoá` : 'Theo dõi từ khoá hằng ngày');
     await chrome.storage.local.set({ kwWatch: list.includes(KW.kw) ? list.filter((k) => k !== KW.kw) : [...list, KW.kw] });
   };
   if ($('#kwRunW')) $('#kwRunW').onclick = async () => { await chrome.runtime.sendMessage({ type: 'runWatched' }); $('#kwJob').textContent = 'Đang quét các từ khoá theo dõi…'; };
   $('#kwHour').onchange = (e) => chrome.storage.local.set({ kwSettings: { ...state.kwSettings, hour: Number(e.target.value) } });
   $('#kwTr').onclick = async (e) => {
+    if (!L.bulkTranscript) return upgrade('Lấy lời thoại hàng loạt');
     const todo = trTop.filter((v) => !v.transcript && !v.hookLine);
     e.target.disabled = true;
     for (let i = 0; i < todo.length; i++) {
@@ -423,7 +431,7 @@ PANES.keyword = () => {
     $('#kwTrMsg').textContent = '✓ Xong.'; e.target.disabled = false;
   };
   if ($('#kwTrCopy')) $('#kwTrCopy').onclick = (e) => navigator.clipboard.writeText(withTr.map((v) => `${vurl(v)}\nMở đầu: ${v.hookLine || ''}\n${v.transcript || ''}`).join('\n\n')).then(() => (e.target.textContent = '✓ Đã copy'));
-  $('#kwCsv').onclick = () => TTA.download(`tiktok-tukhoa-${KW.kw.replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.csv`, TTA.toCSV(res));
+  $('#kwCsv').onclick = () => !L.csv ? upgrade('Xuất CSV') : TTA.download(`tiktok-tukhoa-${KW.kw.replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.csv`, TTA.toCSV(res));
   $('#kwDel').onclick = async () => {
     if (!confirm(`Xoá từ khoá "${KW.kw}" khỏi danh sách? (Video vẫn được giữ trong dữ liệu)`)) return;
     const { videos = {}, ttKeywords = {} } = await chrome.storage.local.get(['videos', 'ttKeywords']);

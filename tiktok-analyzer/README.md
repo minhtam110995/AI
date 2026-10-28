@@ -9,6 +9,12 @@ Tiện ích Chrome (Manifest V3) tự ghi lại số liệu video và kênh khi 
 4. Bấm **Load unpacked**, rồi chọn thư mục `tiktok-analyzer`.
 5. Ghim biểu tượng 📊 lên thanh công cụ.
 
+## 🔐 Tài khoản & gói cước (bản 2.0)
+- Popup và Dashboard yêu cầu **đăng nhập** (trang **Tài khoản**: đăng ký, đăng nhập, quên mật khẩu, mua / gia hạn gói, xem thiết bị và lịch sử thanh toán).
+- Gói **Miễn phí**: 3 lượt tìm từ khoá/ngày, quét nhanh, xem 20 video đầu. Gói **Pro / Team**: mở toàn bộ, theo dõi từ khoá hằng ngày, lời thoại hàng loạt, xuất CSV, dùng 2 / 5 máy.
+- Thanh toán qua PayOS (VietQR), gói tự kích hoạt sau khi trả tiền.
+- Cài máy chủ: xem `backend/README.md`. **Chưa điền `src/config.js` thì tiện ích chạy chế độ nội bộ** (không cần đăng nhập, mở toàn bộ tính năng).
+
 ## Cách dùng
 1. Mở một trang kênh, ví dụ `https://www.tiktok.com/@tenkenh`. Nếu tab đã mở sẵn trước khi cài tiện ích thì bấm F5.
 2. Bấm biểu tượng tiện ích, chọn **⬇ Tự cuộn để thu thập**. Trang sẽ tự cuộn để TikTok tải thêm video, và tiện ích ghi lại số liệu trong lúc cuộn.

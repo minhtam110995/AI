@@ -1,0 +1,7 @@
+# Cấu hình Supabase CLI (chỉ cần khi deploy bằng dòng lệnh)
+[functions.create-payment]
+verify_jwt = true
+
+[functions.payos-webhook]
+# PayOS không gửi JWT của Supabase; function tự kiểm tra chữ ký PayOS
+verify_jwt = false

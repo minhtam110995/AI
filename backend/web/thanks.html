@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thanh toán – TikTok Analyzer</title>
+<style>
+  :root { --bg:#fcfcfb; --card:#fff; --text:#0b0b0b; --muted:#52514e; --line:#e2e1dc; --ok:#008300; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1a1a19; --card:#232321; --text:#fff; --muted:#c3c2b7; --line:#383835; --ok:#2fa52f; } }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui, sans-serif; display:grid; place-items:center; min-height:100vh; padding:16px; box-sizing:border-box; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:28px; max-width:460px; text-align:center; }
+  h1 { font-size:22px; margin:0 0 8px; } p { color:var(--muted); margin:8px 0; }
+</style></head>
+<body><div class="card">
+  <h1 id="t">✅ Đã nhận thanh toán</h1>
+  <p id="d">Gói của bạn sẽ được kích hoạt trong vài giây. Quay lại trang <b>Tài khoản</b> của tiện ích TikTok Analyzer và bấm <b>“Kiểm tra lại gói”</b> nếu chưa thấy cập nhật.</p>
+  <p>Bạn có thể đóng tab này.</p>
+</div>
+<script>
+  // PayOS chuyển về kèm ?cancel=true hoặc ?status=CANCELLED khi khách huỷ
+  const q = new URLSearchParams(location.search);
+  if (q.get('cancel') === 'true' || q.get('status') === 'CANCELLED') {
+    document.getElementById('t').textContent = 'Đã huỷ thanh toán';
+    document.getElementById('d').textContent = 'Bạn chưa bị trừ tiền. Có thể mua lại bất cứ lúc nào ở trang Tài khoản của tiện ích.';
+  }
+</script>
+</body></html>
