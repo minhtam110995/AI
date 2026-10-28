@@ -5,3 +5,7 @@ verify_jwt = true
 [functions.payos-webhook]
 # PayOS không gửi JWT của Supabase; function tự kiểm tra chữ ký PayOS
 verify_jwt = false
+
+[functions.sepay-webhook]
+# SePay không gửi JWT của Supabase; function tự kiểm tra API key của SePay
+verify_jwt = false

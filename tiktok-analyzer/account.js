@@ -80,10 +80,14 @@ async function render() {
     $('#payMsg').className = 'msg'; $('#payMsg').textContent = 'Đang tạo đơn thanh toán…';
     try {
       const r = await Auth.createPayment(b.dataset.plan, Number(b.dataset.months));
-      chrome.tabs.create({ url: r.checkoutUrl });
-      $('#payMsg').className = 'msg ok';
-      $('#payMsg').textContent = `Đã mở trang thanh toán (mã đơn ${r.orderCode}, ${vnd(r.amount)}). Thanh toán xong quay lại đây, gói sẽ tự cập nhật trong vài giây.`;
-      pollAfterPay();
+      $('#payMsg').textContent = '';
+      if (r.transfer) showTransfer(r, b.dataset.plan, b.dataset.months);
+      else {
+        chrome.tabs.create({ url: r.checkoutUrl });
+        $('#payMsg').className = 'msg ok';
+        $('#payMsg').textContent = `Đã mở trang thanh toán (mã đơn ${r.orderCode}, ${vnd(r.amount)}). Thanh toán xong quay lại đây, gói sẽ tự cập nhật trong vài giây.`;
+        pollAfterPay();
+      }
     } catch (e) { $('#payMsg').className = 'msg err'; $('#payMsg').textContent = e.message; } finally { b.disabled = false; }
   }));
 
@@ -102,6 +106,46 @@ async function render() {
     const ST = { pending: '⏳ Chờ thanh toán', paid: '✅ Đã thanh toán', cancelled: '✖ Đã huỷ' };
     $('#payments').innerHTML = list.length ? `<table><tbody>${list.map((p) => `<tr><td class="desc">${esc(p.plan.toUpperCase())} ${p.months} tháng · ${vnd(p.amount)}<br><span class="muted small">Mã ${p.order_code} · ${new Date(p.created_at).toLocaleString('vi-VN')}</span></td><td>${ST[p.status] || esc(p.status)}</td></tr>`).join('')}</tbody></table>` : 'Chưa có thanh toán nào.';
   }).catch((e) => ($('#payments').textContent = e.message));
+}
+
+// Khung chuyển khoản: mã VietQR + thông tin tài khoản + nội dung, tự chờ xác nhận
+function showTransfer(r, plan, months) {
+  const t = r.transfer;
+  document.getElementById('payModal')?.remove();
+  const m = document.createElement('div');
+  m.id = 'payModal';
+  const row = (k, v, copy) => `<tr><td>${k}</td><td><b${copy ? ' class="hl"' : ''}>${esc(v)}</b>${copy ? ` <button class="mini" data-copy="${esc(v)}">Copy</button>` : ''}</td></tr>`;
+  m.innerHTML = `<div class="pm-inner">
+    <div class="pm-head"><div><h2>Hoàn tất thanh toán</h2><p class="muted small">Gói ${esc(plan.toUpperCase())} ${months} tháng — <b>${vnd(r.amount)}</b></p></div><button class="pm-x" title="Đóng">✕</button></div>
+    <p class="muted small" style="text-align:center">Quét mã QR bằng ứng dụng ngân hàng để thanh toán</p>
+    <div class="pm-qr"><img src="${esc(t.qrUrl)}" alt="Mã VietQR"></div>
+    <table class="pm-tbl"><tbody>
+      ${row('Ngân hàng', t.bankName)}${row('Số tài khoản', t.account, true)}${row('Tên người nhận', t.accountName)}
+      ${row('Số tiền', vnd(r.amount))}${row('Nội dung chuyển khoản', t.content, true)}
+    </tbody></table>
+    <p class="muted small">Chuyển khoản tay thì nhập <b>đúng nội dung ${esc(t.content)}</b> và đúng số tiền. Sau khi chuyển, chờ vài giây — hệ thống tự kích hoạt gói cho <b>${esc($('#sub').textContent.split(' · ')[0])}</b>.</p>
+    <p class="pm-wait" id="pmWait"><span class="spin"></span> Đang chờ xác nhận thanh toán…</p>
+    <p class="muted small">Đã chuyển hơn 10 phút mà chưa kích hoạt? Liên hệ ${esc(TTA_CONFIG.SUPPORT || 'hỗ trợ')} kèm mã đơn <b>${r.orderCode}</b>.</p>
+  </div>`;
+  document.body.appendChild(m);
+  const close = () => { clearInterval(timer); m.remove(); render(); };
+  m.querySelector('.pm-x').onclick = close;
+  m.onclick = (e) => { if (e.target === m) close(); };
+  m.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = () => navigator.clipboard.writeText(b.dataset.copy).then(() => (b.textContent = '✓'))));
+  m.querySelector('img').onerror = () => (m.querySelector('.pm-qr').innerHTML = '<p class="muted small">Không tải được ảnh QR — hãy chuyển khoản tay theo thông tin bên dưới.</p>');
+  // Hỏi máy chủ 5 giây / lần xem đơn đã thanh toán chưa (tối đa 30 phút)
+  let n = 0;
+  const timer = setInterval(async () => {
+    if (++n > 360) { clearInterval(timer); $('#pmWait').textContent = 'Hết thời gian chờ. Nếu đã chuyển khoản, bấm “Kiểm tra lại gói” hoặc liên hệ hỗ trợ.'; return; }
+    const list = await Auth.payments().catch(() => []);
+    if (list.find((p) => String(p.order_code) === String(r.orderCode))?.status === 'paid') {
+      clearInterval(timer);
+      await Auth.refresh(true);
+      $('#pmWait').innerHTML = '✅ Đã nhận thanh toán — gói đã được kích hoạt!';
+      $('#pmWait').classList.add('done');
+      setTimeout(close, 2500);
+    }
+  }, 5000);
 }
 
 // Sau khi mở trang thanh toán: hỏi lại máy chủ vài lần để tự cập nhật gói

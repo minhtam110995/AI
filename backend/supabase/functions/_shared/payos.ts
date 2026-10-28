@@ -1,4 +1,4 @@
-// Tiện ích chung cho PayOS: bảng giá, ký HMAC-SHA256, CORS.
+// Tiện ích chung cho thanh toán (PayOS / chuyển khoản SePay): bảng giá, ký HMAC-SHA256, CORS.
 // Bảng giá (VND) — sửa tại đây rồi deploy lại các function.
 export const PRICES: Record<string, Record<number, number>> = {
   pro: { 1: 199000, 3: 537000, 12: 1910000 },   // 3 tháng giảm 10%, 12 tháng giảm 20%
@@ -35,3 +35,14 @@ export function safeEqual(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return r === 0;
 }
+
+// Mã đơn: luôn đúng 9 chữ số, ngắn để khách dễ ghi khi chuyển khoản tay
+export const newOrderCode = () => 100_000_000 + Math.floor(Math.random() * 900_000_000);
+// Nội dung chuyển khoản: chỉ chữ + số (ngân hàng hay bỏ dấu cách / ký tự đặc biệt)
+export const TRANSFER_PREFIX = 'TTA';
+export const transferContent = (orderCode: number) => `${TRANSFER_PREFIX}${orderCode}`;
+// Tìm mã đơn trong nội dung ngân hàng gửi về (cho phép dấu cách / chấm / gạch giữa TTA và số)
+export const findOrderCode = (text: string): number | null => {
+  const m = String(text || '').toUpperCase().match(new RegExp(TRANSFER_PREFIX + '[\\s.\\-_]*(\\d{9})(?!\\d)'));
+  return m ? Number(m[1]) : null;
+};

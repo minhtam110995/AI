@@ -12,7 +12,7 @@ Tiện ích Chrome (Manifest V3) tự ghi lại số liệu video và kênh khi 
 ## 🔐 Tài khoản & gói cước (bản 2.0)
 - Popup và Dashboard yêu cầu **đăng nhập** (trang **Tài khoản**: đăng ký, đăng nhập, quên mật khẩu, mua / gia hạn gói, xem thiết bị và lịch sử thanh toán).
 - Gói **Miễn phí**: 3 lượt tìm từ khoá/ngày, quét nhanh, xem 20 video đầu. Gói **Pro / Team**: mở toàn bộ, theo dõi từ khoá hằng ngày, lời thoại hàng loạt, xuất CSV, dùng 2 / 5 máy.
-- Thanh toán qua PayOS (VietQR), gói tự kích hoạt sau khi trả tiền.
+- Thanh toán bằng mã VietQR chuyển khoản vào tài khoản ngân hàng (có thể là tài khoản cá nhân, xác nhận tự động qua SePay) hoặc PayOS; gói tự kích hoạt sau khi tiền về.
 - Cài máy chủ: xem `backend/README.md`. **Chưa điền `src/config.js` thì tiện ích chạy chế độ nội bộ** (không cần đăng nhập, mở toàn bộ tính năng).
 
 ## Cách dùng
