@@ -54,7 +54,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg.type === 'refreshChannels') { refreshChannels().then((n) => reply({ ok: true, n })); return true; }
   if (msg.type === 'runWatched') { runWatchedKeywords(); reply({ ok: true }); }
   if (msg.type === 'searchKeyword') { searchKeyword(msg.keyword, msg.scrolls || 15); reply({ ok: true }); }
-  if (msg.type === 'analyzeChannel') { reply({ ok: !!channelOf(msg.input) }); analyzeChannel(msg.input, msg.scrolls || 25, { comments: msg.comments !== false }); }
+  if (msg.type === 'analyzeChannel') { reply({ ok: !!channelOf(msg.input) }); analyzeChannel(msg.input, msg.scrolls || 25, { comments: msg.comments !== false, transcripts: !!msg.transcripts }); }
   if (msg.type === 'channelComments') { reply({ ok: !analyzing }); channelComments(msg.user, msg.ids); }
   if (msg.type === 'flushed') scheduleBreakoutCheck();
 });
@@ -249,7 +249,7 @@ async function channelComments(user, ids) {
   analyzing = false;
 }
 
-async function analyzeChannel(input, scrolls, { comments = true } = {}) {
+async function analyzeChannel(input, scrolls, { comments = true, transcripts = false } = {}) {
   const user = channelOf(input);
   if (!user || analyzing) return;
   analyzing = true;
@@ -280,7 +280,8 @@ async function analyzeChannel(input, scrolls, { comments = true } = {}) {
       await setJob({ step: 'error', msg: `Không lấy được video nào của @${user}. Kiểm tra lại tên kênh, hoặc mở tiktok.com, đăng nhập (giải captcha) rồi thử lại.` });
     } else {
       // Lời thoại cho 10 video nhiều view nhất (để phân tích hook chính xác hơn)
-      const todo = vids.sort((a, b) => b.views - a.views).slice(0, 10).filter((v) => !v.transcript);
+      // Chỉ khi người dùng chọn: tải trang video ở chế độ nền dễ khiến TikTok chặn tạm (403)
+      const todo = transcripts ? vids.sort((a, b) => b.views - a.views).slice(0, 10).filter((v) => !v.transcript) : [];
       for (let i = 0; i < todo.length; i++) {
         await setJob({ step: 'run', msg: `Đã có ${vids.length} video. Đang lấy lời thoại video top ${i + 1}/${todo.length}…` });
         const err = await handleOriginal({ author: todo[i].author, id: todo[i].id }).then(() => null, (e) => e);

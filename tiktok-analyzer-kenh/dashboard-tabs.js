@@ -641,7 +641,8 @@ PANES.content = (list, author) => {
       <p class="muted small">Dán link kênh của bạn hoặc của đối thủ. Tiện ích tự mở kênh trong một cửa sổ nhỏ, cuộn lấy video, lấy bình luận 3 video top và lời thoại 10 video top, rồi hiện báo cáo bên dưới. Cần đang đăng nhập tiktok.com.</p>
       <div class="toolbar"><input id="chInput" type="search" placeholder="vd: https://www.tiktok.com/@tenkenh hoặc @tenkenh" style="flex:1;min-width:min(260px,100%)" value="${esc(CH.input)}">
         <select id="chDepth"><option value="10">Nhanh (~150 video)</option><option value="25" selected>Vừa (~400 video)</option><option value="60">Toàn bộ kênh</option></select>
-        <label class="small"><input type="checkbox" id="chCmtOn" checked> Lấy bình luận ${COMMENT_VIDEOS_UI} video top</label>
+        <label class="small"><input type="checkbox" id="chCmtOn"${CH.cmtOn === false ? '' : ' checked'}> Lấy bình luận ${COMMENT_VIDEOS_UI} video top</label>
+        <label class="small" title="Tải thêm 10 trang video ở chế độ nền để lấy lời thoại. Dễ bị TikTok chặn tạm (lỗi 403) nếu dùng nhiều — có thể lấy sau bằng nút 📋 ở Video hot."><input type="checkbox" id="chTrOn"${CH.trOn ? ' checked' : ''}> Lấy lời thoại 10 video top</label>
         <button id="chGo" class="primary">Phân tích</button></div>
       <p class="muted small" id="chJob">${job ? esc(job.msg) + (job.step === 'run' ? ' (đừng đóng Chrome)' : '') : ''}</p>
       ${known.length ? `<div class="toolbar"><span class="muted small">Kênh đã có dữ liệu:</span>${known.map((a) => `<span class="chipgrp"><button class="mini chPick${a === author ? ' primary' : ''}" data-a="${esc(a)}">@${esc(a)} · ${counts[a]}</button><button class="mini chDel" data-a="${esc(a)}" title="Xoá dữ liệu kênh @${esc(a)}">✕</button></span>`).join('')}</div>` : ''}
@@ -649,9 +650,11 @@ PANES.content = (list, author) => {
     </section>`;
   const bindHead = () => {
     $('#chInput').oninput = (e) => (CH.input = e.target.value);
+    $('#chCmtOn').onchange = (e) => (CH.cmtOn = e.target.checked);
+    $('#chTrOn').onchange = (e) => (CH.trOn = e.target.checked);
     $('#chInput').onkeydown = (e) => { if (e.key === 'Enter') $('#chGo').click(); };
     $('#chGo').onclick = async () => {
-      const r = await chrome.runtime.sendMessage({ type: 'analyzeChannel', input: $('#chInput').value, scrolls: Number($('#chDepth').value), comments: $('#chCmtOn').checked });
+      const r = await chrome.runtime.sendMessage({ type: 'analyzeChannel', input: $('#chInput').value, scrolls: Number($('#chDepth').value), comments: $('#chCmtOn').checked, transcripts: $('#chTrOn').checked });
       $('#chJob').textContent = r?.ok ? 'Đã bắt đầu… (tiến trình cập nhật tự động)' : 'Link chưa đúng. Dán dạng https://www.tiktok.com/@tenkenh hoặc @tenkenh.';
     };
     el.querySelectorAll('.chPick').forEach((b) => (b.onclick = () => { $('#fAuthor').value = b.dataset.a; render(); }));
