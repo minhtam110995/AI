@@ -35,7 +35,7 @@ Video phát trong khung riêng, kèm tên sản phẩm gắn giỏ. Tiện ích 
 
 Tiện ích chỉ hỗ trợ **xem**, không tải video xuống.
 
-## 📊 Cột phân tích ngay trên trang kênh TikTok (bản 1.10)
+## 📊 Cột phân tích ngay trên trang kênh TikTok (bản 2.0)
 Mở trang kênh bất kỳ (`tiktok.com/@tenkenh`) và lướt như bình thường: bên phải hiện cột **📊 Phân tích** tự cập nhật theo các video bạn đã lướt qua.
 - Chỉ số nhanh: view trung vị, ER, số video/tuần, tỉ lệ video ≥ 2× trung vị.
 - **🔥 Video hot**: 10 video nhiều view / bứt phá nhất; nút 📝 xem lời thoại, 📋 copy caption + lời thoại; **📝 Lấy lời thoại** cả 10 video rồi **📋 Copy tất cả**.
