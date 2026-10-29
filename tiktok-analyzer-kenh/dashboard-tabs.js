@@ -740,7 +740,7 @@ PANES.content = (list, author) => {
   const badges = (v) => [v.pinned && '📌', v.products?.length && '🛒', v.photo && '📷', repeat.has(v.id) && '<span class="tag" title="Cùng tuyến và format với ≥ 3 video, trung vị ≥ 1,5× kênh">🔁 lặp lại được</span>'].filter(Boolean).join(' ');
   const hot = `
     <section class="card"><div class="tablehead"><h2>🔥 Video hot</h2>
-      <div class="toolbar" style="margin:0"><button class="mini hotTab${CH.hot === 'views' ? ' primary' : ''}" data-h="views">Nhiều view nhất</button><button class="mini hotTab${CH.hot === 'ratio' ? ' primary' : ''}" data-h="ratio">Bứt phá nhất</button><button class="mini" id="hotCopyAll" title="Copy caption + lời thoại của cả 10 video">📋 Copy tất cả</button></div></div>
+      <div class="toolbar" style="margin:0"><button class="mini hotTab${CH.hot === 'views' ? ' primary' : ''}" data-h="views">Nhiều view nhất</button><button class="mini hotTab${CH.hot === 'ratio' ? ' primary' : ''}" data-h="ratio">Bứt phá nhất</button><button class="mini${CH.hotJob?.done ? ' primary' : ''}" id="hotCopyAll" title="Copy caption + lời thoại của cả 10 video"${CH.hotJob?.running ? ' disabled' : ''}>${CH.hotJob?.running ? `⏳ Lấy lời thoại ${CH.hotJob.i}/${CH.hotJob.n}…` : CH.hotJob?.done ? '📋 Đã lấy xong — bấm để copy' : '📋 Copy tất cả'}</button></div></div>
       <p class="muted small">${CH.hot === 'ratio' ? 'Video vượt xa các video đăng cùng giai đoạn (so với 10 video đăng gần nhất): thứ thuật toán đẩy mạnh, đáng học nhất.' : 'Video nhiều view nhất trong khoảng thời gian đang lọc.'} Cột “Bứt phá” = view so với trung vị 10 video đăng gần nhất. 📌 ghim · 🛒 gắn giỏ · 📷 ảnh lướt · 🔁 công thức đã lặp lại thành công.</p>
       ${tbl(['Video / câu mở đầu', 'Ngày', 'View', 'Bứt phá', 'Lưu', 'Share', 'Độ dài', 'Format', 'Tuyến'], hotList.map((v) => [
         `${vlink(v, TTA.hookText(v) || v.desc)} ${badges(v)} <button class="mini hotCopy" data-id="${v.id}" title="Copy toàn bộ caption + lời thoại của video này">📋</button>`, TTA.fmtDate(v.createTime) + (now - v.createTime < 3 * DAY ? ' <span class="tag">mới</span>' : ''),
@@ -948,14 +948,22 @@ PANES.content = (list, author) => {
     if (!v.transcript && !tried(v)) { b.textContent = '⏳'; b.disabled = true; await fetchTr(v); b.disabled = false; b.textContent = '📋'; b.title = 'Đã lấy lời thoại — bấm để copy'; b.classList.add('primary'); return; }
     copyOut(b, fullText(v), '📋');
   }));
+  // Tiến trình lấy lời thoại lưu ở CH.hotJob để không mất khi Dashboard vẽ lại (mỗi lời thoại lưu xong là vẽ lại)
   $('#hotCopyAll').onclick = async (e) => {
     const b = e.target, todo = hotList.filter((v) => !v.transcript && !tried(v));
     if (todo.length) {
-      b.disabled = true;
-      for (let i = 0; i < todo.length; i++) { b.textContent = `⏳ Lấy lời thoại ${i + 1}/${todo.length}…`; if (i) await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500)); await fetchTr(todo[i]); }
-      b.disabled = false; b.textContent = '📋 Đã lấy xong — bấm để copy'; b.classList.add('primary');
+      CH.hotJob = { running: true, i: 0, n: todo.length };
+      for (let i = 0; i < todo.length; i++) {
+        CH.hotJob.i = i + 1;
+        const cur = $('#hotCopyAll'); if (cur) { cur.disabled = true; cur.textContent = `⏳ Lấy lời thoại ${i + 1}/${todo.length}…`; }
+        if (i) await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
+        await fetchTr(todo[i]);
+      }
+      CH.hotJob = { done: true };
+      const cur = $('#hotCopyAll'); if (cur) { cur.disabled = false; cur.textContent = '📋 Đã lấy xong — bấm để copy'; cur.classList.add('primary'); }
       return;
     }
+    CH.hotJob = null;
     copyOut(b, hotList.map((v, i) => `${i + 1}. ${fullText(v)}`).join('\n\n'), '📋 Copy tất cả');
   };
   const plain = (html) => { const d = document.createElement('div'); d.innerHTML = html; return d.textContent; };
