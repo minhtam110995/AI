@@ -10,7 +10,7 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const profile = () => (location.pathname.match(/^\/@([^/?#]+)\/?$/) || [])[1] || '';
   const DAY = 86400;
-  const ST = { open: true, tab: 'top', sort: 'views', fetching: false, prog: '', ready: false, tr: {}, open1: null };
+  const ST = { open: true, tab: 'top', sort: 'views', fetching: false, prog: '', ready: false, tr: {}, open1: null, ai: null, me: {}, editMe: false };
 
   let box = null, data = { list: [], user: null }, timer = null, lastUser = '';
 
@@ -66,6 +66,10 @@
     box.id = 'tta-side';
     document.body.appendChild(box);
     box.addEventListener('click', onClick);
+    box.addEventListener('input', onInput);
+    box.addEventListener('toggle', (e) => { if (e.target.classList?.contains('me')) ST.editMe = e.target.open; }, true);
+    // phím gõ trong ô nhập không lọt xuống TikTok (TikTok dùng phím tắt)
+    ['keydown', 'keyup', 'keypress'].forEach((k) => box.addEventListener(k, (e) => { if (/INPUT|TEXTAREA/.test(e.target.tagName)) e.stopPropagation(); }));
     return box;
   }
 
@@ -92,6 +96,7 @@
     const tabs = `<div class="tabs">${[['top', '🔥 Video hot'], ['ana', '🧭 Phân tích']].map(([k, l]) => `<button data-a="tab" data-t="${k}" class="${ST.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
 
     let body = '';
+    if (ST.ai) { box.innerHTML = head + composer(A, list); return; }
     if (ST.tab === 'ana') {
       const line = (icon, txt) => (txt ? `<li>${icon} ${txt}</li>` : '');
       body = `<ul class="ins">
@@ -106,18 +111,118 @@
     } else {
       const top = [...list].sort((a, b) => (ST.sort === 'ratio' ? A.ratio(b) - A.ratio(a) : b.views - a.views)).slice(0, 10);
       const need = top.filter((v) => !trOf(v) && !ST.tr['x' + v.id]).length;
-      body = `<div class="bar"><button data-a="sort" data-s="views" class="${ST.sort === 'views' ? 'on' : ''}">Nhiều view</button><button data-a="sort" data-s="ratio" class="${ST.sort === 'ratio' ? 'on' : ''}">Bứt phá</button><span class="sp"></span>
+      body = `<div class="bar"><button data-a="sort" data-s="views" class="${ST.sort === 'views' ? 'on' : ''}">Nhiều view</button><button data-a="sort" data-s="ratio" class="${ST.sort === 'ratio' ? 'on' : ''}">Bứt phá</button><button data-a="ai" data-id="top" class="ai" title="Phân tích viral cả 10 video & viết lại">✨ Top 10</button><span class="sp"></span>
         <button data-a="all" class="pri"${ST.fetching ? ' disabled' : ''}>${ST.fetching ? esc(ST.prog) : need ? `📝 Lấy lời thoại (${need})` : '📋 Copy tất cả'}</button></div>
         <ol class="vl">${top.map((v) => {
           const r = A.ratio(v), tr = trOf(v), miss = ST.tr['x' + v.id];
           return `<li><div class="vt"><a href="/@${esc(v.author)}/video/${v.id}" title="${esc(v.desc)}">${esc(hookOf(v).slice(0, 90))}</a></div>
             <div class="vm">▶ <b>${fmt(v.views)}</b> · ${r >= 2 ? `<span class="hot">${r.toFixed(1)}×</span>` : r.toFixed(1) + '×'} · ER ${pct(er(v), 1)}${v.duration ? ` · ${v.duration}s` : ''}${v.products?.length ? ' · 🛒' : ''}
-              <span class="sp"></span><button data-a="tr" data-id="${v.id}" title="${tr ? 'Xem lời thoại' : 'Lấy lời thoại'}">${tr ? '📄' : '📝'}</button><button data-a="cp" data-id="${v.id}" title="Copy caption + lời thoại">📋</button></div>
+              <span class="sp"></span><button data-a="tr" data-id="${v.id}" title="${tr ? 'Xem lời thoại' : 'Lấy lời thoại'}">${tr ? '📄' : '📝'}</button><button data-a="cp" data-id="${v.id}" title="Copy caption + lời thoại">📋</button><button data-a="ai" data-id="${v.id}" class="ai" title="Phân tích viral & viết lại bằng ChatGPT / Claude">✨</button></div>
             ${ST.open1 === v.id ? `<div class="trx">${tr ? esc(tr) : esc(miss || 'Đang lấy…')}</div>` : ''}</li>`;
         }).join('')}</ol>
         <p class="note">Lời thoại lấy từ phụ đề có sẵn trong dữ liệu TikTok đã gửi khi bạn lướt — không mở thêm trang nên không lo bị chặn.</p>`;
     }
     box.innerHTML = head + `<div class="kp">${kpi(fmt(A.med), 'View trung vị')}${kpi(pct(A.er, 1), 'ER trung vị', '(tim + bình luận + share + lưu) / view')}${kpi(A.perWeek.toFixed(1), 'Video/tuần (30 ngày)')}${kpi(pct(A.hit, 0), 'Video ≥ 2× trung vị')}</div>` + tabs + body;
+  }
+
+  // ---------- ✨ Phân tích viral & viết lại bằng ChatGPT / Claude ----------
+  const GOALS = {
+    viral: ['🔍 Vì sao viral', 'Phân tích vì sao video viral'],
+    rewrite: ['✍️ Viết lại cho kênh tôi', 'Viết lại theo công thức viral cho kênh của tôi'],
+    hooks: ['🎣 10 câu hook', 'Viết 10 câu hook 3 giây đầu'],
+    sell: ['🛒 Kịch bản bán hàng', 'Chuyển thành kịch bản bán hàng'],
+  };
+  const ME_FIELDS = [['niche', 'Ngách / chủ đề kênh', 'vd: mẹo kinh doanh online cho mẹ bỉm'], ['product', 'Sản phẩm / dịch vụ', 'vd: khoá học bán hàng TikTok 1,99 triệu'],
+    ['audience', 'Khách hàng mục tiêu', 'vd: nữ 25–40, nội trợ, muốn kiếm thêm thu nhập'], ['voice', 'Giọng văn', 'vd: gần gũi, xưng chị – các em, hài hước nhẹ'], ['avoid', 'Không dùng / tránh', 'vd: không nói giá, không dùng từ "cam kết"']];
+  const aiVideos = (A, list) => {
+    const ids = ST.ai.ids;
+    const sorted = [...list].sort((x, y) => (ST.sort === 'ratio' ? A.ratio(y) - A.ratio(x) : y.views - x.views));
+    return ids === 'top' ? sorted.slice(0, 10) : list.filter((v) => ids.includes(v.id));
+  };
+
+  function buildPrompt(A, list) {
+    const vids = aiVideos(A, list), u = data.user, me = ST.me || {}, goal = ST.ai.goal, topic = (ST.ai.topic || '').trim();
+    const many = vids.length > 1;
+    const vtxt = vids.map((v, i) => [
+      `### Video ${i + 1}${many ? '' : ''}: https://www.tiktok.com/@${v.author}/video/${v.id}`,
+      `- Số liệu: ${fmt(v.views)} view (${A.ratio(v).toFixed(1)}× view trung vị của kênh), ER ${pct(er(v), 1)}, ${fmt(v.shares)} share, ${fmt(v.saves)} lưu${v.duration ? `, dài ${v.duration}s` : ''}${v.createTime ? `, đăng ${new Date(v.createTime * 1000).toLocaleDateString('vi-VN')}` : ''}${v.products?.length ? ', có gắn giỏ hàng' : ''}`,
+      `- Caption: ${(v.desc || '').replace(/\s+/g, ' ').trim() || '–'}`,
+      `- Kịch bản gốc (lời thoại): ${trOf(v) || '(không có lời thoại — video không lời hoặc chưa lấy được; hãy suy luận từ caption và số liệu)'}`,
+    ].join('\n')).join('\n\n');
+    const meTxt = ME_FIELDS.filter(([k]) => (me[k] || '').trim()).map(([k, l]) => `- ${l}: ${me[k].trim()}`).join('\n');
+    const tasks = {
+      viral: [
+        `Phân tích vì sao ${many ? 'các video này' : 'video này'} viral:`,
+        '1. Hook 3 giây đầu: trích nguyên văn, vì sao giữ chân người xem.',
+        '2. Cấu trúc nội dung theo từng đoạn (mở – thân – kết), nhịp và cách chuyển ý.',
+        '3. Cảm xúc / tâm lý người xem được khai thác (tò mò, sợ bỏ lỡ, đồng cảm, hài hước…).',
+        '4. Lời kêu gọi hành động và lý do người xem bình luận / chia sẻ / lưu.',
+        `5. Rút ra **công thức có thể tái sử dụng** dạng khung (Hook → … → CTA)${many ? ', và điểm chung giữa các video' : ''}.`,
+        '6. Những điều KHÔNG nên bắt chước (dễ vi phạm, phụ thuộc người nổi tiếng, may mắn…).',
+      ],
+      rewrite: [
+        'Bước 1: Tóm tắt ngắn công thức viral của video gốc (hook, cấu trúc, cảm xúc, CTA).',
+        `Bước 2: Viết **3 kịch bản mới** cho kênh của tôi${topic ? ` về chủ đề / sản phẩm: ${topic}` : ''}, áp dụng công thức đó nhưng **không sao chép câu chữ gốc**. Mỗi kịch bản gồm:`,
+        '- Tiêu đề ý tưởng; 2 phương án câu hook 3 giây đầu;',
+        '- Thân bài theo từng cảnh: lời nói + hình ảnh quay + chữ trên màn hình;',
+        '- Lời kêu gọi hành động; caption; 3–5 hashtag; độ dài dự kiến.',
+      ],
+      hooks: [
+        `Dựa trên hook của video gốc, viết **10 câu hook 3 giây đầu** cho ${topic ? `chủ đề: ${topic}` : 'kênh của tôi'}, mỗi câu ≤ 15 từ, đa dạng kiểu: câu hỏi, con số, gây tò mò, cảnh báo, POV, trước/sau, phản bác.`,
+        'Ghi kiểu hook cạnh mỗi câu. Đánh dấu 3 câu mạnh nhất và giải thích vì sao.',
+      ],
+      sell: [
+        'Bước 1: Chỉ ra yếu tố nào của video gốc có thể dùng để bán hàng mà không lộ liễu.',
+        `Bước 2: Viết **2 kịch bản bán hàng 30–45 giây** cho ${topic ? `sản phẩm: ${topic}` : 'sản phẩm của tôi'}, cấu trúc: hook → vấn đề → trải nghiệm / bằng chứng → giải pháp → kêu gọi bấm giỏ hàng. Mỗi kịch bản có lời nói theo cảnh, chữ trên màn hình, caption, hashtag.`,
+        'Bước 3: Gợi ý 3 câu trả lời bình luận mẫu cho người hỏi giá / xin link.',
+      ],
+    }[goal];
+    return [
+      'Bạn là chuyên gia nội dung TikTok tại Việt Nam, giỏi phân tích video viral và viết kịch bản video ngắn.',
+      `# Mục tiêu: ${GOALS[goal][1]}`,
+      `## Nhiệm vụ\n${tasks.join('\n')}`,
+      `## Dữ liệu kênh @${profile()}\n- ${u ? `${fmt(u.followers)} follower, ` : ''}view trung vị ${fmt(A.med)}/video, ER trung vị ${pct(A.er, 1)}, ${A.perWeek.toFixed(1)} video/tuần. Số liệu do tiện ích TikTok Analyzer thu thập từ dữ liệu công khai ngày ${new Date().toLocaleDateString('vi-VN')}.`,
+      `## ${many ? `${vids.length} video` : 'Video'} cần phân tích\n${vtxt}`,
+      meTxt ? `## Hồ sơ kênh của tôi\n${meTxt}` : '',
+      '## Lưu ý\nChỉ dựa trên dữ liệu ở trên; chỗ nào là suy đoán thì ghi rõ. Không sao chép nguyên văn nội dung của người khác. Trả lời bằng tiếng Việt, có tiêu đề rõ ràng, dễ làm theo.',
+    ].filter(Boolean).join('\n\n');
+  }
+
+  function composer(A, list) {
+    const vids = aiVideos(A, list), have = vids.filter((v) => trOf(v)).length, none = vids.filter((v) => !trOf(v) && ST.tr['x' + v.id]).length;
+    const me = ST.me || {}, filled = ME_FIELDS.filter(([k]) => (me[k] || '').trim()).length;
+    return `<div class="bar"><button data-a="aiback">← Quay lại</button><span class="sp"></span><b>✨ ChatGPT / Claude</b></div>
+      <p class="sub">${vids.length > 1 ? `${vids.length} video top` : `Video: ${esc(hookOf(vids[0] || {}).slice(0, 70))}`} · lời thoại ${have}/${vids.length}${none ? ` (${none} video không lời)` : ''}${ST.fetching ? ` · ${esc(ST.prog)}` : have + none < vids.length ? ' <button data-a="aifetch">📝 Lấy lời thoại còn thiếu</button>' : ''}</p>
+      <div class="goals">${Object.entries(GOALS).map(([k, [l]]) => `<button data-a="aigoal" data-g="${k}" class="${ST.ai.goal === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      ${ST.ai.goal === 'viral' ? '' : `<input class="in" id="ttaTopic" placeholder="${ST.ai.goal === 'sell' ? 'Sản phẩm cần bán (vd: kem chống nắng 199k)' : 'Chủ đề / sản phẩm cho lần này (không bắt buộc)'}" value="${esc(ST.ai.topic || '')}">`}
+      <div class="bar"><button data-a="aiopen" data-to="chatgpt" class="pri">Mở ChatGPT ↗</button><button data-a="aiopen" data-to="claude" class="pri">Mở Claude ↗</button><button data-a="aicopy">📋 Copy prompt</button></div>
+      <p class="note">Tiện ích copy sẵn prompt rồi mở ChatGPT / Claude (điền sẵn nếu prompt ngắn). Nếu ô chat trống: bấm <b>Ctrl+V</b> rồi Enter.</p>
+      <details class="me"${ST.editMe ? ' open' : ''}><summary>👤 Hồ sơ kênh của tôi (${filled}/${ME_FIELDS.length}) — tự gắn vào mọi prompt</summary>
+        ${ME_FIELDS.map(([k, l, ph]) => `<label>${l}<input class="in" data-me="${k}" placeholder="${esc(ph)}" value="${esc(me[k] || '')}"></label>`).join('')}
+      </details>
+      <details class="pv"><summary>Xem trước prompt (${buildPrompt(A, list).length.toLocaleString('vi-VN')} ký tự)</summary><div class="trx">${esc(buildPrompt(A, list))}</div></details>`;
+  }
+
+  async function fetchMissing(vids) {
+    const todo = vids.filter((v) => !trOf(v) && !ST.tr['x' + v.id]);
+    if (!todo.length) return;
+    ST.fetching = true;
+    for (let i = 0; i < todo.length; i++) {
+      ST.prog = `⏳ lấy lời thoại ${i + 1}/${todo.length}…`; render();
+      await fetchTr(todo[i]);
+      if (i < todo.length - 1) await sleep(400 + Math.random() * 600);
+    }
+    ST.fetching = false; render();
+  }
+
+  // Mở ChatGPT / Claude: luôn copy prompt; prompt ngắn thì điền sẵn qua đường link (?q=)
+  async function openAI(to, btn) {
+    const A = analyze(data.list), prompt = buildPrompt(A, data.list);
+    try { await navigator.clipboard.writeText(prompt); } catch (_) {}
+    const base = to === 'claude' ? 'https://claude.ai/new' : 'https://chatgpt.com/';
+    const url = base + '?q=' + encodeURIComponent(prompt);
+    window.open(url.length < 7000 ? url : base, '_blank');
+    btn.textContent = url.length < 7000 ? '✓ Đã mở (điền sẵn)' : '✓ Đã copy — dán Ctrl+V';
   }
 
   // ---------- lời thoại ----------
@@ -152,6 +257,18 @@
       if (!trOf(v) && !ST.tr['x' + v.id]) { b.textContent = '⏳'; await fetchTr(v); render(); return; } // lấy xong bấm lần nữa để copy
       copy(b, textOf(v));
     }
+    if (a === 'ai') {
+      ST.ai = { ids: b.dataset.id === 'top' ? 'top' : [b.dataset.id], goal: ST.ai?.goal || 'viral', topic: ST.ai?.topic || '' };
+      render();
+      const A = analyze(data.list);
+      fetchMissing(aiVideos(A, data.list)); // tự lấy lời thoại còn thiếu (từ dữ liệu đã tải)
+      return;
+    }
+    if (a === 'aiback') { ST.ai = null; render(); }
+    if (a === 'aigoal') { ST.ai.goal = b.dataset.g; render(); }
+    if (a === 'aifetch') fetchMissing(aiVideos(analyze(data.list), data.list));
+    if (a === 'aicopy') copy(b, buildPrompt(analyze(data.list), data.list));
+    if (a === 'aiopen') openAI(b.dataset.to, b);
     if (a === 'all') {
       const A = analyze(data.list);
       const top = [...data.list].sort((x, y) => (ST.sort === 'ratio' ? A.ratio(y) - A.ratio(x) : y.views - x.views)).slice(0, 10);
@@ -167,17 +284,35 @@
     }
   }
 
+  // Cập nhật ô xem trước prompt khi gõ chủ đề / hồ sơ (không vẽ lại cả cột để khỏi mất chỗ đang gõ)
+  function refreshPreview() {
+    const txt = buildPrompt(analyze(data.list), data.list);
+    const sum = box?.querySelector('.pv summary'), pre = box?.querySelector('.pv .trx');
+    if (sum) sum.textContent = `Xem trước prompt (${txt.length.toLocaleString('vi-VN')} ký tự)`;
+    if (pre) pre.textContent = txt;
+    const me = box?.querySelector('details.me summary');
+    if (me) me.textContent = `👤 Hồ sơ kênh của tôi (${ME_FIELDS.filter(([k]) => (ST.me[k] || '').trim()).length}/${ME_FIELDS.length}) — tự gắn vào mọi prompt`;
+  }
+
+  function onInput(e) {
+    const t = e.target;
+    if (t.id === 'ttaTopic' && ST.ai) ST.ai.topic = t.value;
+    if (t.dataset?.me) { ST.me[t.dataset.me] = t.value; clearTimeout(onInput.tm); onInput.tm = setTimeout(() => chrome.storage.local.set({ myProfile: ST.me }), 500); }
+    if (ST.ai) refreshPreview();
+  }
+
   // ---------- cập nhật ----------
   async function refresh() {
+    if (box && box.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) { schedule(); return; } // đang gõ: để sau
     const user = profile();
     if (!user) { render(); return; }
-    if (user !== lastUser) { lastUser = user; ST.tr = {}; ST.open1 = null; }
+    if (user !== lastUser) { lastUser = user; ST.tr = {}; ST.open1 = null; ST.ai = null; }
     await load(user);
     render();
   }
   const schedule = () => { clearTimeout(timer); timer = setTimeout(refresh, 1200); };
 
-  chrome.storage.local.get('ttaPanelOpen').then(({ ttaPanelOpen }) => { if (ttaPanelOpen === false) ST.open = false; });
+  chrome.storage.local.get(['ttaPanelOpen', 'myProfile']).then(({ ttaPanelOpen, myProfile }) => { if (ttaPanelOpen === false) ST.open = false; ST.me = myProfile || {}; });
   chrome.storage.onChanged.addListener((ch) => { if (ch.videos || ch.users) schedule(); });
   // TikTok là trang 1 trang (SPA): theo dõi đổi địa chỉ
   let href = '';
@@ -210,6 +345,14 @@
     #tta-side .trx{background:#1f1f23;border-radius:6px;padding:6px 8px;margin-top:4px;font-size:12px;white-space:pre-wrap;max-height:180px;overflow:auto;user-select:text}
     #tta-side .ins{margin:6px 0;padding-left:0;list-style:none}
     #tta-side .ins li{margin:0 0 6px}
+    #tta-side button.ai{border-color:#7c5cff}
+    #tta-side .goals{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+    #tta-side .in{width:100%;box-sizing:border-box;background:#1f1f23;color:#f1f1f2;border:1px solid #3a3a40;border-radius:6px;padding:6px 8px;font:13px system-ui;margin:4px 0}
+    #tta-side .in:focus{outline:none;border-color:#25f4ee}
+    #tta-side details{margin:8px 0}
+    #tta-side summary{cursor:pointer;color:#c9c9d1;font-size:12px}
+    #tta-side .me label{display:block;font-size:11px;color:#a8a8b0;margin-top:4px}
+    #tta-side .pv .trx{max-height:220px}
     #tta-side .tag{display:inline-block;background:#1f1f23;border-radius:999px;padding:0 6px;margin:2px 2px 0 0;font-size:11px}
   `;
   (document.head || document.documentElement).appendChild(style);

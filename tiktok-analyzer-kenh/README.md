@@ -40,6 +40,7 @@ Mở trang kênh bất kỳ (`tiktok.com/@tenkenh`) và lướt như bình thư�
 - Chỉ số nhanh: view trung vị, ER, số video/tuần, tỉ lệ video ≥ 2× trung vị.
 - **🔥 Video hot**: 10 video nhiều view / bứt phá nhất; nút 📝 xem lời thoại, 📋 copy caption + lời thoại; **📝 Lấy lời thoại** cả 10 video rồi **📋 Copy tất cả**.
 - **🧭 Phân tích**: giờ đăng, độ dài, kiểu mở đầu hiệu quả nhất, tỉ lệ có lời nói, video gắn giỏ, hashtag hiệu quả.
+- **✨ Phân tích viral & viết lại bằng ChatGPT / Claude**: bấm ✨ ở 1 video (hoặc **✨ Top 10**), chọn mục tiêu — 🔍 Vì sao viral · ✍️ Viết lại cho kênh tôi · 🎣 10 câu hook · 🛒 Kịch bản bán hàng — nhập chủ đề / sản phẩm nếu muốn, rồi bấm **Mở ChatGPT** hoặc **Mở Claude**. Tiện ích gom kịch bản gốc (lời thoại) + caption + số liệu thành prompt, copy sẵn và mở trang AI (prompt ngắn được điền sẵn; dài thì bấm Ctrl+V). Mục **👤 Hồ sơ kênh của tôi** (ngách, sản phẩm, khách hàng, giọng văn, điều cần tránh) nhập 1 lần, tự gắn vào mọi prompt. Không cần API key.
 - Nút ↗ mở báo cáo đầy đủ trong Dashboard; nút – thu gọn cột.
 - **Không tự mở trang, không tải trang video**: lời thoại lấy từ link phụ đề có sẵn trong dữ liệu TikTok gửi về khi bạn lướt, nên không làm tăng nguy cơ bị TikTok chặn. Link phụ đề có hạn dùng vài giờ: nếu báo “chưa có phụ đề”, hãy cuộn lại kênh rồi thử lại.
 
