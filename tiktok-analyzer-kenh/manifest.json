@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TikTok Analyzer",
-  "version": "1.9.2",
+  "version": "1.10.0",
   "description": "Phân tích TikTok: video nhiều view theo từ khoá, hook & công thức viral, bình luận, theo dõi đối thủ, lời thoại gốc.",
   "permissions": [
     "storage",
@@ -55,7 +55,8 @@
       ],
       "js": [
         "src/common.js",
-        "src/content.js"
+        "src/content.js",
+        "src/panel.js"
       ],
       "run_at": "document_start"
     }

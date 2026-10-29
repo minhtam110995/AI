@@ -313,6 +313,7 @@
   function decorate() {
     fixBlocked();
     for (const a of document.querySelectorAll('a[href*="/video/"]')) {
+      if (a.closest('#tta-side')) continue; // không gắn nhãn vào cột phân tích của tiện ích
       const id = (a.getAttribute('href').match(/\/video\/(\d+)/) || [])[1];
       const v = id && mem.get(id);
       if (!v) continue;

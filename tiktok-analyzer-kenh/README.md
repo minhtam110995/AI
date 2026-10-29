@@ -35,6 +35,14 @@ Video phát trong khung riêng, kèm tên sản phẩm gắn giỏ. Tiện ích 
 
 Tiện ích chỉ hỗ trợ **xem**, không tải video xuống.
 
+## 📊 Cột phân tích ngay trên trang kênh TikTok (bản 1.10)
+Mở trang kênh bất kỳ (`tiktok.com/@tenkenh`) và lướt như bình thường: bên phải hiện cột **📊 Phân tích** tự cập nhật theo các video bạn đã lướt qua.
+- Chỉ số nhanh: view trung vị, ER, số video/tuần, tỉ lệ video ≥ 2× trung vị.
+- **🔥 Video hot**: 10 video nhiều view / bứt phá nhất; nút 📝 xem lời thoại, 📋 copy caption + lời thoại; **📝 Lấy lời thoại** cả 10 video rồi **📋 Copy tất cả**.
+- **🧭 Phân tích**: giờ đăng, độ dài, kiểu mở đầu hiệu quả nhất, tỉ lệ có lời nói, video gắn giỏ, hashtag hiệu quả.
+- Nút ↗ mở báo cáo đầy đủ trong Dashboard; nút – thu gọn cột.
+- **Không tự mở trang, không tải trang video**: lời thoại lấy từ link phụ đề có sẵn trong dữ liệu TikTok gửi về khi bạn lướt, nên không làm tăng nguy cơ bị TikTok chặn. Link phụ đề có hạn dùng vài giờ: nếu báo “chưa có phụ đề”, hãy cuộn lại kênh rồi thử lại.
+
 ## 🧭 Phân tích kênh
 1. Mở Dashboard, vào tab **🧭 Phân tích kênh** (thay cho tab Nội dung & Hook cũ).
 2. Dán link kênh (`https://www.tiktok.com/@tenkenh`) hoặc `@tenkenh`, chọn độ sâu, bấm **Phân tích**. Tiện ích mở kênh trong một cửa sổ nhỏ, tự cuộn lấy video, lấy bình luận 3 video nhiều view nhất (bỏ chọn ô “Lấy bình luận” nếu muốn nhanh hơn), lấy lời thoại 10 video nhiều view nhất, rồi tự chọn kênh đó trong báo cáo (cần đang đăng nhập tiktok.com). Kênh đã có dữ liệu thì bấm tên kênh để xem ngay; bấm **✕** cạnh tên kênh để xoá toàn bộ dữ liệu của kênh đó (video, hồ sơ, bình luận).

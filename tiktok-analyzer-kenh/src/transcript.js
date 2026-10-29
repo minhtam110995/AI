@@ -88,7 +88,7 @@ const Transcript = (() => {
 
   const clock = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
-  async function getOriginal({ link, author, id, lang }) {
+  async function getOriginal({ link, author, id, lang, cacheOnly }) {
     const p = link ? parseLink(link) : { author, id };
     if (!p?.id) throw new Error('Link không hợp lệ. Hãy dán link dạng https://www.tiktok.com/@kenh/video/123…');
     let video = null;
@@ -105,6 +105,14 @@ const Transcript = (() => {
         ({ track, segments } = await loadTrack(cached.subs, lang));
         if (segments.length) { video = cached; caption = cached.desc || ''; tracks = cached.subs; }
       } catch (_) { /* link hết hạn → tải lại trang */ }
+    }
+
+    // cacheOnly (cột phân tích trên trang kênh): không tải trang video, tránh bị TikTok chặn
+    if (!video && cacheOnly) {
+      const { videos = {} } = await chrome.storage.local.get('videos').catch(() => ({}));
+      const v = videos[p.id];
+      return { id: p.id, author: v?.author || p.author, video: null, caption: v?.desc || '', transcript: '', segments: [], cacheMiss: true,
+        note: v && !v.hasSpeech ? 'Video không có phụ đề (thường là video không lời / chỉ có nhạc).' : 'Chưa có phụ đề trong dữ liệu đã tải (hoặc link đã hết hạn). Cuộn lại kênh để TikTok gửi dữ liệu mới, rồi thử lại.' };
     }
 
     // 2) Chưa có hoặc link hết hạn: tải trang video để lấy dữ liệu mới
