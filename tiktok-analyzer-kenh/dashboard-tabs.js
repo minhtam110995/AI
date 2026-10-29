@@ -952,7 +952,7 @@ PANES.content = (list, author) => {
     const b = e.target, todo = hotList.filter((v) => !v.transcript && !tried(v));
     if (todo.length) {
       b.disabled = true;
-      for (let i = 0; i < todo.length; i++) { b.textContent = `⏳ Lấy lời thoại ${i + 1}/${todo.length}…`; await fetchTr(todo[i]); }
+      for (let i = 0; i < todo.length; i++) { b.textContent = `⏳ Lấy lời thoại ${i + 1}/${todo.length}…`; if (i) await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500)); await fetchTr(todo[i]); }
       b.disabled = false; b.textContent = '📋 Đã lấy xong — bấm để copy'; b.classList.add('primary');
       return;
     }

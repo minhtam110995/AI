@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TikTok Analyzer",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "Phân tích TikTok: video nhiều view theo từ khoá, hook & công thức viral, bình luận, theo dõi đối thủ, lời thoại gốc.",
   "permissions": [
     "storage",

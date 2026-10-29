@@ -140,6 +140,17 @@ async function openReport(keyword) {
 }
 
 // Cửa sổ nhỏ hiển thị thật (tab nền bị Chrome tạm dừng vẽ nên TikTok không tải thêm kết quả khi cuộn)
+// TikTok chặn tạm (HTTP 403 / trang lỗi): trang không chạy được content script → không trả lời.
+const BLOCKED_MSG = '⛔ TikTok đang chặn tạm truy cập (lỗi 403) vì có nhiều lượt mở tự động. Hãy: (1) mở tiktok.com ở tab thường xem có vào được không, đăng nhập / giải captcha nếu có; (2) tắt VPN / proxy nếu đang bật; (3) đợi 15–30 phút rồi thử lại, chọn mức quét "Nhanh".';
+async function pageAlive(tabId, ms = 20000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    try { if (await chrome.tabs.sendMessage(tabId, { type: 'context' })) return true; } catch (_) {}
+    await sleep(1500);
+  }
+  return false;
+}
+
 async function openWorkWindow(url, { wide = false } = {}) {
   // Lấy bình luận cần cửa sổ rộng: TikTok chỉ hiện khung bình luận bên phải ở giao diện máy tính
   // Màn hình nhỏ: Chrome từ chối cửa sổ quá to → lùi dần về kích thước nhỏ hơn
@@ -163,7 +174,8 @@ async function searchKeyword(input, scrolls, { silent = false } = {}) {
     const before = await count();
     await setKw({ step: 'run', msg: `Đang tìm "${keyword}" trên TikTok trong cửa sổ nhỏ (để cửa sổ đó mở, đừng thu nhỏ)…` });
     win = await openWorkWindow(`https://www.tiktok.com/search/video?q=${encodeURIComponent(keyword)}`);
-    await sleep(8000);
+    if (!(await pageAlive(win.tabId))) throw new Error(BLOCKED_MSG);
+    await sleep(6000);
     const tick = setInterval(async () => setKw({ step: 'run', msg: `Đang cuộn lấy kết quả "${keyword}": ${await count()} video… (để cửa sổ TikTok nhỏ mở)` }), 5000);
     try { await chrome.tabs.sendMessage(win.tabId, { type: 'autoscroll', times: scrolls, wait: true }); } catch (_) { await sleep(scrolls * 3000); }
     clearInterval(tick);
@@ -174,7 +186,7 @@ async function searchKeyword(input, scrolls, { silent = false } = {}) {
     if (n && !silent) await openReport(keyword);
     await setKw({ step: 'done', msg: n ? `✓ Xong: có ${n} video cho từ khoá "${keyword}" (+${Math.max(0, n - before)} video mới lần này).` : `Không lấy được video nào. Hãy mở tiktok.com, đăng nhập (hoặc giải captcha) rồi thử lại.`, n });
   } catch (e) {
-    await setKw({ step: 'error', msg: 'Lỗi: ' + (e.message || e) });
+    await setKw({ step: 'error', msg: (e.message || '').startsWith('⛔') ? e.message : 'Lỗi: ' + (e.message || e) });
   }
   if (win) try { await chrome.windows.remove(win.winId); } catch (_) {}
   searching = false;
@@ -203,8 +215,11 @@ async function commentsForTop(win, user, vids, setJob, ids = null) {
   let got = 0;
   for (let i = 0; i < todo.length; i++) {
     await setJob({ step: 'run', msg: `Đang lấy bình luận video top ${i + 1}/${todo.length} của @${user}…` });
+    if (i) await sleep(4000 + Math.random() * 4000); // nghỉ giữa các video để TikTok không chặn
     await chrome.tabs.update(win.tabId, { url: `https://www.tiktok.com/@${encodeURIComponent(todo[i].author)}/video/${todo[i].id}` });
-    await sleep(7000);
+    await sleep(3000);
+    if (!(await pageAlive(win.tabId))) throw new Error(BLOCKED_MSG);
+    await sleep(4000);
     const timeout = sleep(90000);
     try { await Promise.race([chrome.tabs.sendMessage(win.tabId, { type: 'comments', max: 150, wait: true }), timeout]); } catch (_) {}
     try { await chrome.tabs.sendMessage(win.tabId, { type: 'flushNow' }); } catch (_) {}
@@ -228,7 +243,7 @@ async function channelComments(user, ids) {
       : r.got ? `✓ Đã lấy bình luận ${r.got}/${r.tried} video top của @${user}.`
       : `⚠️ Không lấy được bình luận (${r.tried} video). Hãy đăng nhập tiktok.com, mở thử 1 video xem có hiện bình luận không (captcha?), rồi thử lại.` });
   } catch (e) {
-    await setJob({ step: 'error', msg: 'Lỗi: ' + (e.message || e) });
+    await setJob({ step: 'error', msg: (e.message || '').startsWith('⛔') ? e.message : 'Lỗi: ' + (e.message || e) });
   }
   if (win) try { await chrome.windows.remove(win.winId); } catch (_) {}
   analyzing = false;
@@ -245,7 +260,8 @@ async function analyzeChannel(input, scrolls, { comments = true } = {}) {
     const before = (await mine()).length;
     await setJob({ step: 'run', msg: `Đang mở kênh @${user} trong cửa sổ nhỏ (để cửa sổ đó mở, đừng thu nhỏ)…` });
     win = await openWorkWindow(`https://www.tiktok.com/@${encodeURIComponent(user)}`);
-    await sleep(8000);
+    if (!(await pageAlive(win.tabId))) throw new Error(BLOCKED_MSG);
+    await sleep(6000);
     const tick = setInterval(async () => setJob({ step: 'run', msg: `Đang cuộn kênh @${user}: ${(await mine()).length} video…` }), 5000);
     try { await chrome.tabs.sendMessage(win.tabId, { type: 'autoscroll', times: scrolls, wait: true }); } catch (_) { await sleep(scrolls * 3000); }
     clearInterval(tick);
@@ -267,13 +283,14 @@ async function analyzeChannel(input, scrolls, { comments = true } = {}) {
       const todo = vids.sort((a, b) => b.views - a.views).slice(0, 10).filter((v) => !v.transcript);
       for (let i = 0; i < todo.length; i++) {
         await setJob({ step: 'run', msg: `Đã có ${vids.length} video. Đang lấy lời thoại video top ${i + 1}/${todo.length}…` });
-        await handleOriginal({ author: todo[i].author, id: todo[i].id }).catch(() => null);
-        await sleep(1200 + Math.random() * 800);
+        const err = await handleOriginal({ author: todo[i].author, id: todo[i].id }).then(() => null, (e) => e);
+        if (/HTTP 4(03|29)/.test(err?.message || '')) throw new Error(BLOCKED_MSG); // bị chặn → dừng ngay, không gọi tiếp
+        await sleep(2000 + Math.random() * 1500);
       }
       await setJob({ step: 'done', msg: `✓ Xong: có ${vids.length} video của @${user} (+${Math.max(0, vids.length - before)} video mới lần này).`, n: vids.length });
     }
   } catch (e) {
-    await setJob({ step: 'error', msg: 'Lỗi: ' + (e.message || e) });
+    await setJob({ step: 'error', msg: (e.message || '').startsWith('⛔') ? e.message : 'Lỗi: ' + (e.message || e) });
   }
   if (win) try { await chrome.windows.remove(win.winId); } catch (_) {}
   analyzing = false;
