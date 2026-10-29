@@ -934,27 +934,29 @@ PANES.content = (list, author) => {
   el.querySelectorAll('.hotTab').forEach((b) => (b.onclick = () => { CH.hot = b.dataset.h; render(); }));
   // 📋 Copy toàn bộ nội dung video hot (caption + lời thoại đầy đủ). Video chưa có lời thoại → lấy trước, bấm lần 2 để copy.
   // Đã thử lấy lời thoại: có trường transcript (kể cả rỗng = video không có lời) hoặc vừa thử trong phiên này
-  const tried = (v) => !!v.trTried || typeof v.transcript === 'string';
+  const tried = (v) => !!v.trTried || typeof v.transcript === 'string' || (CH.trTried ||= new Set()).has(v.id);
+  const trOf = (v) => v.transcript || CH.trText?.[v.id] || '';
   const fullText = (v) => [`🎬 ${vurl(v)} — ${TTA.fmt(v.views)} view`, `Caption: ${(v.desc || '').trim() || '–'}`,
-    `Lời thoại: ${v.transcript ? v.transcript.trim() : tried(v) ? '(video không có lời thoại / phụ đề)' : '(chưa lấy)'}`].join('\n');
+    `Lời thoại: ${trOf(v) ? trOf(v).trim() : tried(v) ? '(video không có lời thoại / phụ đề)' : '(chưa lấy)'}`].join('\n');
   const vById = new Map(hotList.map((v) => [v.id, v]));
   const fetchTr = async (v) => {
     if (v.transcript || tried(v)) return;
     const r = await chrome.runtime.sendMessage({ type: 'getOriginal', author: v.author, id: v.id }).catch(() => null);
     v.trTried = true;
-    if (r?.ok && r.result?.transcript) v.transcript = r.result.transcript;
+    (CH.trTried ||= new Set()).add(v.id); // nhớ qua các lần Dashboard vẽ lại
+    if (r?.ok && r.result?.transcript) { v.transcript = r.result.transcript; (CH.trText ||= {})[v.id] = r.result.transcript; }
   };
   const copyOut = (btn, text, label) => navigator.clipboard.writeText(text).then(() => { btn.textContent = '✓'; setTimeout(() => (btn.textContent = label), 1500); })
     .catch(() => { btn.textContent = label; alert('Trình duyệt chặn copy. Bấm lại nút một lần nữa.'); });
   el.querySelectorAll('.hotCopy').forEach((b) => (b.onclick = async () => {
     const v = vById.get(b.dataset.id);
-    if (!v.transcript && !tried(v)) { b.textContent = '⏳'; b.disabled = true; await fetchTr(v); b.disabled = false; b.textContent = '📋'; b.title = 'Đã lấy lời thoại — bấm để copy'; b.classList.add('primary'); return; }
+    if (!trOf(v) && !tried(v)) { b.textContent = '⏳'; b.disabled = true; await fetchTr(v); b.disabled = false; b.textContent = '📋'; b.title = 'Đã lấy lời thoại — bấm để copy'; b.classList.add('primary'); return; }
     copyOut(b, fullText(v), '📋');
   }));
   // Tiến trình lấy lời thoại lưu ở CH.hotJob để không mất khi Dashboard vẽ lại (mỗi lời thoại lưu xong là vẽ lại)
   $('#hotCopyAll').onclick = async (e) => {
     const b = e.target, todo = hotList.filter((v) => !v.transcript && !tried(v));
-    if (todo.length) {
+    if (todo.length && !CH.hotJob?.done) {
       CH.hotJob = { running: true, i: 0, n: todo.length };
       for (let i = 0; i < todo.length; i++) {
         CH.hotJob.i = i + 1;
