@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
   // ---------- Chuyển khoản ngân hàng (tài khoản cá nhân) ----------
   if (provider === 'bank') {
     // Mặc định: tài khoản nhận tiền của Viral Finder (đặt BANK_* trong Secrets để đổi)
-    const bankId = env('BANK_ID') || 'TCB', account = env('BANK_ACCOUNT') || '19035710006015', accountName = env('BANK_ACCOUNT_NAME') || 'NGUYEN MINH TAM';
+    const bankId = env('BANK_ID') || 'BIDV', account = env('BANK_ACCOUNT') || '1590410793', accountName = env('BANK_ACCOUNT_NAME') || 'NGUYEN MINH TAM';
     if (!bankId || !account) return json({ error: 'Máy chủ chưa cấu hình tài khoản nhận tiền.' }, 500);
     // Đơn chờ thanh toán cùng gói trong 30 phút qua → dùng lại, tránh khách chuyển 2 lần cho 2 mã khác nhau
     const { data: open } = await admin.from('payments').select('order_code, amount, transfer_content')
@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     // Ảnh VietQR (chuẩn Napas, mọi app ngân hàng quét được) — dịch vụ ảnh công khai của VietQR.io
     const qrUrl = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(account)}-compact2.png?amount=${amount}`
       + `&addInfo=${encodeURIComponent(content)}&accountName=${encodeURIComponent(accountName)}`;
-    return json({ orderCode: code, amount, transfer: { bankId, bankName: env('BANK_NAME') || (bankId === 'TCB' ? 'Techcombank' : bankId), account, accountName, content, qrUrl } });
+    return json({ orderCode: code, amount, transfer: { bankId, bankName: env('BANK_NAME') || bankId, account, accountName, content, qrUrl } });
   }
 
   // ---------- PayOS ----------
