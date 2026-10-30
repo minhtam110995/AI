@@ -27,8 +27,8 @@ Deno.serve(async (req) => {
 
   // ---------- Chuyển khoản ngân hàng (tài khoản cá nhân) ----------
   if (provider === 'bank') {
-    // Mặc định: tài khoản nhận tiền của Viral Finder (đặt BANK_* trong Secrets để đổi)
-    const bankId = env('BANK_ID') || 'BIDV', account = env('BANK_ACCOUNT') || '1590410793', accountName = env('BANK_ACCOUNT_NAME') || 'NGUYEN MINH TAM';
+    // Mặc định: tài khoản ảo (VA) BIDV do SePay cấp, tiền về tài khoản chính 1590410793 — SePay với BIDV chỉ báo giao dịch vào VA (đặt BANK_* trong Secrets để đổi)
+    const bankId = env('BANK_ID') || 'BIDV', account = env('BANK_ACCOUNT') || '96247MH020', accountName = env('BANK_ACCOUNT_NAME') || 'NGUYEN MINH TAM';
     if (!bankId || !account) return json({ error: 'Máy chủ chưa cấu hình tài khoản nhận tiền.' }, 500);
     // Đơn chờ thanh toán cùng gói trong 30 phút qua → dùng lại, tránh khách chuyển 2 lần cho 2 mã khác nhau
     const { data: open } = await admin.from('payments').select('order_code, amount, transfer_content')

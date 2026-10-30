@@ -80,7 +80,7 @@ Cài Supabase CLI (https://supabase.com/docs/guides/cli), rồi trong thư mục
 supabase login
 supabase link --project-ref <mã dự án, phần xxxx trong xxxx.supabase.co>
 supabase secrets set PAYMENT_PROVIDER=bank BANK_ID=BIDV BANK_NAME=BIDV \
-  BANK_ACCOUNT=1590410793 BANK_ACCOUNT_NAME="NGUYEN MINH TAM" SEPAY_API_KEY=<chuỗi bí mật ở bước 3>
+  BANK_ACCOUNT=96247MH020 BANK_ACCOUNT_NAME="NGUYEN MINH TAM" SEPAY_API_KEY=<chuỗi bí mật ở bước 3>
 supabase functions deploy create-payment
 supabase functions deploy sepay-webhook --no-verify-jwt
 ```
