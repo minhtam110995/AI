@@ -1,5 +1,5 @@
 // SePay gọi vào đây mỗi khi tài khoản ngân hàng nhận tiền.
-// Tìm mã đơn (TTA + số) trong nội dung chuyển khoản → kích hoạt / cộng hạn gói.
+// Tìm mã đơn (VF + số) trong nội dung chuyển khoản → kích hoạt / cộng hạn gói.
 // Cấu hình trong SePay: Tích hợp Webhooks → URL: https://<project>.supabase.co/functions/v1/sepay-webhook
 //   Kiểu chứng thực: API Key → điền đúng giá trị SEPAY_API_KEY đã đặt cho function.
 import { createClient } from 'npm:@supabase/supabase-js@2';

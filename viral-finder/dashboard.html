@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viral Finder – Dashboard</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>🚀 Viral Finder</h1>
+    <p class="muted" id="subtitle">Phân tích dữ liệu đã thu thập từ tiktok.com</p>
+  </div>
+  <div class="actions">
+    <button id="acctBtn" class="hidden"></button>
+    <button id="exportCsv">Xuất CSV</button>
+    <button id="exportJson">Sao lưu JSON</button>
+    <label class="btn">Nhập JSON<input type="file" id="importJson" accept=".json" hidden></label>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <a href="#overview" data-tab="overview">📊 Tổng quan</a>
+  <a href="#keyword" data-tab="keyword">🔎 Từ khoá</a>
+  <a href="#content" data-tab="content">🧭 Phân tích kênh</a>
+  <a href="#comments" data-tab="comments">💬 Bình luận</a>
+  <a href="#trends" data-tab="trends">📡 Theo dõi & Trend</a>
+</nav>
+
+<section class="filters">
+  <label>Kênh
+    <select id="fAuthor"><option value="">Tất cả kênh</option></select>
+  </label>
+  <label>Thời gian đăng
+    <select id="fRange">
+      <option value="0">Toàn bộ</option>
+      <option value="7">7 ngày</option>
+      <option value="30">30 ngày</option>
+      <option value="90" selected>90 ngày</option>
+      <option value="365">12 tháng</option>
+    </select>
+  </label>
+  <label class="grow">Tìm theo mô tả / hashtag
+    <input id="fSearch" type="search" placeholder="vd: review, #skincare">
+  </label>
+</section>
+
+<div data-pane="overview">
+<section id="profile" class="profile hidden"></section>
+<section class="kpis" id="kpis"></section>
+<section class="card insights"><h2>💡 Gợi ý từ dữ liệu</h2><ul id="insights"></ul></section>
+
+<div class="grid2">
+  <section class="card wide"><h2>Lượt xem từng video theo ngày đăng</h2><p class="muted small">Mỗi cột là 1 video. Đường kẻ ngang = lượt xem trung vị.</p><div id="chartTimeline" class="chart"></div></section>
+  <section class="card"><h2>Giờ & ngày đăng hiệu quả</h2><p class="muted small">Lượt xem trung vị theo khung giờ đăng (giờ máy bạn). Ô càng đậm càng tốt.</p><div id="chartHeat" class="chart"></div></section>
+  <section class="card"><h2>Độ dài video tối ưu</h2><p class="muted small">Lượt xem trung vị theo độ dài video.</p><div id="chartDuration" class="chart"></div></section>
+  <section class="card"><h2>Hashtag hiệu quả nhất</h2><p class="muted small">Lượt xem trung vị của video chứa hashtag (≥ 2 video).</p><div id="chartTags" class="chart"></div></section>
+  <section class="card"><h2>Tăng trưởng follower</h2><p class="muted small">Ghi lại mỗi lần bạn mở trang kênh (tối đa 1 mốc/giờ).</p><div id="chartGrowth" class="chart"></div></section>
+</div>
+
+
+<section class="card">
+  <div class="tablehead"><h2>Danh sách video</h2><span class="muted small" id="tableInfo"></span></div>
+  <div class="tablewrap"><table id="videos"></table></div>
+</section>
+</div>
+<div data-pane="keyword" id="paneKeyword"></div>
+<div data-pane="content" id="paneContent"></div>
+<div data-pane="comments" id="paneComments"></div>
+<div data-pane="trends" id="paneTrends"></div>
+
+<div id="tip" class="tip" role="tooltip"></div>
+<script src="src/config.js"></script>
+<script src="src/auth.js"></script>
+<script src="src/common.js"></script>
+<script src="dashboard.js"></script>
+<script src="dashboard-tabs.js"></script>
+</body>
+</html>

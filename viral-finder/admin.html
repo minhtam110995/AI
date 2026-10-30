@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quản trị – Viral Finder</title>
+<link rel="stylesheet" href="dashboard.css">
+<style>
+  .kpis .kpi .v { font-size: 22px; }
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; margin-top: 8px; }
+  .bars div { flex: 1; background: var(--series); border-radius: 3px 3px 0 0; min-height: 2px; }
+  .filters2 { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .filters2 input { flex: 1; min-width: 200px; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: 14px system-ui; }
+  td .mini { margin: 1px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--series-soft); }
+  .pill.trial { background: #fde7b0; color: #7a5200; } .pill.free { background: var(--grid); } .pill.blocked { background: #f8c9c9; color: #8a1010; }
+  .detail { background: var(--surface); }
+  .msg { min-height: 18px; font-size: 13px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div><h1>🛠️ Viral Finder – Quản trị</h1><p class="muted small" id="sub">Đang kiểm tra quyền…</p></div>
+  <div class="actions"><button id="reload">🔄 Tải lại</button><button id="toAcc">Tài khoản của tôi</button></div>
+</header>
+<section id="deny" class="card hidden"><h2>Không có quyền</h2><p class="muted">Trang này chỉ dành cho email quản trị. Hãy đăng nhập bằng email quản trị ở trang Tài khoản.</p></section>
+<div id="app" class="hidden">
+  <section class="kpis" id="kpis"></section>
+  <section class="card"><h2>Doanh thu 30 ngày</h2><div class="bars" id="bars"></div><p class="muted small" id="barsInfo"></p></section>
+  <section class="card"><h2>⏳ Đơn chờ thanh toán (14 ngày)</h2>
+    <p class="muted small">Khách đã chuyển khoản nhưng ghi sai nội dung / thiếu mã → đối chiếu với lịch sử giao dịch ngân hàng (SePay) rồi bấm “Kích hoạt”.</p>
+    <div id="pending" class="tablewrap"></div></section>
+  <section class="card"><h2>👥 Khách hàng</h2>
+    <div class="filters2"><input id="q" type="search" placeholder="Tìm theo email…">
+      <select id="filter"><option value="all">Tất cả</option><option value="paying">Đang trả phí</option><option value="trial">Đang dùng thử</option><option value="expiring">Sắp hết hạn (7 ngày)</option><option value="expired">Đã hết hạn</option><option value="free">Miễn phí</option></select>
+      <button id="csv">Xuất CSV</button></div>
+    <p class="msg" id="msg"></p>
+    <div id="users" class="tablewrap"></div></section>
+  <section class="card"><h2>🔑 Quản trị viên</h2>
+    <div class="filters2"><input id="newAdmin" type="email" placeholder="email nhân viên hỗ trợ"><button id="addAdmin">Thêm</button></div>
+    <div id="admins" class="muted small"></div></section>
+</div>
+<script src="src/config.js"></script>
+<script src="src/auth.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

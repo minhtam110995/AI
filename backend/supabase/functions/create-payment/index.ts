@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
   }
 
   // ---------- PayOS ----------
-  const description = `TTA ${plan.toUpperCase()} ${months}T`.slice(0, 25);
+  const description = `VF ${plan.toUpperCase()} ${months}T`.slice(0, 25);
   const returnUrl = env('PAYMENT_RETURN_URL');
   const cancelUrl = env('PAYMENT_CANCEL_URL') || returnUrl;
   const signature = await hmacHex(env('PAYOS_CHECKSUM_KEY'),
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     body: JSON.stringify({
       orderCode, amount, description, returnUrl, cancelUrl, signature,
       buyerEmail: user.email, expiredAt: Math.floor(Date.now() / 1000) + 30 * 60,
-      items: [{ name: `TikTok Analyzer ${plan.toUpperCase()} ${months} tháng`, quantity: 1, price: amount }],
+      items: [{ name: `Viral Finder ${plan.toUpperCase()} ${months} tháng`, quantity: 1, price: amount }],
     }),
   });
   const body = await res.json().catch(() => ({}));

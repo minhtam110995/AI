@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tài khoản – Viral Finder</title>
+<link rel="stylesheet" href="dashboard.css">
+<style>
+  body { max-width: 880px; }
+  .auth { max-width: 380px; margin: 40px auto; }
+  .auth h2 { font-size: 18px; margin-bottom: 12px; }
+  .auth form { display: grid; gap: 10px; }
+  .auth input { width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 15px system-ui; }
+  .auth button[type=submit] { padding: 10px; font-size: 14px; }
+  .links { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-top: 4px; }
+  .links a { color: var(--series); cursor: pointer; }
+  .msg { min-height: 20px; font-size: 13px; }
+  .msg.err { color: var(--bad); } .msg.ok { color: var(--good); }
+  .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .plan { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--card); display: grid; gap: 8px; align-content: start; }
+  .plan.cur { border-color: var(--series); box-shadow: 0 0 0 1px var(--series); }
+  .plan h3 { margin: 0; font-size: 16px; }
+  .plan ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--text2); }
+  .price { font-size: 22px; font-weight: 700; }
+  .buy { display: grid; gap: 6px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--series-soft); font-weight: 700; font-size: 12px; }
+  #payModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  #payModal .pm-inner { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; width: min(440px, 100%); max-height: 94vh; overflow: auto; display: grid; gap: 10px; }
+  .pm-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+  .pm-head h2 { font-size: 18px; margin: 0; }
+  .pm-x { border: 0; background: transparent; font-size: 18px; }
+  .pm-qr { background: #fff; border-radius: 10px; padding: 8px; display: grid; place-items: center; min-height: 120px; }
+  .pm-qr img { width: 100%; max-width: 280px; display: block; }
+  .pm-tbl { width: 100%; border-collapse: collapse; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+  .pm-tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .pm-tbl td:last-child { text-align: right; }
+  .pm-tbl .hl { color: var(--good); }
+  .pm-wait { text-align: center; font-size: 13px; color: var(--text2); margin: 0; }
+  .pm-wait.done { color: var(--good); font-weight: 700; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--good); border-radius: 50%; animation: sp 1s linear infinite; vertical-align: -2px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .warn { border-left: 3px solid var(--bad); padding: 8px 12px; background: var(--card); border-radius: 6px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div><h1>🚀 Viral Finder – Tài khoản</h1><p class="muted small" id="sub"></p></div>
+  <div class="actions"><button id="toDash">Mở Dashboard</button><button id="logout" class="hidden">Đăng xuất</button></div>
+</header>
+
+<section id="dev" class="card hidden"><h2>Chế độ nội bộ</h2>
+  <p class="muted">Viral Finder chưa được cấu hình máy chủ tài khoản (file <code>src/config.js</code>), nên đang mở toàn bộ tính năng và không cần đăng nhập. Xem hướng dẫn trong <code>backend/README.md</code> để bật đăng ký, đăng nhập và thu phí.</p></section>
+
+<section id="authBox" class="auth hidden">
+  <div class="card">
+    <h2 id="authTitle">Đăng nhập</h2>
+    <form id="authForm">
+      <input id="email" type="email" placeholder="Email" autocomplete="email" required>
+      <input id="pw" type="password" placeholder="Mật khẩu (ít nhất 6 ký tự)" autocomplete="current-password" minlength="6" required>
+      <input id="pw2" type="password" placeholder="Nhập lại mật khẩu" autocomplete="new-password" class="hidden">
+      <button type="submit" class="primary" id="authBtn">Đăng nhập</button>
+      <div class="msg" id="authMsg"></div>
+    </form>
+    <div class="links"><a id="toggle">Chưa có tài khoản? Đăng ký</a><a id="forgot">Quên mật khẩu</a></div>
+  </div>
+</section>
+
+<div id="accBox" class="hidden">
+  <section class="card" id="status"></section>
+  <section class="card"><h2>Nâng cấp / gia hạn</h2>
+    <p class="muted small">Thanh toán bằng quét mã VietQR / chuyển khoản ngân hàng. Gói được kích hoạt tự động sau khi tiền về (thường vài giây). Gia hạn khi còn hạn sẽ được cộng nối tiếp.</p>
+    <div class="plans" id="plans"></div>
+    <p class="msg" id="payMsg"></p>
+  </section>
+  <div class="grid2">
+    <section class="card"><h2>Thiết bị đang dùng</h2><div id="devices" class="muted small">Đang tải…</div></section>
+    <section class="card"><h2>Lịch sử thanh toán</h2><div id="payments" class="muted small">Đang tải…</div></section>
+  </div>
+</div>
+<script src="src/config.js"></script>
+<script src="src/auth.js"></script>
+<script src="account.js"></script>
+</body>
+</html>
