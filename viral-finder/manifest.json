@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Viral Finder",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Tìm video viral TikTok: phân tích kênh ngay khi lướt, lời thoại gốc, công thức viral, viết lại kịch bản với ChatGPT / Claude.",
   "permissions": [
     "storage",

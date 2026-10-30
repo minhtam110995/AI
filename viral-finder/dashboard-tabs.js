@@ -37,6 +37,24 @@ function groupStats(list, keyFn) {
 // ================= 🧭 Phân tích kênh =================
 // Dán link kênh → tiện ích tự thu thập → báo cáo: thẻ kênh, sức khoẻ, video hot, tuyến nội dung, công thức, việc nên làm.
 const CH = { input: '', hot: 'views', autoPick: 0 };
+
+// ---- 📋 Copy nội dung gốc (caption + lời thoại) — dùng chung cho Video hot và báo cáo từ khoá ----
+// Đã thử lấy lời thoại: có trường transcript (kể cả rỗng = video không có lời) hoặc vừa thử trong phiên này
+const tried = (v) => !!v.trTried || typeof v.transcript === 'string' || (CH.trTried ||= new Set()).has(v.id);
+const trOf = (v) => v.transcript || CH.trText?.[v.id] || '';
+const fullText = (v) => [`🎬 ${vurl(v)} — ${TTA.fmt(v.views)} view`, `Caption: ${(v.desc || '').trim() || '–'}`,
+  `Lời thoại: ${trOf(v) ? trOf(v).trim() : tried(v) ? '(video không có lời thoại / phụ đề)' : '(chưa lấy)'}`].join('\n');
+const fetchTr = async (v) => {
+  if (v.transcript || tried(v)) return;
+  const r = await chrome.runtime.sendMessage({ type: 'getOriginal', author: v.author, id: v.id }).catch(() => null);
+  if (!r?.ok) return r; // hết lượt / bị chặn → chưa tính là đã thử, lần sau thử lại
+  v.trTried = true;
+  (CH.trTried ||= new Set()).add(v.id); // nhớ qua các lần Dashboard vẽ lại
+  if (r.result?.transcript) { v.transcript = r.result.transcript; (CH.trText ||= {})[v.id] = r.result.transcript; }
+  return r;
+};
+const copyOut = (btn, text, label, done = '✓') => navigator.clipboard.writeText(text).then(() => { btn.textContent = done; setTimeout(() => (btn.textContent = label), 1500); })
+  .catch(() => { btn.textContent = label; alert('Trình duyệt chặn copy. Bấm lại nút một lần nữa.'); });
 const DAY = 86400;
 // Hashtag "kéo đề xuất" chung chung, không nói lên chủ đề kênh
 const GENERIC_TAGS = new Set('fyp fypシ fypシ゚viral foryou foryoupage fypage fy fyp2024 fyp2025 fyppp xuhuong xuhuongtiktok xh trending trend viral viralvideo tiktok tiktokvietnam capcut learnontiktok foryourpage douyin reels'.split(' '));
@@ -570,19 +588,29 @@ function channelCompare(author, others, persp) {
   return { html, acts, brief };
 }
 
-// Xoá toàn bộ dữ liệu của 1 kênh: video, hồ sơ, bình luận; bỏ khỏi so sánh / theo dõi
+// Xoá toàn bộ dữ liệu của 1 kênh (hoặc nhiều kênh): video, hồ sơ, bình luận; bỏ khỏi so sánh / theo dõi
 async function deleteChannel(a) {
   const n = state.videos.filter((v) => v.author === a).length;
   if (!confirm(`Xoá kênh @${a} khỏi dữ liệu?\n\nSẽ xoá ${n} video, hồ sơ kênh và bình luận đã lấy của kênh này (cả trong báo cáo từ khoá nếu có). Không hoàn tác được.`)) return;
+  await removeChannels([a]);
+}
+async function deleteAllChannels(list) {
+  const n = state.videos.filter((v) => list.includes(v.author)).length;
+  if (!confirm(`Xoá hết dữ liệu của cả ${list.length} kênh?\n\nSẽ xoá ${n} video, hồ sơ kênh và bình luận đã lấy — gồm cả video trong các báo cáo từ khoá. Muốn giữ lại thì bấm “Sao lưu JSON” trước. Không hoàn tác được.`)) return;
+  await removeChannels(list);
+}
+async function removeChannels(list) {
+  const del = new Set(list.map((a) => a.toLowerCase()));
   const all = await chrome.storage.local.get(['videos', 'users', 'chCompare', 'myChannel', 'watchChannels']);
   const videos = all.videos || {};
   const cKeys = [];
-  for (const id in videos) if ((videos[id].author || '').toLowerCase() === a.toLowerCase()) { delete videos[id]; cKeys.push('c:' + id); }
+  for (const id in videos) if (del.has((videos[id].author || '').toLowerCase())) { delete videos[id]; cKeys.push('c:' + id); }
   const users = all.users || {};
-  delete users[a];
-  const out = { videos, users, chCompare: (all.chCompare || []).filter((x) => x !== a), watchChannels: (all.watchChannels || []).filter((x) => x !== a) };
-  if (all.myChannel === a) out.myChannel = '';
-  if ($('#fAuthor').value === a) $('#fAuthor').value = '';
+  for (const u in users) if (del.has(u.toLowerCase())) delete users[u];
+  const keep = (x) => !del.has(String(x).toLowerCase());
+  const out = { videos, users, chCompare: (all.chCompare || []).filter(keep), watchChannels: (all.watchChannels || []).filter(keep) };
+  if (all.myChannel && !keep(all.myChannel)) out.myChannel = '';
+  if ($('#fAuthor').value && !keep($('#fAuthor').value)) $('#fAuthor').value = '';
   await chrome.storage.local.remove(cKeys);
   await chrome.storage.local.set(out);
 }
@@ -646,7 +674,7 @@ PANES.content = (list, author) => {
         <label class="small" title="Tải thêm 10 trang video ở chế độ nền để lấy lời thoại. Dễ bị TikTok chặn tạm (lỗi 403) nếu dùng nhiều — có thể lấy sau bằng nút 📋 ở Video hot."><input type="checkbox" id="chTrOn"${CH.trOn && LIM().bulkTranscript ? ' checked' : ''}${LIM().bulkTranscript ? '' : ' disabled'}> ${LIM().bulkTranscript ? '' : '🔒 '}Lấy lời thoại 10 video top</label>
         <button id="chGo" class="primary">Phân tích</button></div>
       <p class="muted small" id="chJob">${job ? esc(job.msg) + (job.step === 'run' ? ' (đừng đóng Chrome)' : '') + (job.locked ? ' <a href="#" class="toAcc">Mở trang Tài khoản →</a>' : '') : ''}</p>
-      ${known.length ? `<div class="toolbar"><span class="muted small">Kênh đã có dữ liệu:</span>${known.map((a) => `<span class="chipgrp"><button class="mini chPick${a === author ? ' primary' : ''}" data-a="${esc(a)}">@${esc(a)} · ${counts[a]}</button><button class="mini chDel" data-a="${esc(a)}" title="Xoá dữ liệu kênh @${esc(a)}">✕</button></span>`).join('')}</div>` : ''}
+      ${known.length ? `<div class="toolbar"><span class="muted small">Kênh đã có dữ liệu:</span>${known.map((a) => `<span class="chipgrp"><button class="mini chPick${a === author ? ' primary' : ''}" data-a="${esc(a)}">@${esc(a)} · ${counts[a]}</button><button class="mini chDel" data-a="${esc(a)}" title="Xoá dữ liệu kênh @${esc(a)}">✕</button></span>`).join('')}${known.length > 1 ? `<button class="mini" id="chDelAll" title="Xoá dữ liệu của tất cả kênh">🗑 Xoá hết</button>` : ''}</div>` : ''}
       ${author && rivalsPick.length ? `<div class="toolbar"><span class="muted small">So sánh với (tối đa 3):</span>${rivalsPick.map((a) => `<button class="mini chCmp${others.includes(a) ? ' primary' : ''}" data-a="${esc(a)}">${a === state.myChannel ? '⭐ ' : ''}@${esc(a)}</button>`).join('')}</div>` : ''}
     </section>`;
   const bindHead = () => {
@@ -660,6 +688,7 @@ PANES.content = (list, author) => {
     };
     el.querySelectorAll('.chPick').forEach((b) => (b.onclick = () => { $('#fAuthor').value = b.dataset.a; render(); }));
     el.querySelectorAll('.chDel').forEach((b) => (b.onclick = () => deleteChannel(b.dataset.a)));
+    if ($('#chDelAll')) $('#chDelAll').onclick = () => deleteAllChannels(Object.keys(counts));
     el.querySelectorAll('.chCmp').forEach((b) => (b.onclick = () => {
       const a = b.dataset.a;
       if (a === state.myChannel) { chrome.storage.local.set({ myChannel: '' }); return; } // bỏ chọn kênh của tôi = bỏ ⭐
@@ -938,21 +967,7 @@ PANES.content = (list, author) => {
   if ($('#chFields')) $('#chFields').onclick = (e) => navigator.clipboard.writeText(JSON.stringify(state.fieldStats, null, 1)).then(() => (e.target.textContent = '✓ Đã copy'));
   el.querySelectorAll('.hotTab').forEach((b) => (b.onclick = () => { CH.hot = b.dataset.h; render(); }));
   // 📋 Copy toàn bộ nội dung video hot (caption + lời thoại đầy đủ). Video chưa có lời thoại → lấy trước, bấm lần 2 để copy.
-  // Đã thử lấy lời thoại: có trường transcript (kể cả rỗng = video không có lời) hoặc vừa thử trong phiên này
-  const tried = (v) => !!v.trTried || typeof v.transcript === 'string' || (CH.trTried ||= new Set()).has(v.id);
-  const trOf = (v) => v.transcript || CH.trText?.[v.id] || '';
-  const fullText = (v) => [`🎬 ${vurl(v)} — ${TTA.fmt(v.views)} view`, `Caption: ${(v.desc || '').trim() || '–'}`,
-    `Lời thoại: ${trOf(v) ? trOf(v).trim() : tried(v) ? '(video không có lời thoại / phụ đề)' : '(chưa lấy)'}`].join('\n');
   const vById = new Map(hotList.map((v) => [v.id, v]));
-  const fetchTr = async (v) => {
-    if (v.transcript || tried(v)) return;
-    const r = await chrome.runtime.sendMessage({ type: 'getOriginal', author: v.author, id: v.id }).catch(() => null);
-    v.trTried = true;
-    (CH.trTried ||= new Set()).add(v.id); // nhớ qua các lần Dashboard vẽ lại
-    if (r?.ok && r.result?.transcript) { v.transcript = r.result.transcript; (CH.trText ||= {})[v.id] = r.result.transcript; }
-  };
-  const copyOut = (btn, text, label) => navigator.clipboard.writeText(text).then(() => { btn.textContent = '✓'; setTimeout(() => (btn.textContent = label), 1500); })
-    .catch(() => { btn.textContent = label; alert('Trình duyệt chặn copy. Bấm lại nút một lần nữa.'); });
   el.querySelectorAll('.hotCopy').forEach((b) => (b.onclick = async () => {
     const v = vById.get(b.dataset.id);
     if (!trOf(v) && !tried(v)) { b.textContent = '⏳'; b.disabled = true; await fetchTr(v); b.disabled = false; b.textContent = '📋'; b.title = 'Đã lấy lời thoại — bấm để copy'; b.classList.add('primary'); return; }
@@ -1250,7 +1265,8 @@ PANES.keyword = () => {
           <div class="vbody"><div class="vdesc">${esc((v.desc || '').slice(0, 110))}</div>
             <div class="vmeta">@${esc(v.author)} · ${TTA.fmtDate(v.createTime)}</div>
             <div class="vmeta">${TTA.fmt(perDay(v))} view/ngày · ER ${TTA.pct(TTA.er(v))} ${badge(v)}</div>
-            <div class="vmeta"><b class="score" title="Điểm xu hướng 0–100">🧠 ${score(v)}</b>${growth24(v) != null ? ` · 🚀 +${TTA.fmt(growth24(v))} view/24h` : ''}</div></div>
+            <div class="vmeta"><b class="score" title="Điểm xu hướng 0–100">🧠 ${score(v)}</b>${growth24(v) != null ? ` · 🚀 +${TTA.fmt(growth24(v))} view/24h` : ''}</div>
+            <button class="mini kwCopy${trOf(v) || tried(v) ? ' primary' : ''}" data-id="${v.id}" title="Copy link + caption + lời thoại của video này">📋 Copy nội dung gốc</button></div>
         </div>`).join('')}</div>
         ${res.length > LIM().kwRows ? `<div class="card lockcard">🔒 Gói Miễn phí xem được ${LIM().kwRows} video đầu. Còn <b>${res.length - LIM().kwRows}</b> video nữa — <button class="primary toAcc">⭐ Nâng cấp Pro để xem tất cả</button></div>` : ''}
         ${res.length > KW.limit && LIM().kwRows > KW.limit ? `<div class="toolbar" style="justify-content:center"><button id="kwMore">Xem thêm (${res.length - KW.limit} video)</button></div>` : ''}`
@@ -1296,7 +1312,22 @@ PANES.keyword = () => {
   $('#kwGrid').onclick = () => { KW.view = 'grid'; rerender(); };
   $('#kwTable').onclick = () => { KW.view = 'table'; rerender(); };
   if ($('#kwMore')) $('#kwMore').onclick = () => { KW.limit += 60; rerender(); };
-  el.querySelectorAll('[data-play]').forEach((c) => (c.onclick = (e) => { if (!e.target.closest('a')) playModal(c.dataset.play, c.dataset.author); }));
+  el.querySelectorAll('[data-play]').forEach((c) => (c.onclick = (e) => { if (!e.target.closest('a, .kwCopy')) playModal(c.dataset.play, c.dataset.author); }));
+  // 📋 Copy nội dung gốc: chưa có lời thoại → lấy trước (1 video, có trừ lượt gói Miễn phí), xong bấm lần nữa để copy
+  const kwById = new Map(res.map((v) => [v.id, v]));
+  const COPY_LABEL = '📋 Copy nội dung gốc';
+  el.querySelectorAll('.kwCopy').forEach((b) => (b.onclick = async () => {
+    const v = kwById.get(b.dataset.id);
+    if (!trOf(v) && !tried(v)) {
+      b.disabled = true; b.textContent = '⏳ Đang lấy lời thoại…';
+      const r = await fetchTr(v);
+      b.disabled = false;
+      if (!r?.ok) { b.textContent = COPY_LABEL; if (r?.locked) { if (confirm(r.error + '\n\nMở trang Tài khoản?')) chrome.tabs.create({ url: Auth.accountUrl() }); } else alert(r?.error || 'Chưa lấy được lời thoại, thử lại sau ít phút.'); return; }
+      b.textContent = '📋 Đã lấy xong — bấm để copy'; b.classList.add('primary');
+      return;
+    }
+    copyOut(b, fullText(v), COPY_LABEL, '✓ Đã copy');
+  }));
   const bind = (id, key, num) => ($(id).onchange = (e) => { KW[key] = num ? Number(e.target.value) : e.target.value; rerender(); });
   bind('#kwRange', 'range'); bind('#kwSort', 'sort'); bind('#kwMin', 'min', true); bind('#kwCart', 'cart');
   if ($('#kwFrom')) { bind('#kwFrom', 'from'); bind('#kwTo', 'to'); }

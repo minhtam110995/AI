@@ -45,7 +45,7 @@ Mở trang kênh bất kỳ (`tiktok.com/@tenkenh`) và lướt như bình thư�
 
 ## 🧭 Phân tích kênh
 1. Mở Dashboard, vào tab **🧭 Phân tích kênh** (thay cho tab Nội dung & Hook cũ).
-2. Dán link kênh (`https://www.tiktok.com/@tenkenh`) hoặc `@tenkenh`, chọn độ sâu, bấm **Phân tích**. Tiện ích mở kênh trong một cửa sổ nhỏ, tự cuộn lấy video, lấy bình luận 3 video nhiều view nhất (bỏ chọn ô “Lấy bình luận” nếu muốn nhanh hơn), lấy lời thoại 10 video nhiều view nhất, rồi tự chọn kênh đó trong báo cáo (cần đang đăng nhập tiktok.com). Kênh đã có dữ liệu thì bấm tên kênh để xem ngay; bấm **✕** cạnh tên kênh để xoá toàn bộ dữ liệu của kênh đó (video, hồ sơ, bình luận).
+2. Dán link kênh (`https://www.tiktok.com/@tenkenh`) hoặc `@tenkenh`, chọn độ sâu, bấm **Phân tích**. Tiện ích mở kênh trong một cửa sổ nhỏ, tự cuộn lấy video, lấy bình luận 3 video nhiều view nhất (bỏ chọn ô “Lấy bình luận” nếu muốn nhanh hơn), lấy lời thoại 10 video nhiều view nhất, rồi tự chọn kênh đó trong báo cáo (cần đang đăng nhập tiktok.com). Kênh đã có dữ liệu thì bấm tên kênh để xem ngay; bấm **✕** cạnh tên kênh để xoá toàn bộ dữ liệu của kênh đó (video, hồ sơ, bình luận), hoặc **🗑 Xoá hết** để xoá dữ liệu của mọi kênh một lần (nên **Sao lưu JSON** trước).
 3. Báo cáo gồm:
    - **Thẻ kênh** và **chân dung kênh 1 câu** (chủ đề chính, tần suất, format và độ dài ăn view, view trung vị, tỉ lệ bứt phá).
    - **✅ Việc nên làm**: gợi ý tự sinh (làm thêm/giảm tuyến nào, kiểu hook, độ dài, giờ đăng…), có nút Copy.
@@ -73,6 +73,7 @@ Mở trang kênh bất kỳ (`tiktok.com/@tenkenh`) và lướt như bình thư�
    - **🔗 Từ khoá liên quan** gợi ý từ hashtag đi kèm, bấm để quét tiếp.
    - **⭐ Theo dõi từ khoá hằng ngày:** tự quét vào giờ đã chọn và thông báo khi có video xu hướng mới (Chrome cần đang mở).
    - **📝 Lời thoại 10 video điểm cao nhất** để đọc kịch bản, copy tất cả.
+   - **📋 Copy nội dung gốc** ở cuối mỗi thẻ video: bấm lần 1 để lấy lời thoại (nếu chưa có), bấm lần 2 để copy link + caption + lời thoại.
 
 ## Tính năng mới (bản 1.2) – chạy hoàn toàn trong tiện ích, không cần API key
 - **Nhãn trên lưới video TikTok:** ER · share · lưu · 🔥 *gấp X lần view trung vị của kênh* (viền đỏ khi ≥ 3×) · 🛒 nếu video gắn giỏ.
