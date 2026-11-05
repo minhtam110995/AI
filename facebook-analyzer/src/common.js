@@ -68,7 +68,13 @@ const FBA = (() => {
     const photos = (() => { let c = 0; deepFind(n, (o) => { if (o.__typename === 'Photo') c++; return undefined; }); return c; })();
     const link = !!deepFind(n, (o) => (o.__typename === 'ExternalUrl' || o.external_url ? true : undefined));
     const type = reel ? 'reel' : videoId || views ? 'video' : photos > 1 ? 'album' : photos ? 'photo' : link ? 'link' : 'text';
-    return { actor, time, text, reactions, comments, shares, views, duration, videoId, url, type };
+    // Phụ đề tự động của Reels/video (nếu Facebook có tạo): link tệp SRT/VTT
+    const captionsUrl = deepFind(n, (o) => (typeof o.captions_url === 'string' ? o.captions_url
+      : typeof o.captionsUrl === 'string' ? o.captionsUrl
+      : Array.isArray(o.video_available_captions_locales) ? o.video_available_captions_locales.find((c) => c?.captions_url)?.captions_url : undefined));
+    const cover = deepFind(n, (o) => (typeof o.preferred_thumbnail?.image?.uri === 'string' ? o.preferred_thumbnail.image.uri
+      : typeof o.thumbnailImage?.uri === 'string' ? o.thumbnailImage.uri : typeof o.first_frame_thumbnail === 'string' ? o.first_frame_thumbnail : undefined));
+    return { actor, time, text, reactions, comments, shares, views, duration, videoId, url, type, captionsUrl, cover };
   }
 
   function extract(json) {
@@ -87,6 +93,7 @@ const FBA = (() => {
         duration: r.duration ? Math.round(r.duration) : null,
         url: r.url || (r.videoId && r.type === 'reel' ? `https://www.facebook.com/reel/${r.videoId}` : null),
         hashtags: [...new Set((r.text.match(/#[\p{L}\p{N}_]+/gu) || []).map((h) => h.slice(1).toLowerCase()))],
+        captionsUrl: r.captionsUrl || null, cover: r.cover || null,
         src: 'api',
       });
     };
@@ -169,8 +176,87 @@ const FBA = (() => {
       p.reactions, p.comments, p.shares, p.views, p.duration, er(p)?.toFixed(4) ?? '', p.text, p.url].map(q).join(',')).join('\n');
   }
 
+  // ---------- từ khoá, thời gian tương đối, phụ đề ----------
+  const kwKey = (q) => String(q || '').toLowerCase().normalize('NFC').replace(/\s+/g, ' ').trim();
+
+  // "3 ngày" / "2 tuần trước" / "5 giờ" / "hôm qua" / "12 tháng 3" / "12 thg 3, 2024" / "March 12" → giây (gần đúng)
+  function parseRelTime(t, now = Date.now()) {
+    const s = String(t || '').toLowerCase().normalize('NFC');
+    const unit = { 'phút': 60, 'giờ': 3600, 'ngày': 86400, 'tuần': 7 * 86400, 'tháng': 30 * 86400, 'năm': 365 * 86400,
+      m: 60, min: 60, mins: 60, h: 3600, hr: 3600, hrs: 3600, hour: 3600, hours: 3600, d: 86400, day: 86400, days: 86400, w: 7 * 86400, wk: 7 * 86400, week: 7 * 86400, weeks: 7 * 86400, y: 365 * 86400, yr: 365 * 86400, year: 365 * 86400, years: 365 * 86400 };
+    if (/hôm qua|yesterday/.test(s)) return Math.floor(now / 1000) - 86400;
+    // Ngày cụ thể trước ("12 tháng 3"), để không nhầm với "12 tháng" (12 tháng trước)
+    let m = s.match(/(\d{1,2})\s*(?:tháng|thg)\s*(\d{1,2})(?!\d)(?:,?\s*(\d{4}))?/);
+    if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
+      const y = m[3] ? Number(m[3]) : new Date(now).getFullYear();
+      let d = new Date(y, Number(m[2]) - 1, Number(m[1]), 12);
+      if (!m[3] && d.getTime() > now) d = new Date(y - 1, Number(m[2]) - 1, Number(m[1]), 12);
+      return Math.floor(d.getTime() / 1000);
+    }
+    m = s.match(/(\d+)\s*(phút|giờ|ngày|tuần|tháng|năm|mins?|hrs?|hours?|days?|weeks?|wk|years?|yr|[mhdwy])(?![\p{L}])/u);
+    return m ? Math.floor(now / 1000) - Number(m[1]) * unit[m[2]] : null;
+  }
+
+  // Tệp phụ đề SRT / WebVTT → văn bản liền mạch (bỏ số thứ tự, mốc thời gian, thẻ định dạng, dòng lặp)
+  function parseCaptions(raw) {
+    const out = [];
+    for (const line of String(raw || '').replace(/\r/g, '').split('\n')) {
+      const l = line.trim();
+      if (!l || /^WEBVTT/i.test(l) || /^\d+$/.test(l) || /-->/.test(l) || /^(NOTE|STYLE|REGION)\b/.test(l)) continue;
+      const t = l.replace(/<[^>]+>/g, '').replace(/\{[^}]+\}/g, '').trim();
+      if (t && t !== out[out.length - 1]) out.push(t);
+    }
+    return out.join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  // ---------- video xu hướng (báo cáo từ khoá) ----------
+  const ageDays = (p, now = Date.now()) => (p.time ? Math.max(1, (now / 1000 - p.time) / 86400) : null);
+  const perDay = (p) => (p.views && p.time ? p.views / ageDays(p) : null);
+
+  // ---------- prompt cho ChatGPT / Claude ----------
+  const AI_GOALS = {
+    viral: ['🔍 Vì sao viral', 'Phân tích vì sao nội dung viral'],
+    rewrite: ['✍️ Viết lại cho trang tôi', 'Viết lại theo công thức viral cho fanpage của tôi'],
+    hooks: ['🎣 10 câu hook', 'Viết 10 câu hook mở đầu'],
+    sell: ['🛒 Kịch bản bán hàng', 'Chuyển thành kịch bản / bài bán hàng'],
+  };
+  const ME_FIELDS = [['niche', 'Ngách / chủ đề fanpage', 'vd: mẹo kinh doanh online cho mẹ bỉm'], ['product', 'Sản phẩm / dịch vụ', 'vd: khoá học bán hàng 1,99 triệu'],
+    ['audience', 'Khách hàng mục tiêu', 'vd: nữ 25–40, nội trợ'], ['voice', 'Giọng văn', 'vd: gần gũi, xưng chị – các em'], ['avoid', 'Không dùng / tránh', 'vd: không nói giá']];
+  // items: [{ p, ratio }] — bài / Reels đưa vào prompt (đã chọn sẵn)
+  function aiPrompt({ goal = 'viral', items = [], topic = '', me = {}, source = '' }) {
+    const many = items.length > 1;
+    const body = items.map(({ p, ratio }, i) => [
+      `### ${p.type === 'reel' || p.type === 'video' ? 'Reels/video' : 'Bài viết'} ${i + 1} — ${p.page || ''}${p.url ? ': ' + p.url : ''}`,
+      `- Số liệu: ${p.views ? fmt(p.views) + ' lượt xem, ' : ''}${fmt(p.reactions)} cảm xúc, ${fmt(p.comments)} bình luận, ${fmt(p.shares)} chia sẻ${ratio ? ` (${ratio.toFixed(1)}× mức trung vị của trang)` : ''}${p.duration ? `, dài ${p.duration}s` : ''}${p.time ? `, đăng ${fmtDate(p.time)}` : ''}`,
+      `- Nội dung / caption: ${(p.text || '').replace(/\s+/g, ' ').trim() || '–'}`,
+      ...(p.type === 'reel' || p.type === 'video' ? [`- Lời thoại: ${p.transcript || '(chưa có — Reels không có phụ đề tự động hoặc chưa lấy; hãy suy luận từ caption và số liệu)'}`] : []),
+    ].join('\n')).join('\n\n');
+    const meTxt = ME_FIELDS.filter(([k]) => (me[k] || '').trim()).map(([k, l]) => `- ${l}: ${me[k].trim()}`).join('\n');
+    const tasks = {
+      viral: [`Phân tích vì sao ${many ? 'các nội dung này' : 'nội dung này'} viral trên Facebook:`,
+        '1. Câu mở đầu / 3 giây đầu: trích nguyên văn, vì sao giữ chân người xem.',
+        '2. Cấu trúc nội dung (mở – thân – kết), nhịp và cách chuyển ý.',
+        '3. Cảm xúc / tâm lý được khai thác (tò mò, sợ bỏ lỡ, đồng cảm, hài hước…).',
+        '4. Lời kêu gọi hành động và lý do người xem bình luận / chia sẻ.',
+        `5. Rút ra **công thức có thể tái sử dụng** dạng khung (Hook → … → CTA)${many ? ', và điểm chung giữa các nội dung' : ''}.`,
+        '6. Những điều KHÔNG nên bắt chước.'],
+      rewrite: ['Bước 1: Tóm tắt ngắn công thức viral của nội dung gốc.',
+        `Bước 2: Viết **3 nội dung mới** cho fanpage của tôi${topic ? ` về chủ đề / sản phẩm: ${topic}` : ''}, áp dụng công thức đó nhưng **không sao chép câu chữ gốc**. Mỗi nội dung gồm: 2 phương án câu mở đầu; thân bài (với Reels: lời nói + cảnh quay + chữ trên màn hình theo từng cảnh); lời kêu gọi hành động; caption; 3–5 hashtag.`],
+      hooks: [`Dựa trên câu mở đầu của nội dung gốc, viết **10 câu hook** cho ${topic ? `chủ đề: ${topic}` : 'fanpage của tôi'}, mỗi câu ≤ 15 từ, đa dạng kiểu: câu hỏi, con số, gây tò mò, cảnh báo, POV, trước/sau, phản bác. Ghi kiểu hook cạnh mỗi câu, đánh dấu 3 câu mạnh nhất và giải thích.`],
+      sell: [`Chuyển công thức của nội dung gốc thành **kịch bản Reels 30–60 giây và 1 bài đăng bán hàng** cho ${topic ? `sản phẩm: ${topic}` : 'sản phẩm của tôi'}: hook nêu nỗi đau / mong muốn, cho thấy sản phẩm giải quyết, bằng chứng, xử lý 1 lời từ chối, CTA rõ ràng. Không hứa hẹn quá mức, không vi phạm chính sách quảng cáo Facebook.`],
+    };
+    return [`Bạn là chuyên gia nội dung Facebook (fanpage & Reels) tại Việt Nam.`,
+      `# Mục tiêu: ${AI_GOALS[goal]?.[1] || ''}`,
+      source ? `Nguồn: ${source}` : '',
+      meTxt ? `# Về fanpage của tôi\n${meTxt}` : '',
+      `# Dữ liệu\n${body || '(chưa chọn nội dung)'}`,
+      `# Yêu cầu\n${tasks[goal].join('\n')}`,
+      'Trả lời bằng tiếng Việt, trình bày rõ ràng theo đề mục.'].filter(Boolean).join('\n\n');
+  }
+  const aiUrl = (to, prompt) => (to === 'claude' ? 'https://claude.ai/new?q=' : 'https://chatgpt.com/?q=') + encodeURIComponent(prompt);
+
   return {
     parseShort, parseResponse, extract, merge, engagement, metric, metricKind, er, textKey, fmt, pct, median, fmtDate, TYPE_LABEL,
-    hookType, firstLine, download, toCSV,
+    hookType, firstLine, download, toCSV, kwKey, parseRelTime, parseCaptions, ageDays, perDay, AI_GOALS, ME_FIELDS, aiPrompt, aiUrl,
   };
 })();

@@ -1,12 +1,21 @@
-# Facebook Analyzer – Phân tích fanpage đối thủ & Reels
+# Facebook Analyzer 2.0 – Phân tích fanpage đối thủ & Reels
 
-Tiện ích Chrome (Manifest V3) ghi lại số liệu bài viết và Reels **công khai** mà Facebook đã tải khi bạn lướt fanpage, rồi phân tích trên Dashboard. Tiện ích không cần API key, không tự gửi request, và dữ liệu chỉ lưu trên máy bạn.
+Tiện ích Chrome (Manifest V3) ghi lại số liệu bài viết và Reels **công khai** mà Facebook đã tải khi bạn lướt fanpage, rồi phân tích trên Dashboard. Tiện ích không cần API key và dữ liệu chỉ lưu trên máy bạn. Phân tích fanpage / tìm từ khoá mở Facebook trong cửa sổ nhỏ bằng chính tài khoản đang đăng nhập; lời thoại Reels tải tệp phụ đề Facebook đã tạo sẵn.
 
 ## Cài đặt
 1. Tải [`facebook-analyzer.zip`](../downloads/facebook-analyzer.zip) rồi giải nén.
 2. Vào `chrome://extensions`, bật **Developer mode**, bấm **Load unpacked**, chọn thư mục `facebook-analyzer`.
 
 **Cập nhật bản mới:** chép đè file vào thư mục cũ, rồi bấm ↻ ở tiện ích trong `chrome://extensions`.
+
+## Mới ở bản 2.0 (miễn phí, không cần đăng nhập)
+- **🧭 Phân tích fanpage bằng link:** Dashboard → tab **📊 Fanpage** → dán link fanpage → **Phân tích**. Tiện ích tự mở trang trong một cửa sổ nhỏ, cuộn tab Reels rồi bài viết, xong tự đóng và hiện báo cáo. Cần đang đăng nhập facebook.com.
+  - **Fanpage đã có dữ liệu:** bấm tên để xem, **✕** để xoá một trang, **🗑 Xoá hết** để xoá tất cả (nên **Sao lưu JSON** trước).
+  - **🔥 Nội dung hot nhất:** 10 bài / Reels bứt phá nhất, nút **📋** copy link + nội dung + lời thoại; **📋 Copy tất cả**.
+- **🔎 Từ khoá:** gõ từ khoá (vd: *bất động sản*) → **Tìm & thu thập**. Tiện ích mở trang tìm kiếm video của Facebook, tự cuộn lấy kết quả. Lọc theo thời gian đăng, view tối thiểu; xếp theo **🧠 điểm xu hướng**, lượt xem, view/ngày, mới nhất. Mỗi thẻ video có **📋 Copy nội dung gốc**. Ngày đăng đọc từ chữ "3 ngày", "2 tuần" trên kết quả tìm kiếm nên là ngày gần đúng.
+- **📝 Lời thoại Reels:** bấm 📋 ở một Reels lần 1 → tiện ích lấy phụ đề tự động của Facebook (mở Reels vài giây trong cửa sổ nhỏ nếu cần); bấm lần 2 để copy. Facebook chỉ tạo phụ đề cho một phần Reels — Reels không có phụ đề thì chỉ copy được caption.
+- **✨ ChatGPT / Claude:** chọn mục tiêu (Vì sao viral, Viết lại cho trang tôi, 10 câu hook, Kịch bản bán hàng), gõ chủ đề / sản phẩm, bấm **Mở ChatGPT** hoặc **Mở Claude** — prompt gồm 5 nội dung hot nhất kèm số liệu, nội dung, lời thoại. Điền **👤 Hồ sơ fanpage của tôi** một lần để tự gắn vào mọi prompt.
+- **Cột phân tích bên phải:** đang xem một fanpage, bấm nút **📊 Phân tích trang** ở góc phải dưới → số liệu nhanh, nội dung hot (copy nội dung + lời thoại), ✨ ChatGPT / Claude, **⬇ Cuộn lấy bài** — không cần mở Dashboard.
 
 ## Cách dùng
 1. Mở fanpage đối thủ trên facebook.com.

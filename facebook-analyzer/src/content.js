@@ -28,12 +28,20 @@
   });
 
   // ---------- nhận dữ liệu ----------
+  // Đang ở trang tìm kiếm Facebook → gắn nhãn từ khoá cho mọi bài / video lấy được
+  const searchKw = () => (/^\/search\//.test(location.pathname) ? FBA.kwKey(new URLSearchParams(location.search).get('q')) : '');
+  const union = (a, b) => (a?.length || b?.length ? [...new Set([...(a || []), ...(b || [])])] : undefined);
   function queue(list, fromDom) {
+    const kw = searchKw();
+    if (kw) list = list.map((p) => ({ ...p, kw: union(p.kw, [kw]) }));
     for (const p of list) {
       const prev = mem.get(p.key);
       const m = fromDom ? fillMissing(prev, p) : FBA.merge(prev, p);
+      m.kw = union(prev?.kw, p.kw);
       remember(m);
-      pending.set(p.key, fromDom ? fillMissing(pending.get(p.key), p) : FBA.merge(pending.get(p.key), p));
+      const q = fromDom ? fillMissing(pending.get(p.key), p) : FBA.merge(pending.get(p.key), p);
+      q.kw = union(pending.get(p.key)?.kw, p.kw);
+      pending.set(p.key, q);
     }
     if (list.length) { clearTimeout(timer); timer = setTimeout(flush, 900); recompute(); }
   }
@@ -56,6 +64,8 @@
       if (!prev) newCount++;
       const m = p.src === 'dom' ? fillMissing(prev, p) : FBA.merge(prev, p);
       if (prev?.src === 'api') m.src = 'api';
+      m.kw = union(prev?.kw, p.kw);
+      if (!m.kw) delete m.kw;
       const hist = prev?.hist ? [...prev.hist] : [];
       const last = hist[hist.length - 1];
       if (!last || now - last.t > 3600e3) hist.push({ t: now, reactions: m.reactions, comments: m.comments, shares: m.shares, views: m.views });
@@ -104,6 +114,8 @@
     const name = document.title.replace(/^\(\d+\+?\)\s*/, '').replace(/\s*[|·-]\s*Facebook\s*$/i, '').trim();
     return { slug, name: name || slug, reels: seg[1] === 'reels' || seg[1] === 'videos' };
   }
+
+  window.__FBA_CTX = pageCtx; // cột phân tích (panel.js) dùng chung
 
   function readPageHeader() {
     const c = pageCtx();
@@ -222,7 +234,50 @@
       } else if (p && p.views == null && views != null) domItems.push({ key: p.key, views, src: 'dom' });
       if (p) putBadge(a, mem.get(p.key) || p, 'fba-reel');
     }
+    if (searchKw()) scanSearch(domItems);
     if (domItems.length) queue(domItems, true);
+  }
+
+  // ---------- kết quả tìm kiếm video / Reels ----------
+  // Mỗi ô kết quả: link video (/reel/ID, /videos/ID, watch?v=ID) + dòng "1,2 Tr lượt xem · 3 tuần trước" + tên trang
+  const VIDEO_HREF = /\/reel\/(\d+)|\/videos\/(?:[^/?#]+\/)?(\d{6,})|[?&]v=(\d{6,})/;
+  const NOT_PROFILE = /\/(reel|videos|watch|search|hashtag|groups|events|photo|stories|share|l\.php)\b|[?&]v=/;
+  function scanSearch(domItems) {
+    const done = new Set();
+    for (const a of document.querySelectorAll('a[href*="/reel/"], a[href*="/videos/"], a[href*="v="]')) {
+      const m = (a.getAttribute('href') || '').match(VIDEO_HREF);
+      const id = m && (m[1] || m[2] || m[3]);
+      if (!id || done.has(id)) continue;
+      let card = a;
+      for (let i = 0; i < 8 && card.parentElement; i++) {
+        card = card.parentElement;
+        if (RX.views.test(card.innerText || '') || card.offsetHeight > 900) break;
+      }
+      const text = card.innerText || '';
+      if (!RX.views.test(text) || card.offsetHeight > 900) continue;
+      done.add(id);
+      const segs = text.split('\n').flatMap((l) => l.split('·')).map((x) => x.trim()).filter(Boolean);
+      const pageA = [...card.querySelectorAll('a[href]')].find((x) => {
+        const h = x.getAttribute('href') || '', t = (x.innerText || '').trim();
+        return t.length >= 2 && t.length <= 80 && !NOT_PROFILE.test(h) && /facebook\.com\/|^\//.test(h) && !/\d\s*(lượt xem|views?)/i.test(t);
+      });
+      const page = (pageA?.innerText || '').trim().split('\n')[0];
+      if (!page) continue;
+      const tSeg = segs.find((x) => x.length <= 25 && !/lượt xem|views?|bình luận|comments?|chia sẻ|shares?/i.test(x) && FBA.parseRelTime(x) != null);
+      const dSeg = segs.find((x) => /^\d{1,2}:\d{2}(:\d{2})?$/.test(x));
+      const caption = segs.filter((x) => x !== page && x.length >= 10 && !RX.views.test(x) && x !== tSeg).sort((x, y) => y.length - x.length)[0] || '';
+      const isReel = !!m[1];
+      const prev = mem.get('v:' + id);
+      domItems.push({
+        key: 'v:' + id, videoId: id, page: prev?.page || page, type: isReel ? 'reel' : 'video', src: 'dom',
+        views: grab(text, 'views'), reactions: grab(text, 'reactions'), comments: grab(text, 'comments'),
+        time: tSeg ? FBA.parseRelTime(tSeg) : null, timeApprox: tSeg ? true : undefined,
+        duration: dSeg ? dSeg.split(':').reduce((acc, x) => acc * 60 + Number(x), 0) : null,
+        text: caption, url: isReel ? `https://www.facebook.com/reel/${id}` : new URL(a.getAttribute('href'), location.origin).href.split('&')[0],
+        cover: card.querySelector('img[src*="scontent"], img[src*="fbcdn"]')?.src || null,
+        hashtags: [...new Set((caption.match(/#[\p{L}\p{N}_]+/gu) || []).map((h) => h.slice(1).toLowerCase()))],
+      });
+    }
   }
 
   const style = document.createElement('style');
@@ -251,7 +306,7 @@
   // Tự cuộn để Facebook tải thêm bài / Reels
   let scrolling = false;
   async function autoScroll(times) {
-    if (scrolling) return;
+    if (scrolling) { while (scrolling) await sleep(500); return; }
     scrolling = true;
     let stale = 0;
     for (let i = 0; i < times && scrolling; i++) {
@@ -275,8 +330,13 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
   chrome.runtime.onMessage.addListener((m, _s, reply) => {
-    if (m.type === 'context') reply({ page: pageCtx(), newCount });
-    if (m.type === 'autoscroll') { autoScroll(m.times || 30); reply({ ok: true }); }
+    if (m.type === 'context') reply({ page: pageCtx(), newCount, alive: true, loggedOut: !!document.querySelector('#login_form, form[action*="/login"] input[name="email"]') });
+    if (m.type === 'autoscroll') {
+      // wait: true → chỉ trả lời khi cuộn xong (dùng cho phân tích fanpage / tìm từ khoá chạy nền)
+      const run = autoScroll(m.times || 30);
+      if (m.wait) { run.then(() => reply({ ok: true, newCount })); return true; }
+      reply({ ok: true });
+    }
     if (m.type === 'stopScroll') { scrolling = false; reply({ ok: true }); }
     if (m.type === 'flushNow') { scan(); setTimeout(() => flush().then(() => reply({ ok: true })), 1200); return true; }
   });

@@ -14,11 +14,15 @@ async function load() {
   S.watch = all.watchPages || [];
   S.settings = all.fbSettings || {};
   S.lastRefresh = all.lastRefresh;
+  S.pgJob = all.pgJob; S.kwJob = all.kwJob; S.keywords = all.fbKeywords || {}; S.me = all.fbMe || {};
   const names = [...new Set(S.posts.map((p) => p.page).filter(Boolean))].sort();
   const sel = $('#fPage');
   const cur = sel.value || new URLSearchParams(location.search).get('page') || '';
   sel.innerHTML = '<option value="">Tất cả fanpage</option>' + names.map((n) => `<option value="${esc(n)}">${esc(n)} (${S.posts.filter((p) => p.page === n).length})</option>`).join('');
   sel.value = names.includes(cur) ? cur : '';
+  // vừa phân tích xong 1 fanpage → tự chọn fanpage đó
+  const j = S.pgJob;
+  if (j?.step === 'done' && j.page && names.includes(j.page) && j.t !== S.autoPick && Date.now() - j.t < 10 * 60e3) { S.autoPick = j.t; sel.value = j.page; }
   $('#subtitle').textContent = `${S.posts.length} bài · ${S.posts.filter(isReel).length} Reels/video · ${names.length} fanpage · ${S.watch.length} đang theo dõi`;
   render();
 }
@@ -53,6 +57,101 @@ const postsPerWeek = (list) => {
   const w = (Math.max(...ts) - Math.min(...ts)) / (7 * 86400);
   return w > 0 ? ts.length / w : null;
 };
+
+// ---------- 📋 Copy nội dung gốc (nội dung + lời thoại Reels) ----------
+const trDone = (p) => !!p.trTried && typeof p.transcript === 'string';
+const fullText = (p) => [`${isReel(p) ? '🎬' : '📝'} ${p.url || ''} — ${p.page || ''}`,
+  `Số liệu: ${p.views ? FBA.fmt(p.views) + ' lượt xem · ' : ''}${FBA.fmt(p.reactions)} cảm xúc · ${FBA.fmt(p.comments)} bình luận · ${FBA.fmt(p.shares)} chia sẻ`,
+  `Nội dung: ${(p.text || '').trim() || '–'}`,
+  ...(isReel(p) ? [`Lời thoại: ${p.transcript ? p.transcript.trim() : trDone(p) ? '(Reels này không có phụ đề tự động)' : '(chưa lấy)'}`] : [])].join('\n');
+const COPY_LABEL = '📋 Copy nội dung gốc';
+const copyBtn = (p, label = COPY_LABEL) => `<button class="mini${!isReel(p) || trDone(p) ? ' primary' : ''}" data-copy="${esc(p.key)}" title="Copy link + nội dung${isReel(p) ? ' + lời thoại' : ''}">${label}</button>`;
+// Reels chưa có lời thoại: bấm lần 1 lấy phụ đề (mở Reels vài giây trong cửa sổ nhỏ), bấm lần 2 để copy
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-copy]');
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const p = S.posts.find((x) => x.key === b.dataset.copy);
+  if (!p) return;
+  const label = b.dataset.label || b.textContent;
+  b.dataset.label = label;
+  if (isReel(p) && !trDone(p)) {
+    b.disabled = true; b.textContent = '⏳ Đang lấy lời thoại…';
+    const r = await chrome.runtime.sendMessage({ type: 'getTranscript', key: p.key }).catch(() => null);
+    b.disabled = false;
+    if (!r?.ok) { b.textContent = label; alert(r?.error || 'Chưa lấy được lời thoại, thử lại sau.'); return; }
+    p.transcript = r.transcript; p.trTried = true;
+    b.textContent = r.transcript ? '📋 Đã lấy xong — bấm để copy' : '📋 Không có phụ đề — bấm để copy nội dung'; b.classList.add('primary');
+    return;
+  }
+  navigator.clipboard.writeText(fullText(p)).then(() => { b.textContent = '✓ Đã copy'; setTimeout(() => (b.textContent = label), 1500); })
+    .catch(() => alert('Trình duyệt chặn copy. Bấm lại nút một lần nữa.'));
+}, true);
+
+// ---------- ✨ ChatGPT / Claude ----------
+const AI = { goal: 'viral', topic: '' };
+function aiBox(items, source) {
+  const me = S.me || {}, filled = FBA.ME_FIELDS.filter(([k]) => (me[k] || '').trim()).length;
+  setTimeout(() => {
+    const box = $('#aiBox');
+    if (!box) return;
+    box.querySelectorAll('[data-goal]').forEach((b) => (b.onclick = () => { AI.goal = b.dataset.goal; render(); }));
+    $('#aiTopic').oninput = (e) => (AI.topic = e.target.value);
+    box.querySelectorAll('[data-me]').forEach((i) => (i.onchange = () => chrome.storage.local.set({ fbMe: { ...S.me, [i.dataset.me]: i.value } })));
+    box.querySelectorAll('[data-ai]').forEach((b) => (b.onclick = () => {
+      const prompt = FBA.aiPrompt({ goal: AI.goal, items, topic: AI.topic, me: S.me, source });
+      const url = FBA.aiUrl(b.dataset.ai, prompt);
+      if (url.length < 7000) { window.open(url, '_blank'); return; }
+      navigator.clipboard.writeText(prompt).then(() => { alert('Prompt dài nên đã copy sẵn. Trang AI sẽ mở — dán (Ctrl+V) vào ô chat rồi gửi.'); window.open(b.dataset.ai === 'claude' ? 'https://claude.ai/new' : 'https://chatgpt.com/', '_blank'); });
+    }));
+  });
+  return `<section class="card" id="aiBox"><h2>✨ Đưa vào ChatGPT / Claude</h2>
+    <p class="muted small">Gửi ${items.length} nội dung hot nhất (kèm số liệu, nội dung, lời thoại Reels nếu đã lấy) sang AI theo mục tiêu bạn chọn. Muốn có lời thoại: bấm 📋 ở từng Reels trước.</p>
+    <div class="toolbar">${Object.entries(FBA.AI_GOALS).map(([k, [l]]) => `<button class="mini${AI.goal === k ? ' primary' : ''}" data-goal="${k}">${l}</button>`).join('')}</div>
+    <div class="toolbar"><input id="aiTopic" type="search" placeholder="Chủ đề / sản phẩm của bạn (không bắt buộc)" value="${esc(AI.topic)}" style="flex:1;min-width:220px">
+      <button class="primary" data-ai="chatgpt">Mở ChatGPT</button><button class="primary" data-ai="claude">Mở Claude</button></div>
+    <details class="small" style="margin-top:8px"><summary>👤 Hồ sơ fanpage của tôi (${filled}/${FBA.ME_FIELDS.length}) — tự gắn vào mọi prompt</summary>
+      <div class="megrid">${FBA.ME_FIELDS.map(([k, l, ph]) => `<label>${l}<input data-me="${k}" placeholder="${esc(ph)}" value="${esc(me[k] || '')}"></label>`).join('')}</div></details></section>`;
+}
+
+// ---------- 🧭 Phân tích fanpage: dán link → tự thu thập ----------
+function analyzeCard() {
+  const counts = {};
+  S.posts.forEach((p) => (counts[p.page] = (counts[p.page] || 0) + 1));
+  const known = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 15);
+  const cur = $('#fPage').value, j = S.pgJob;
+  setTimeout(() => {
+    if (!$('#pgGo')) return;
+    $('#pgInput').onkeydown = (e) => { if (e.key === 'Enter') $('#pgGo').click(); };
+    $('#pgGo').onclick = async () => {
+      const r = await chrome.runtime.sendMessage({ type: 'analyzePage', input: $('#pgInput').value, scrolls: Number($('#pgDepth').value) });
+      $('#pgJob').textContent = r?.ok ? 'Đã bắt đầu… (tiến trình cập nhật tự động)' : 'Link chưa đúng. Dán dạng https://www.facebook.com/tenfanpage';
+    };
+    document.querySelectorAll('[data-pick]').forEach((b) => (b.onclick = () => { $('#fPage').value = b.dataset.pick; render(); }));
+    document.querySelectorAll('[data-delpage]').forEach((b) => (b.onclick = () => deletePages([b.dataset.delpage])));
+    if ($('#pgDelAll')) $('#pgDelAll').onclick = () => deletePages(Object.keys(counts));
+  });
+  return `<section class="card"><h2>🧭 Phân tích fanpage</h2>
+    <p class="muted small">Dán link fanpage của bạn hoặc đối thủ. Tiện ích tự mở trang trong một cửa sổ nhỏ, cuộn tab Reels và bài viết, rồi hiện báo cáo bên dưới. Cần đang đăng nhập facebook.com.</p>
+    <div class="toolbar"><input id="pgInput" type="search" placeholder="vd: https://www.facebook.com/tenfanpage" style="flex:1;min-width:min(260px,100%)">
+      <select id="pgDepth"><option value="8">Nhanh (~40 bài)</option><option value="15" selected>Vừa (~80 bài)</option><option value="40">Sâu (~200 bài)</option></select>
+      <button id="pgGo" class="primary">Phân tích</button></div>
+    <p class="muted small" id="pgJob">${j ? esc(j.msg) + (j.step === 'run' ? ' (đừng đóng Chrome)' : '') : ''}</p>
+    ${known.length ? `<div class="toolbar"><span class="muted small">Fanpage đã có dữ liệu:</span>${known.map((n) => `<span class="chipgrp"><button class="mini${n === cur ? ' primary' : ''}" data-pick="${esc(n)}">${esc(n)} · ${counts[n]}</button><button class="mini" data-delpage="${esc(n)}" title="Xoá dữ liệu ${esc(n)}">✕</button></span>`).join('')}${known.length > 1 ? '<button class="mini" id="pgDelAll" title="Xoá dữ liệu của tất cả fanpage">🗑 Xoá hết</button>' : ''}</div>` : ''}</section>`;
+}
+async function deletePages(names) {
+  const n = S.posts.filter((p) => names.includes(p.page)).length;
+  const msg = names.length === 1 ? `Xoá fanpage ${names[0]} khỏi dữ liệu?\n\nSẽ xoá ${n} bài / Reels đã lưu của trang này (cả trong báo cáo từ khoá nếu có).`
+    : `Xoá hết dữ liệu của cả ${names.length} fanpage?\n\nSẽ xoá ${n} bài / Reels — gồm cả video trong các báo cáo từ khoá. Muốn giữ lại thì bấm “Sao lưu JSON” trước.`;
+  if (!confirm(msg + ' Không hoàn tác được.')) return;
+  const del = new Set(names);
+  const all = await chrome.storage.local.get(['posts', 'pages', 'watchPages']);
+  const posts = all.posts || {}, pages = all.pages || {};
+  for (const k in posts) if (del.has(posts[k].page)) delete posts[k];
+  names.forEach((x) => delete pages[x]);
+  if (del.has($('#fPage').value)) $('#fPage').value = '';
+  await chrome.storage.local.set({ posts, pages, watchPages: (all.watchPages || []).filter((x) => !del.has(x)) });
+}
 
 // ---------- biểu đồ dùng chung ----------
 function timeline(list, label, M = FBA.engagement) {
@@ -112,7 +211,7 @@ function renderPage(el) {
   const page = $('#fPage').value;
   const list = filtered();
   if (!list.length) {
-    el.innerHTML = `<section class="card"><h2>Chưa có dữ liệu</h2><ol class="small"><li>Mở fanpage đối thủ trên facebook.com.</li><li>Bấm biểu tượng tiện ích → <b>⬇ Quét bài viết</b> (và <b>🎬 Quét Reels</b>).</li><li>Quay lại đây để xem phân tích.</li></ol></section>`;
+    el.innerHTML = analyzeCard() + `<section class="card"><h2>Chưa có dữ liệu</h2><ol class="small"><li>Dán link fanpage vào ô <b>Phân tích fanpage</b> ở trên và bấm <b>Phân tích</b>, hoặc</li><li>Mở fanpage trên facebook.com, bấm biểu tượng tiện ích → <b>⬇ Quét bài viết</b> / <b>🎬 Quét Reels</b>.</li></ol></section>`;
     return;
   }
   const posts = list.filter((p) => !isReel(p));
@@ -148,7 +247,12 @@ function renderPage(el) {
       FBA.pct(ps.filter((p) => ratio(p) >= 3).length / ps.length, 0)];
   });
 
+  // 🔥 Nội dung hot: bứt phá nhất (nếu đủ dữ liệu so sánh), không thì nhiều tương tác / lượt xem nhất
+  const hot = [...list].sort((a, b) => (ratio(b) ?? 0) - (ratio(a) ?? 0) || FBA.metric(b) - FBA.metric(a)).slice(0, 10);
+  const hotRows = hot.map((p) => [link(p, (p.text || '(không có chữ)').slice(0, 90)) + pill(p), esc(p.page), FBA.TYPE_LABEL[p.type], FBA.fmtDate(p.time),
+    FBA.fmt(p.views), FBA.fmt(FBA.engagement(p)), ratio(p) ? ratio(p).toFixed(1) + '×' : '–', copyBtn(p, '📋')]);
   el.innerHTML = `
+    ${analyzeCard()}
     ${page ? profileCard(page) : ''}
     ${kpis([['Bài viết', list.length], ['Tương tác trung vị / bài', FBA.fmt(median(eng)), 'Cảm xúc + bình luận + chia sẻ'],
       ['Tương tác / người theo dõi', fl ? FBA.pct(median(eng) / fl, 2) : '–', 'Tương tác trung vị ÷ số người theo dõi'],
@@ -156,6 +260,10 @@ function renderPage(el) {
       ['Bài bứt phá (≥ 3×)', `${brk.length} (${FBA.pct(brk.length / list.length, 0)})`],
       ['Tỉ lệ Reels/video', FBA.pct(list.filter(isReel).length / list.length, 0)]])}
     <section class="card insights"><h2>💡 Nhận định</h2><ul>${ins.map((x) => `<li>${x}</li>`).join('')}</ul></section>
+    <section class="card"><div class="tablehead"><h2>🔥 Nội dung hot nhất</h2><button id="hotCopyAll" class="mini">📋 Copy tất cả</button></div>
+      <p class="muted small">Xếp theo mức bứt phá so với trung vị của trang. 📋 = copy link + nội dung (Reels: kèm lời thoại — bấm lần 1 để lấy phụ đề, lần 2 để copy).</p>
+      ${tbl(['Nội dung', 'Fanpage', 'Loại', 'Ngày', 'Lượt xem', 'Tương tác', 'Bứt phá', ''], hotRows)}</section>
+    ${aiBox(hot.slice(0, 5).map((p) => ({ p, ratio: ratio(p) })), page ? `fanpage ${page}` : '')}
     <section class="card"><h2>Tương tác từng bài theo ngày đăng</h2><p class="muted small">Tương tác = cảm xúc + bình luận + chia sẻ. Lượt xem Reels xem ở tab 🎬 Reels.</p><div class="chart">${timeline(list.filter((p) => p.reactions != null), 'Tương tác từng bài')}</div></section>
     <div class="grid2">
       <section class="card"><h2>Giờ & ngày đăng hiệu quả</h2><p class="muted small">Tương tác trung vị theo khung giờ đăng (giờ máy bạn).</p><div class="chart">${heatmap(list.filter((p) => p.reactions != null))}</div></section>
@@ -167,6 +275,7 @@ function renderPage(el) {
     <section class="card" style="margin-top:16px"><h2>So sánh fanpage</h2>${tbl(['Fanpage', 'Người theo dõi', 'Bài đã lưu', 'Tương tác TV/bài', 'View TV/Reels', 'Bài/tuần', 'Tỉ lệ bứt phá'], cmp)}</section>
     <section class="card"><div class="tablehead"><h2>Danh sách bài</h2><span class="muted small">${list.length} bài · bấm tiêu đề cột để sắp xếp</span></div><div id="postTable"></div></section>`;
   postTable(list);
+  $('#hotCopyAll').onclick = (e) => navigator.clipboard.writeText(hot.map((p, i) => `${i + 1}. ${fullText(p)}`).join('\n\n')).then(() => (e.target.textContent = '✓ Đã copy'));
 }
 
 const PCOLS = [
@@ -252,7 +361,8 @@ function renderReels(el) {
       <section class="card"><h2>🎯 Reels "vượt tầm" (view so với người theo dõi)</h2>${tbl(['Reels', 'Fanpage', 'View', 'Tỉ lệ'], outl.map(({ p, r }) => [link(p, (p.text || 'Reels').slice(0, 60)), esc(p.page), FBA.fmt(p.views), `<b>${r.toFixed(1)}×</b>`]), 'Cần số người theo dõi (mở trang chủ fanpage)')}</section>
     </div>
     <section class="card" style="margin-top:16px"><div class="tablehead"><h2>Top Reels</h2><button id="copyHooks">Copy caption top 10</button></div>
-      ${tbl(['Caption', 'Fanpage', 'Ngày', 'View', 'Cảm xúc', 'Bình luận', 'Chia sẻ', 'ER', 'Độ dài'], sorted.slice(0, 50).map((p) => [link(p, (p.text || '(không có caption)').slice(0, 90)) + pill(p), esc(p.page), FBA.fmtDate(p.time), FBA.fmt(p.views), FBA.fmt(p.reactions), FBA.fmt(p.comments), FBA.fmt(p.shares), FBA.pct(FBA.er(p)), p.duration ? p.duration + 's' : '–']))}</section>`;
+      ${tbl(['Caption', 'Fanpage', 'Ngày', 'View', 'Cảm xúc', 'Bình luận', 'Chia sẻ', 'ER', 'Độ dài', ''], sorted.slice(0, 50).map((p) => [link(p, (p.text || '(không có caption)').slice(0, 90)) + pill(p), esc(p.page), FBA.fmtDate(p.time), FBA.fmt(p.views), FBA.fmt(p.reactions), FBA.fmt(p.comments), FBA.fmt(p.shares), FBA.pct(FBA.er(p)), p.duration ? p.duration + 's' : '–', copyBtn(p, '📋')]))}</section>
+    ${aiBox(sorted.slice(0, 5).map((p) => ({ p, ratio: ratio(p) })), page ? `Reels của fanpage ${page}` : 'Reels nhiều view')}`;
   $('#copyHooks').onclick = (e) => navigator.clipboard.writeText(sorted.slice(0, 10).map((p) => `${FBA.firstLine(p.text) || '(không có caption)'} — ${FBA.fmt(p.views)} view`).join('\n')).then(() => (e.target.textContent = '✓ Đã copy'));
 }
 
@@ -308,13 +418,95 @@ function renderTrack(el) {
   };
 }
 
+// ================= 🔎 Từ khoá =================
+// Tìm video / Reels theo từ khoá trên Facebook, xếp theo lượt xem, view/ngày, điểm xu hướng
+const KW = { kw: '', range: 0, sort: 'score', min: 0, limit: 60 };
+function renderKeyword(el) {
+  const kws = [...new Set([...Object.keys(S.keywords), ...S.posts.flatMap((p) => p.kw || [])])];
+  const counts = {};
+  S.posts.forEach((p) => (p.kw || []).forEach((k) => (counts[k] = (counts[k] || 0) + 1)));
+  kws.sort((a, b) => (S.keywords[b]?.t || 0) - (S.keywords[a]?.t || 0));
+  const j = S.kwJob;
+  if (j?.step === 'done' && j.keyword && j.t !== KW.autoPick && Date.now() - j.t < 10 * 60e3) { KW.autoPick = j.t; KW.kw = j.keyword; }
+  if (!KW.kw || !kws.includes(KW.kw)) KW.kw = kws[0] || '';
+  const all = S.posts.filter((p) => p.kw?.includes(KW.kw) && (p.views || FBA.engagement(p)));
+  const since = KW.range ? Date.now() / 1000 - KW.range * 86400 : 0;
+  const res0 = all.filter((p) => (!since || (p.time && p.time >= since)) && (p.views || 0) >= KW.min);
+  // Điểm xu hướng 0–100 (xếp hạng trong kết quả): view/ngày 40%, lượt xem 25%, bứt phá so với trang 20%, độ mới 15%
+  const rank = (f) => { const v = res0.map(f).filter((x) => x != null).sort((a, b) => a - b); return (x) => (x == null || !v.length ? 0 : v.filter((y) => y <= x).length / v.length); };
+  const rPD = rank(FBA.perDay), rV = rank((p) => p.views), rR = rank(ratio), rN = rank((p) => p.time);
+  const score = (p) => Math.round(100 * (0.4 * rPD(FBA.perDay(p)) + 0.25 * rV(p.views) + 0.2 * rR(ratio(p)) + 0.15 * rN(p.time)));
+  const SORTS = { score: ['🧠 Điểm xu hướng', score], views: ['Lượt xem', (p) => p.views || 0], perDay: ['View/ngày', (p) => FBA.perDay(p) || 0], time: ['Mới nhất', (p) => p.time || 0] };
+  const res = [...res0].sort((a, b) => SORTS[KW.sort][1](b) - SORTS[KW.sort][1](a));
+  const pagesRank = Object.entries(res.reduce((o, p) => ((o[p.page] = (o[p.page] || 0) + (p.views || 0)), o), {})).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const opt = (v, l, cur) => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${l}</option>`;
+  el.innerHTML = `
+    <section class="card"><h2>🔎 Tìm video / Reels nhiều view theo từ khoá</h2>
+      <p class="muted small">Gõ từ khoá (vd: <i>bất động sản</i>). Tiện ích mở trang tìm kiếm video của Facebook trong một cửa sổ nhỏ, tự cuộn lấy kết quả rồi tự đóng. Cần đang đăng nhập facebook.com. Quét nhiều lần sẽ cộng dồn.</p>
+      <div class="toolbar"><input id="kwInput" type="search" placeholder="vd: bất động sản" style="flex:1;min-width:min(240px,100%)">
+        <select id="kwDepth"><option value="8">Nhanh</option><option value="15" selected>Vừa</option><option value="40">Sâu</option></select>
+        <button id="kwGo" class="primary">Tìm & thu thập</button></div>
+      <p class="muted small" id="kwJob">${j ? esc(j.msg) + (j.step === 'run' ? ' (đừng đóng Chrome)' : '') : ''}</p>
+      ${kws.length ? `<div class="toolbar"><span class="muted small">Từ khoá đã quét:</span>${kws.map((k) => `<span class="chipgrp"><button class="mini${k === KW.kw ? ' primary' : ''}" data-kw="${esc(k)}">${esc(k)} · ${counts[k] || 0}</button><button class="mini" data-delkw="${esc(k)}" title="Xoá từ khoá (video vẫn giữ)">✕</button></span>`).join('')}</div>` : ''}</section>
+    ${!KW.kw ? '' : `
+    <section class="card"><div class="toolbar" style="margin:0">
+      <label class="small">Thời gian đăng <select id="kwRange">${[[0, 'Toàn bộ'], [1, '24 giờ'], [7, '7 ngày'], [30, '30 ngày'], [90, '3 tháng'], [365, '12 tháng']].map(([v, l]) => opt(v, l, KW.range)).join('')}</select></label>
+      <label class="small">Xếp theo <select id="kwSort">${Object.entries(SORTS).map(([k, [l]]) => opt(k, l, KW.sort)).join('')}</select></label>
+      <label class="small">View tối thiểu <select id="kwMin">${[[0, 'Không'], [1e4, '10K'], [1e5, '100K'], [1e6, '1M']].map(([v, l]) => opt(v, l, KW.min)).join('')}</select></label>
+      <button id="kwCsv">Xuất CSV</button></div></section>
+    ${kpis([['Video phù hợp', `${res.length} / ${all.length}`], ['Tổng lượt xem', FBA.fmt(res.reduce((a, p) => a + (p.views || 0), 0))], ['View trung vị', FBA.fmt(median(res.map((p) => p.views)))],
+      ['View/ngày trung vị', FBA.fmt(median(res.map(FBA.perDay)))], ['Số fanpage', new Set(res.map((p) => p.page)).size]])}
+    <section class="card"><h2>🏆 Video nhiều view — "${esc(KW.kw)}"</h2>
+      <p class="muted small">Bấm vào thẻ để mở video trên Facebook. View/ngày = lượt xem ÷ số ngày từ lúc đăng (video mới mà cao là đang lên; ngày đăng đọc từ kết quả tìm kiếm nên có thể lệch vài ngày). 🔥 = gấp ≥ 2× trung vị của chính fanpage đó (khi đã có ≥ 3 bài của trang). 🧠 Điểm xu hướng 0–100: view/ngày 40%, lượt xem 25%, bứt phá 20%, độ mới 15%.</p>
+      ${!res.length ? '<p class="muted">Không có video nào trong khoảng thời gian / bộ lọc này.</p>' : `<div class="vgrid">${res.slice(0, KW.limit).map((p, i) => `
+        <div class="vcard" data-open="${esc(p.url || '')}">
+          <div class="vcover">${p.cover ? `<img loading="lazy" src="${esc(p.cover)}" alt="">` : ''}<span class="vrank">#${i + 1}</span>${p.views ? `<span class="vviews">▶ ${FBA.fmt(p.views)}</span>` : ''}${p.type === 'reel' ? '<span class="vtype">Reels</span>' : ''}</div>
+          <div class="vbody"><div class="vdesc">${esc((p.text || '(không có caption)').slice(0, 110))}</div>
+            <div class="vmeta">${esc(p.page)} · ${FBA.fmtDate(p.time)}${p.duration ? ' · ' + p.duration + 's' : ''}</div>
+            <div class="vmeta">${FBA.perDay(p) ? FBA.fmt(FBA.perDay(p)) + ' view/ngày' : ''}${p.reactions != null ? ` · 👍 ${FBA.fmt(p.reactions)}` : ''} ${pill(p)}</div>
+            <div class="vmeta"><b title="Điểm xu hướng 0–100">🧠 ${score(p)}</b></div>
+            ${copyBtn(p)}</div>
+        </div>`).join('')}</div>
+        ${res.length > KW.limit ? `<div class="toolbar" style="justify-content:center"><button id="kwMore">Xem thêm (${res.length - KW.limit} video)</button></div>` : ''}`}</section>
+    <div class="grid2">
+      <section class="card"><h2>Fanpage nổi bật trong từ khoá</h2><p class="muted small">Tổng lượt xem các video của trang trong kết quả.</p>
+        <div class="chart">${Charts.hbars(pagesRank.map(([n, v]) => ({ label: n.slice(0, 28), value: v })), { left: 190 })}</div></section>
+      ${aiBox(res.slice(0, 5).map((p) => ({ p, ratio: ratio(p) })), `kết quả tìm kiếm Facebook cho từ khoá "${KW.kw}"`)}
+    </div>`}`;
+
+  $('#kwInput').onkeydown = (e) => { if (e.key === 'Enter') $('#kwGo').click(); };
+  $('#kwGo').onclick = async () => {
+    const q = $('#kwInput').value.trim();
+    if (!q) return;
+    await chrome.runtime.sendMessage({ type: 'searchKeyword', keyword: q, scrolls: Number($('#kwDepth').value) });
+    $('#kwJob').textContent = 'Đã bắt đầu… (tiến trình cập nhật tự động)';
+  };
+  el.querySelectorAll('[data-kw]').forEach((b) => (b.onclick = () => { KW.kw = b.dataset.kw; KW.limit = 60; render(); }));
+  el.querySelectorAll('[data-delkw]').forEach((b) => (b.onclick = async () => {
+    const k = b.dataset.delkw;
+    if (!confirm(`Xoá từ khoá "${k}" khỏi danh sách? (Video vẫn được giữ trong dữ liệu)`)) return;
+    const { posts = {}, fbKeywords = {} } = await chrome.storage.local.get(['posts', 'fbKeywords']);
+    for (const id in posts) if (posts[id].kw?.includes(k)) { posts[id].kw = posts[id].kw.filter((x) => x !== k); if (!posts[id].kw.length) delete posts[id].kw; }
+    delete fbKeywords[k];
+    if (KW.kw === k) KW.kw = '';
+    await chrome.storage.local.set({ posts, fbKeywords });
+  }));
+  if (!KW.kw) return;
+  const bind = (id, key) => ($(id).onchange = (e) => { KW[key] = key === 'sort' ? e.target.value : Number(e.target.value); render(); });
+  bind('#kwRange', 'range'); bind('#kwSort', 'sort'); bind('#kwMin', 'min');
+  if ($('#kwMore')) $('#kwMore').onclick = () => { KW.limit += 60; render(); };
+  el.querySelectorAll('[data-open]').forEach((c) => (c.onclick = (e) => { if (!e.target.closest('a, button') && c.dataset.open) window.open(c.dataset.open, '_blank'); }));
+  $('#kwCsv').onclick = () => FBA.download(`facebook-tukhoa-${KW.kw.replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.csv`, FBA.toCSV(res));
+}
+
 // ---------- điều hướng ----------
-const TABS = { page: renderPage, reels: renderReels, track: renderTrack };
+const TABS = { page: renderPage, keyword: renderKeyword, reels: renderReels, track: renderTrack };
 function render() {
   medCache.clear();
   const tab = TABS[location.hash.slice(1)] ? location.hash.slice(1) : 'page';
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
   $('#fType').closest('label').style.display = tab === 'page' ? '' : 'none';
+  document.querySelector('.filters').style.display = tab === 'keyword' ? 'none' : '';
   TABS[tab]($('#view'));
 }
 window.addEventListener('hashchange', render);
@@ -322,7 +514,10 @@ window.addEventListener('hashchange', render);
 let st;
 $('#fSearch').addEventListener('input', () => { clearTimeout(st); st = setTimeout(render, 250); });
 let lt;
-chrome.storage.onChanged.addListener(() => { clearTimeout(lt); lt = setTimeout(load, 1500); });
+// Đang gõ link / từ khoá / chủ đề → chờ gõ xong mới vẽ lại (không mất chữ đang gõ)
+const typing = () => ['pgInput', 'kwInput', 'aiTopic'].includes(document.activeElement?.id) || document.activeElement?.dataset?.me;
+const reload = () => { if (typing()) { lt = setTimeout(reload, 1500); return; } load(); };
+chrome.storage.onChanged.addListener(() => { clearTimeout(lt); lt = setTimeout(reload, 1500); });
 
 $('#exportCsv').onclick = () => FBA.download(`facebook-${$('#fPage').value || 'all'}-${new Date().toISOString().slice(0, 10)}.csv`, FBA.toCSV(filtered()));
 $('#exportJson').onclick = async () => FBA.download(`facebook-analyzer-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(await chrome.storage.local.get(null)), 'application/json');

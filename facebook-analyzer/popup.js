@@ -33,6 +33,11 @@ $('#reels').onclick = async () => {
   chrome.tabs.sendMessage(tab.id, { type: 'autoscroll', times: 30 });
   window.close();
 };
+$('#analyze').onclick = async () => {
+  await chrome.runtime.sendMessage({ type: 'analyzePage', input: 'https://www.facebook.com/' + ctx.page.slug, scrolls: 15 });
+  chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html#page') });
+};
+$('#kw').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html#keyword') });
 $('#stop').onclick = () => chrome.tabs.sendMessage(tab.id, { type: 'stopScroll' });
 $('#watch').onclick = async () => {
   const name = ctx.page.name;

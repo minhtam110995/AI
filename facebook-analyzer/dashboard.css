@@ -79,3 +79,24 @@ code { background: var(--grid); padding: 1px 5px; border-radius: 4px; }
 .pill.warm { background: var(--series-soft); color: var(--text); }
 .chart text { fill: var(--text2); font-size: 11px; }
 .empty { color: var(--muted); font-size: 13px; padding: 24px 0; text-align: center; }
+
+/* ---- 2.0: chip, nút nhỏ, thẻ video, hồ sơ ---- */
+button.mini { padding: 4px 9px; font-size: 12px; border-radius: 7px; }
+.chipgrp { display: inline-flex; }
+.chipgrp button:first-child { border-radius: 7px 0 0 7px; }
+.chipgrp button:last-child { border-radius: 0 7px 7px 0; border-left: 0; padding: 4px 7px; }
+.toolbar input[type=search] { min-width: 0; }
+.megrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-top: 8px; }
+.megrid label { display: grid; gap: 3px; color: var(--text2); }
+.megrid input { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font: 13px system-ui; }
+.vgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 10px; }
+.vcard { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; background: var(--card); display: flex; flex-direction: column; }
+.vcard:hover { border-color: var(--series); }
+.vcover { position: relative; aspect-ratio: 9 / 13; background: var(--grid); }
+.vcover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vrank, .vviews, .vtype { position: absolute; background: rgba(0,0,0,.7); color: #fff; font: 700 12px system-ui; padding: 2px 7px; border-radius: 6px; }
+.vrank { left: 8px; top: 8px; } .vtype { right: 8px; top: 8px; } .vviews { left: 8px; bottom: 8px; font-size: 13px; }
+.vbody { padding: 8px 10px 10px; display: grid; gap: 4px; }
+.vdesc { font-size: 13px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.vmeta { font-size: 11.5px; color: var(--text2); }
+.vbody [data-copy] { margin-top: 4px; }
